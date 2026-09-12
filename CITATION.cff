@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below, together with the paper that describes and validates the method."
+type: software
+title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
+version: 0.1.0
+date-released: 2026-09-11
+license: MIT
+repository-code: "https://github.com/ektrnddn/blrfit"
+authors:
+  - family-names: Dadiani
+    given-names: Ekaterine
+    affiliation: "Carnegie Mellon University"
+    email: edadiani@andrew.cmu.edu
+keywords:
+  - active galactic nuclei
+  - broad emission lines
+  - spectroscopy
+  - supermassive black hole binaries
+  - DESI
+  - SDSS
+abstract: >-
+  Fits the broad Halpha, Hbeta and Mg II emission lines of an active galactic nucleus against
+  the systemic velocity defined by the narrow lines of the same spectrum, measures the
+  displacement and shape of the broad profile, classifies it, flags the conditions under which
+  the measurement should not be trusted, and measures velocity changes between epochs by
+  chi-square cross-correlation. Works on DESI coadds, SDSS spec files or any wavelength, flux
+  and error table.

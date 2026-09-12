@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+# outputs of the command-line tool written into the working directory
+/*_fit.json
+/*_fit.png
+/*_fit.pkl
+/*_rv.json
+/*_rv.png
+/spectra/
+/fetch_manifest.json
+examples/output/
+.DS_Store
