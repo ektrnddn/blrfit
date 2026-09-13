@@ -1,22 +1,6 @@
 # Changelog
 
-## Unreleased
-
-* Pin test in two parts (`tests/test_pins.py`): the continuum and line models, chi-square,
-  measures and classes are recomputed from the pinned parameters and checked on every platform
-  to tight tolerances (bit for bit on the reference stack); a fresh fit is held to equal classes,
-  flags, component counts and systemic sources, the primary offset Δv within 100 km/s and
-  chi-square at most 10 per cent above the pin, because the solver's end point depends on the
-  platform for degenerate decompositions. `tests/data/pins.json` gains the continuum parameters,
-  host information and [O III] pre-fit of each pin; no pinned value changed. The fresh fit must
-  also reproduce the host decision and eigenspectrum count, the host fraction within 5 per cent
-  (or 0.01), and start from the rest-frame arrays of the first part. The five penalty terms of
-  the chi-square are pinned at active parameter values (`test_penalty_terms_pinned`). The
-  command-line and anchor tests use the same 100 km/s end-point tolerance.
-* `tests/test_extinction.py` pins the extinction curve at seven wavelengths; the regression pins
-  have E(B-V) = 0 and did not cover it.
-
-## 0.1.0 (2026-09-11)
+## 0.1.0 (2026-09-13)
 
 First public release.
 
@@ -36,6 +20,11 @@ First public release.
   identical), and generic tables with declared columns, units and frame.
 * `blrfit fit`, `blrfit rv` and `blrfit fetch` (SDSS through astroquery, DESI public releases
   through range requests to the file server; single-target coadd extraction).
-* Tests: regression pins, reader and healpix tests, command-line tests, synthetic validation
-  suites for the fitter, the cross-correlation and the Monte Carlo errors, and the Liu et al.
-  (2014) same-spectrum anchor.
+* Tests: regression pins in two parts (the continuum and line models, chi-square, measures and
+  classes recomputed from the pinned parameters and checked on every platform; the end point of
+  a fresh fit held to the classes, flags, component counts, systemic sources, the primary offset
+  within 100 km/s and chi-square within 10 per cent, because the solver's end point depends on
+  the platform for degenerate decompositions; bit for bit on the reference stack), the penalty
+  terms and the extinction curve pinned, reader and healpix tests, command-line tests, synthetic
+  validation suites for the fitter, the cross-correlation and the Monte Carlo errors, and the
+  Liu et al. (2014) same-spectrum anchor.

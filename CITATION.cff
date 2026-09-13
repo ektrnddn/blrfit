@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below, together with the p
 type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
 version: 0.1.0
-date-released: 2026-09-11
+date-released: 2026-09-13
 license: MIT
 repository-code: "https://github.com/ektrnddn/blrfit"
 authors:

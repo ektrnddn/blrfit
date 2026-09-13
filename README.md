@@ -260,11 +260,13 @@ numpy 2.5 / scipy 1.18 on macOS, the bisector velocities of a fresh fit move by 
 the peak of the two-humped pin and the centroid of one line by up to about 70 km/s, the widths by up
 to about 200 km/s, the second-moment width by up to about 500 km/s, and chi-square drops by up to
 about 20 per cent when another local minimum is found, without changing a class, a flag or a
-component count in any run. A fresh fit is therefore held only to equal classes, flags, component
-counts, systemic sources, host decisions and eigenspectrum counts, the host fraction within 5 per
-cent (or 0.01), the primary offset Δv = c(1/2) − v_n within 100 km/s of the pin and a chi-square at
-most 10 per cent above it; `BLRFIT_STRICT_PINS=1` requires bit-for-bit equality of everything and is
-the release check on the reference stack. The pins have E(B−V) = 0; the extinction law is pinned
+component count in any run. The continuum fit is degenerate as well, between the host and the power
+law: the host fraction of one pin is 0.14 on the reference stack and 0.10 on a Linux runner, at the
+threshold below which the host is rejected, with the same classes and offsets. A fresh fit is
+therefore held only to equal classes, flags, component counts and systemic sources, the primary
+offset Δv = c(1/2) − v_n within 100 km/s of the pin and a chi-square at most 10 per cent above it;
+`BLRFIT_STRICT_PINS=1` requires bit-for-bit equality of everything, the host decision included, and
+is the release check on the reference stack. The pins have E(B−V) = 0; the extinction law is pinned
 separately (`tests/test_extinction.py`). Every hinge of the chi-square (the far-broad width hinge,
 the [O III] width hinge and amplitude ordering, the narrow-line-region wing width hinge) is zero at
 the pinned parameters of all four pins; the five penalty functions are pinned at active parameter
