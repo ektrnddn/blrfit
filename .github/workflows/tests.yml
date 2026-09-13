@@ -16,6 +16,10 @@ jobs:
             stack: "numpy==1.26.4 scipy==1.13.1 astropy~=6.0"  # the numerical stack of the catalogue run (astropy 6.0 is the last for Python 3.9)
           - python-version: "3.12"
             stack: ""                                          # current releases
+    env:
+      OMP_NUM_THREADS: "1"          # the fits are small least-squares problems; BLAS threads only add overhead
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
