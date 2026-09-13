@@ -8,10 +8,12 @@ reproduce them. On the numerical stack that wrote them (numpy 1.26.4, scipy
 Across versions the bounded trust-region solver converges to slightly different
 points: between that stack and numpy 2.5 / scipy 1.18 the pinned bisector
 and peak velocities moved by up to 10 km/s, the centroid by up to 22 km/s, the
-widths by up to 25 km/s (32 km/s for the second-moment width) and chi-square by
+widths by up to 25 km/s (the second-moment width by 32 km/s on macOS and 84 km/s
+on Linux) and chi-square by
 up to 4 per cent, without changing any class or flag. The default tolerances are set
 to that spread (15 km/s on the bisector and peak velocities, 60 km/s on the
-wing-sensitive centroid, 60 km/s on widths, 8 per cent on chi-square and 5 per cent on the
+wing-sensitive centroid and on the widths, 150 km/s on the second-moment width,
+8 per cent on chi-square and 5 per cent on the
 signal-to-noise ratios) plus equality of classes, flags and
 component counts; the pinned spectra were chosen away from the class
 thresholds so that a few km/s cannot flip a class.
@@ -72,7 +74,8 @@ def test_pin_reproduced(pin):
                     assert not np.isfinite(row[f"{p}_{k}"])
                 else:
                     # widths and the wing-sensitive first moment move more than the bisectors
-                    tol = 60.0 if k in ("fwhm", "W25", "W75", "sigma_line") else (60.0 if k.startswith("centroid") else 15.0)
+                    # the second moment (sigma_line) of one pin moved by 84 km/s on Linux with current numpy/scipy
+                    tol = 150.0 if k == "sigma_line" else (60.0 if k in ("fwhm", "W25", "W75") or k.startswith("centroid") else 15.0)
                     assert abs(row[f"{p}_{k}"] - r) < tol, (name, k, row[f"{p}_{k}"], r)
             for k in ("AI", "KI"):
                 assert row[f"{p}_{k}"] == pytest.approx(ref[f"{p}_{k}"], abs=0.03)

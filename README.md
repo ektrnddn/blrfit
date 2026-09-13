@@ -247,7 +247,8 @@ cannot fit fails identically. The repository pins four of these spectra (`tests/
 exact equality with `BLRFIT_STRICT_PINS=1`). Other versions of scipy converge the bounded
 least-squares problems to slightly different points: against numpy 2.5 / scipy 1.18 the pinned
 bisector and peak velocities move by up to 10 km/s, the centroids by up to 22 km/s and the
-widths by up to 25 km/s, far below the errors, without changing a class or a flag.
+widths by up to 25 km/s (the second-moment width of one pin by 84 km/s on Linux), far below the
+errors, without changing a class or a flag.
 
 **Synthetic spectra** (`tests/test_synthetic.py`, `tests/test_rv_synthetic.py`,
 `tests/test_errors_mc.py`; the generator is `tests/synth.py`): bulk shifts of ±1200 km/s at

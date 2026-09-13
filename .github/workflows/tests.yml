@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - python-version: "3.9"
-            stack: "numpy==1.26.4 scipy==1.13.1 astropy<7"   # the numerical stack of the catalogue run
+            stack: "numpy==1.26.4 scipy==1.13.1 astropy~=6.0"  # the numerical stack of the catalogue run (astropy 6.0 is the last for Python 3.9)
           - python-version: "3.12"
             stack: ""                                          # current releases
     steps:
