@@ -7,7 +7,21 @@
   "astropy": "6.1.3",
   "python": "3.12.2",
   "platform": "macOS 15 arm64",
-  "note": "summary_row, fitted parameters, chi-square and BIC of fit_spectrum(complexes=('Halpha','Hbeta'), ebv=0) at the literature redshift"
+  "note": "summary_row, fitted parameters, chi-square and BIC of fit_spectrum(complexes=('Halpha','Hbeta'), ebv=0) at the literature redshift",
+  "extended": {
+   "date": "2026-09-13",
+   "keys": [
+    "conti",
+    "host_info",
+    "o3_prefit"
+   ],
+   "note": "per pin, the full continuum parameter dictionary of the result (res['conti']), the host information (applied, n_gal, host_frac_4200_5000, reason) and the [O III] pre-fit (v_o3, snr), so that the continuum model, the line-complex chi-square and every measure can be recomputed from the pinned parameters without running the optimiser; computed with the frozen production fitter on the same spectra and stack as the original pins and checked equal to the package's values; no existing value changed",
+   "numpy": "1.26.4",
+   "scipy": "1.13.1",
+   "astropy": "6.1.3",
+   "python": "3.12.2",
+   "platform": "macOS 15 arm64"
+  }
  },
  "pins": [
   {
@@ -215,6 +229,23 @@
      378.57397134734475,
      361.3533571279695
     ]
+   },
+   "conti": {
+    "pl_norm": 124.59994461192443,
+    "pl_alpha": -1.8055148098033782,
+    "feop_norm": 3.174424363520699e-13,
+    "feop_fwhm": 8005.911177556567,
+    "feop_shift": 0.009994263990274574
+   },
+   "host_info": {
+    "applied": false,
+    "n_gal": 1,
+    "host_frac_4200_5000": 2.1880895062945558e-05,
+    "reason": "host fraction 0.00 < 0.1; PL+Fe only"
+   },
+   "o3_prefit": {
+    "v_o3": -48.67108272025215,
+    "snr": 15.041821599098203
    }
   },
   {
@@ -320,6 +351,26 @@
      474.80100454584374,
      477.6437090504973
     ]
+   },
+   "conti": {
+    "pl_norm": 13.61194622178974,
+    "pl_alpha": -0.6710300140441895,
+    "feop_norm": 0.5185420139616994,
+    "feop_fwhm": 2474.932430066147,
+    "feop_shift": 0.003968889448393923,
+    "feuv_norm": 0.453871362607582,
+    "feuv_fwhm": 3000.0,
+    "feuv_shift": 0.0022588834617316904
+   },
+   "host_info": {
+    "applied": false,
+    "n_gal": 1,
+    "host_frac_4200_5000": 2.7266195562799976e-05,
+    "reason": "host fraction 0.00 < 0.1; PL+Fe only"
+   },
+   "o3_prefit": {
+    "v_o3": -47.98373602050354,
+    "snr": 17.794135028801172
    }
   },
   {
@@ -431,6 +482,26 @@
      401.1400446601289,
      360.9735914923134
     ]
+   },
+   "conti": {
+    "pl_norm": 44.774761667474685,
+    "pl_alpha": -0.8823076939601892,
+    "feop_norm": 1.1365613451643743,
+    "feop_fwhm": 2219.096285332826,
+    "feop_shift": -0.00538939425143426,
+    "feuv_norm": 1.3409736261801959,
+    "feuv_fwhm": 3000.0,
+    "feuv_shift": -0.003828636922519513
+   },
+   "host_info": {
+    "applied": false,
+    "n_gal": 1,
+    "host_frac_4200_5000": 0.05048418806486647,
+    "reason": "host fraction 0.05 < 0.1; PL+Fe only"
+   },
+   "o3_prefit": {
+    "v_o3": -5.583467360330819,
+    "snr": 43.10067022078334
    }
   },
   {
@@ -632,6 +703,27 @@
      629.47229267431,
      642.5803368841742
     ]
+   },
+   "conti": {
+    "pl_norm": 40.575009769719195,
+    "pl_alpha": -2.333241279946592,
+    "feop_norm": 0.2360365272718913,
+    "feop_fwhm": 2876.6854316330614,
+    "feop_shift": -0.0012716621242927545,
+    "feuv_norm": 0.8146365034503613,
+    "feuv_fwhm": 4999.387258766677,
+    "feuv_shift": 0.0032641510706551626,
+    "gal0": 163.2267658387142
+   },
+   "host_info": {
+    "applied": true,
+    "n_gal": 1,
+    "host_frac_4200_5000": 0.1418996659973831,
+    "reason": ""
+   },
+   "o3_prefit": {
+    "v_o3": -44.90901698919581,
+    "snr": 38.31217751693146
    }
   }
  ]

@@ -244,13 +244,31 @@ fitter on the numerical stack of the catalogue run (numpy 1.26.4, scipy 1.13.1):
 spectra of the Liu et al. (2014) and Eracleous et al. (2012) objects, 823 fits are identical in
 every fitted parameter, measure, class and flag, and the one spectrum that the production code
 cannot fit fails identically. The repository pins four of these spectra (`tests/test_pins.py`;
-exact equality with `BLRFIT_STRICT_PINS=1`). Other versions of scipy, and the same versions on Linux
-with another BLAS, converge the bounded least-squares problems to slightly different points:
-across numpy 2.5 / scipy 1.18 on macOS and the Linux runners of the test workflow the pinned
-bisector velocities move by up to 17 km/s, the centroids by up to 67 km/s, the widths by up to
-25 km/s (the second-moment width of one pin by 84 km/s) and the peak of the two-humped pin by
-60 km/s, within the errors and without changing a class or a flag; the pin test allows that
-spread and the exact comparison is run on the reference stack.
+the pins hold the summary row, the fitted parameters, chi-square and BIC of every line, the
+continuum parameters, the host information and the [O III] pre-fit). The pin test has two parts.
+Everything downstream of the optimiser is a pure function of the data and the parameters and is
+checked on every platform to tolerances that only a change of the model, a penalty, a measure or a
+class rule can exceed: the continuum and line models, the chi-square with its penalty terms, the
+profile measures and the classes are recomputed from the pinned parameters and must agree to a
+relative 1e-9 in chi-square, 1e-3 km/s in every velocity and width, a relative 1e-12 in the
+parameter entries rebuilt from the free ones and a relative 1e-6 in everything else (bit for bit on
+the reference stack). The optimiser's end point is platform dependent: for the degenerate
+decompositions of a broad profile into two or three Gaussians the bounded least-squares solver ends
+at different points on other versions of scipy and on Linux with another BLAS, and at different
+points between runs on the same platform. Measured on the Linux runners of the test workflow and on
+numpy 2.5 / scipy 1.18 on macOS, the bisector velocities of a fresh fit move by up to about 30 km/s,
+the peak of the two-humped pin and the centroid of one line by up to about 70 km/s, the widths by up
+to about 200 km/s, the second-moment width by up to about 500 km/s, and chi-square drops by up to
+about 20 per cent when another local minimum is found, without changing a class, a flag or a
+component count in any run. A fresh fit is therefore held only to equal classes, flags, component
+counts, systemic sources, host decisions and eigenspectrum counts, the host fraction within 5 per
+cent (or 0.01), the primary offset Δv = c(1/2) − v_n within 100 km/s of the pin and a chi-square at
+most 10 per cent above it; `BLRFIT_STRICT_PINS=1` requires bit-for-bit equality of everything and is
+the release check on the reference stack. The pins have E(B−V) = 0; the extinction law is pinned
+separately (`tests/test_extinction.py`). Every hinge of the chi-square (the far-broad width hinge,
+the [O III] width hinge and amplitude ordering, the narrow-line-region wing width hinge) is zero at
+the pinned parameters of all four pins; the five penalty functions are pinned at active parameter
+values by `test_penalty_terms_pinned`.
 
 **Synthetic spectra** (`tests/test_synthetic.py`, `tests/test_rv_synthetic.py`,
 `tests/test_errors_mc.py`; the generator is `tests/synth.py`): bulk shifts of ±1200 km/s at
