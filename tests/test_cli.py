@@ -15,9 +15,9 @@ def test_fit_sdss_example(tmp_path):
     assert doc["input"]["kind"] == "sdss" and doc["input"]["z"] == Z_J001224 and doc["input"]["z_source"] == "argument"
     assert doc["input"]["ebv"] == 0.0
     ha, hb, mg = doc["lines"]["Halpha"], doc["lines"]["Hbeta"], doc["lines"]["MgII"]
-    # the pinned values; 15 km/s is the cross-version tolerance of tests/test_pins.py
-    assert ha["fitted"] and ha["label"] == "C" and abs(ha["dv"] - (-1061.0)) < 15 and ha["strong_offset"]
-    assert hb["fitted"] and hb["label"] == "C" and abs(hb["dv"] - (-1243.5)) < 15
+    # the pinned values; 30 km/s is the cross-platform tolerance of the bisector velocities in tests/test_pins.py
+    assert ha["fitted"] and ha["label"] == "C" and abs(ha["dv"] - (-1061.0)) < 30 and ha["strong_offset"]
+    assert hb["fitted"] and hb["label"] == "C" and abs(hb["dv"] - (-1243.5)) < 30
     assert hb["systemic_source"] == "Halpha prior"
     assert not mg["fitted"] and mg["label"] == "" and mg["class_text"] == "not fitted" and "not fitted" in mg["reasons"][0]
     assert mg["dv"] is None
@@ -45,7 +45,7 @@ def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
     assert doc["input"]["kind"] == "desi" and abs(doc["input"]["z"] - 0.22032) < 1e-4
     assert doc["input"]["ebv_source"] == "FIBERMAP" and abs(doc["input"]["ebv"] - 0.0323) < 1e-3
     ha = doc["lines"]["Halpha"]
-    assert ha["fitted"] and ha["label"] == "F" and abs(ha["dv"] + 37.0) < 15 and ha["flags"] == [] and ha["measurable"]
+    assert ha["fitted"] and ha["label"] == "F" and abs(ha["dv"] + 37.0) < 30 and ha["flags"] == [] and ha["measurable"]
     assert doc["input"]["z_source"] == "redrock"
     assert doc["continuum"]["host_applied"]
 

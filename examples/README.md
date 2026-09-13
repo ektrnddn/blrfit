@@ -34,8 +34,9 @@ blrfit rv data/spec-0652-52138-0326.fits data/coadd-main-dark-17260-396275740825
 blrfit fetch --ra 3.1997083 --dec -8.7834722 --out output/spectra
 ```
 
-Expected results (blrfit 0.1.0 with numpy 1.26.4 and scipy 1.13.1; other versions move the
-velocities by up to about 10 km/s and the widths by up to about 25 km/s): for J001224 (2001) Hα is class C with
+Expected results (blrfit 0.1.0 with numpy 1.26.4 and scipy 1.13.1 on macOS; other numerical stacks move the
+bisector velocities by up to about 20 km/s, the peaks and centroids by up to about 70 km/s and the widths by
+up to about 25 km/s): for J001224 (2001) Hα is class C with
 Δv = −1061 km/s and Hβ class C with Δv = −1244 km/s, both strong offsets with no flag; the 2013
 epoch is shifted by −294 ± 39 km/s in Hβ relative to 2001 (zero-point −13 km/s), with a profile
 change (z_prof ≈ 10, the FWHM of our fits drops from about 3390 to about 2930 km/s) that places

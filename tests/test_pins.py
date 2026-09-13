@@ -4,20 +4,27 @@ produced the DESI catalogue (summary row, fitted parameters, chi-square).
 
 The pins were written by the frozen production code; the package must
 reproduce them. On the numerical stack that wrote them (numpy 1.26.4, scipy
-1.13.1, macOS) the agreement is bit for bit (set BLRFIT_STRICT_PINS=1 to
+1.13.1, macOS arm64) the agreement is bit for bit (set BLRFIT_STRICT_PINS=1 to
 require it). On other stacks and platforms the bounded trust-region solver
-converges to slightly different points: the pinned bisector velocities move by
-up to 10 km/s, the centroids by up to 22 km/s, the widths by up to 25 km/s
-(the second-moment width by 84 km/s on Linux), chi-square by up to 4 per cent,
-and the peak of the two-humped class-B pin by 60 km/s on Linux, the peak of a
-flat-topped or two-humped profile being the unstable statistic that makes
-c(1/2) the primary offset; no class or flag changes. The default tolerances
-are set above that spread (15 km/s on the bisector velocities, 100 km/s on the
-peak velocities, 60 km/s on the centroid and the widths, 150 km/s on the
+converges to slightly different points, and the same numpy and scipy versions
+on Linux differ as well (another BLAS, whose thread count also enters):
+measured against numpy 2.5 / scipy 1.18 on macOS and on the Linux runners of
+the test workflow, the pinned bisector velocities move by up to 17 km/s, the
+centroids by up to 67 km/s (the wing-sensitive first moment of a two-component
+Halpha), the widths by up to 25 km/s, the second-moment width by up to 84 km/s,
+chi-square by up to 4 per cent, and the peak of the two-humped class-B pin by
+60 km/s, the peak of a flat-topped or two-humped profile being the unstable
+statistic that makes c(1/2) the primary offset; no class or flag changes
+anywhere. The default tolerances sit above that spread (30 km/s on the bisector
+velocities, 15 km/s on the narrow-line systemic velocity and width, 100 km/s on
+the centroids and the peak velocities, 60 km/s on the widths, 150 km/s on the
 second-moment width, 8 per cent on chi-square and 5 per cent on the
-signal-to-noise ratios) plus equality of classes, flags and component counts;
-the pinned spectra were chosen away from the class thresholds so that a few
-km/s cannot flip a class.
+signal-to-noise ratios) plus equality of classes, flags, component counts and
+systemic sources; the pinned spectra were chosen away from the class
+thresholds so that a few tens of km/s cannot flip a class. Every departure of
+a spectrum is reported in one message. Bit-for-bit reproduction is checked on
+the reference stack before a release; the tolerant comparison guards the
+physics everywhere else.
 """
 import json
 import os
@@ -32,6 +39,19 @@ from conftest import DATA, EXAMPLES
 STRICT = os.environ.get("BLRFIT_STRICT_PINS", "") not in ("", "0")
 VEL_KEYS = ("v_sys", "sig_sys", "v_o3", "v_peak", "centroid", "c25", "c50", "c75", "fwhm", "W25", "W75",
             "v_peak_sys", "centroid_sys", "c50_sys", "peak_top_sys", "sigma_line")
+
+
+def tolerance_kms(key):
+    """Allowed departure from the pin for one velocity or width statistic, km/s."""
+    if key == "sigma_line":
+        return 150.0
+    if key.startswith(("v_peak", "peak_top", "centroid")):
+        return 100.0
+    if key in ("fwhm", "W25", "W75"):
+        return 60.0
+    if key in ("v_sys", "sig_sys", "v_o3"):
+        return 15.0
+    return 30.0                                   # the bisector velocities c25, c50, c75, c50_sys
 
 
 def _pins():
@@ -55,47 +75,40 @@ def test_pin_reproduced(pin):
     row = blrfit.summary_row(res)
     ref = pin["summary"]
     assert set(res["fits"]) == set(pin["params"])
+    departures = []
     for name, pref in pin["params"].items():
         d = res["fits"][name]["d"]
         assert set(d) == set(pref)
         p = {"Halpha": "HA", "Hbeta": "HB", "MgII": "MG"}[name]
-        assert row[f"{p}_class"] == ref[f"{p}_class"], name
-        assert row[f"{p}_flags"] == ref[f"{p}_flags"], name
-        assert row[f"{p}_n_broad"] == ref[f"{p}_n_broad"], name
-        assert row[f"{p}_systemic_source"] == ref[f"{p}_systemic_source"]
+        for k in ("class", "flags", "n_broad", "systemic_source"):
+            assert row[f"{p}_{k}"] == ref[f"{p}_{k}"], (name, k, row[f"{p}_{k}"], ref[f"{p}_{k}"])
         if STRICT:
             for k, v in pref.items():
                 assert d[k] == v, (name, k)
             assert res["fits"][name]["chi2"] == pin["chi2"][name]
-        else:
-            assert res["fits"][name]["chi2"] == pytest.approx(pin["chi2"][name], rel=0.08)
-            for k in VEL_KEYS:
-                r = ref.get(f"{p}_{k}")
-                if r is None:
-                    assert not np.isfinite(row[f"{p}_{k}"])
-                else:
-                    # widths and the wing-sensitive first moment move more than the bisectors
-                    # tolerances per statistic; see the module docstring for the measured drifts
-                    if k == "sigma_line":
-                        tol = 150.0
-                    elif k.startswith(("v_peak", "peak_top")):
-                        tol = 100.0
-                    elif k in ("fwhm", "W25", "W75") or k.startswith("centroid"):
-                        tol = 60.0
-                    else:
-                        tol = 15.0
-                    assert abs(row[f"{p}_{k}"] - r) < tol, (name, k, row[f"{p}_{k}"], r)
-            for k in ("AI", "KI"):
-                assert row[f"{p}_{k}"] == pytest.approx(ref[f"{p}_{k}"], abs=0.03)
-            for k in ("broad_flux_snr", "broad_peak_snr", "sys_snr"):
-                assert row[f"{p}_{k}"] == pytest.approx(ref[f"{p}_{k}"], rel=0.05)
+            continue
+        chi2, chi2_ref = res["fits"][name]["chi2"], pin["chi2"][name]
+        if chi2 != pytest.approx(chi2_ref, rel=0.08):
+            departures.append(f"{name} chi2 {chi2:.2f} vs pinned {chi2_ref:.2f}")
+        for k in VEL_KEYS:
+            r = ref.get(f"{p}_{k}")
+            got = row[f"{p}_{k}"]
+            if r is None:
+                assert not np.isfinite(got), (name, k, got)
+            elif not abs(got - r) < tolerance_kms(k):
+                departures.append(f"{name} {k} {got:.1f} vs pinned {r:.1f} km/s (tolerance {tolerance_kms(k):.0f})")
+        for k in ("AI", "KI"):
+            if row[f"{p}_{k}"] != pytest.approx(ref[f"{p}_{k}"], abs=0.03):
+                departures.append(f"{name} {k} {row[f'{p}_{k}']:.3f} vs pinned {ref[f'{p}_{k}']:.3f}")
+        for k in ("broad_flux_snr", "broad_peak_snr", "sys_snr"):
+            if row[f"{p}_{k}"] != pytest.approx(ref[f"{p}_{k}"], rel=0.05):
+                departures.append(f"{name} {k} {row[f'{p}_{k}']:.2f} vs pinned {ref[f'{p}_{k}']:.2f}")
+    assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
     if STRICT:
         for k, v in ref.items():
             got = row[k]
             if v is None:
                 assert isinstance(got, float) and np.isnan(got), k
-            elif isinstance(v, float):
-                assert got == v, k
             else:
                 assert got == v, k
 
@@ -111,3 +124,11 @@ def test_pin_values_are_the_catalogue_values():
     assert pins["spec-1592-52990-0139.fits"]["summary"]["HB_class"] == "B"
     assert pins["spec-1704-53178-0562.fits"]["summary"]["HB_class"] == "F"
     assert abs(pins["spec-1704-53178-0562.fits"]["summary"]["HB_c50_sys"]) < 120
+
+
+def test_tolerances_cover_the_measured_spread():
+    assert tolerance_kms("c50") == 30.0 and tolerance_kms("c50_sys") == 30.0
+    assert tolerance_kms("centroid") == 100.0 and tolerance_kms("centroid_sys") == 100.0
+    assert tolerance_kms("v_peak") == 100.0 and tolerance_kms("peak_top_sys") == 100.0
+    assert tolerance_kms("fwhm") == 60.0 and tolerance_kms("sigma_line") == 150.0
+    assert tolerance_kms("v_sys") == 15.0

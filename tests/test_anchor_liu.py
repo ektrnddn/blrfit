@@ -20,7 +20,7 @@ at a directory holding
 * optionally ``compare.fits``, the stored per-spectrum results of the DESI
   catalogue run (columns LID, PLATE, EXACT, OUR_HB_CLASS, OUR_HB_PEAK); when
   present, at least 98 per cent of the spectra must reproduce their stored class and
-  peak velocity (within 15 km/s, the cross-version tolerance of the pins).
+  peak velocity (within 15 km/s; on the reference numerical stack the agreement is exact).
 
     BLRFIT_ANCHOR_DIR=/path/to/lit BLRFIT_NPROC=8 pytest -m slow tests/test_anchor_liu.py
 """

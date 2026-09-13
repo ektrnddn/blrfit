@@ -244,11 +244,13 @@ fitter on the numerical stack of the catalogue run (numpy 1.26.4, scipy 1.13.1):
 spectra of the Liu et al. (2014) and Eracleous et al. (2012) objects, 823 fits are identical in
 every fitted parameter, measure, class and flag, and the one spectrum that the production code
 cannot fit fails identically. The repository pins four of these spectra (`tests/test_pins.py`;
-exact equality with `BLRFIT_STRICT_PINS=1`). Other versions of scipy converge the bounded
-least-squares problems to slightly different points: against numpy 2.5 / scipy 1.18 the pinned
-bisector and peak velocities move by up to 10 km/s, the centroids by up to 22 km/s and the
-widths by up to 25 km/s (the second-moment width of one pin by 84 km/s on Linux), far below the
-errors, without changing a class or a flag.
+exact equality with `BLRFIT_STRICT_PINS=1`). Other versions of scipy, and the same versions on Linux
+with another BLAS, converge the bounded least-squares problems to slightly different points:
+across numpy 2.5 / scipy 1.18 on macOS and the Linux runners of the test workflow the pinned
+bisector velocities move by up to 17 km/s, the centroids by up to 67 km/s, the widths by up to
+25 km/s (the second-moment width of one pin by 84 km/s) and the peak of the two-humped pin by
+60 km/s, within the errors and without changing a class or a flag; the pin test allows that
+spread and the exact comparison is run on the reference stack.
 
 **Synthetic spectra** (`tests/test_synthetic.py`, `tests/test_rv_synthetic.py`,
 `tests/test_errors_mc.py`; the generator is `tests/synth.py`): bulk shifts of ±1200 km/s at
