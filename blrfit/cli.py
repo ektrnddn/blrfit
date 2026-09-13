@@ -262,6 +262,68 @@ def cmd_fit(a):
 # ----------------------------------------------------------------------------
 # rv
 # ----------------------------------------------------------------------------
+def _rv_line(line, res1, res2, sp1, sp2, epochs_meta, a, out):
+    """Cross-correlate one line of the two fitted epochs; returns the JSON record (or a
+    'measured': False record) and the pair for the figure."""
+    epochs = []
+    for meta, sp, res in ((epochs_meta[0], sp1, res1), (epochs_meta[1], sp2, res2)):
+        m = res["meas"].get(line, {}); c = res["cls"].get(line, {})
+        epochs.append(dict(meta, fitted=line in res["fits"], label=c.get("label", ""), flags=list(c.get("flags", [])),
+                           c50_sys=m.get("c50_sys", np.nan), v_peak_sys=m.get("v_peak_sys", np.nan),
+                           fwhm=m.get("fwhm", np.nan), broad_flux_snr=m.get("broad_flux_snr", np.nan),
+                           v_sys=m.get("v_sys", np.nan), line=_line_record(line, res)))
+        out(f"  {os.path.basename(meta['path'])}: MJD {_fmt(meta['mjd'], 8, 1)} {line} class {c.get('label', '-')} "
+            f"c50-sys {_fmt(m.get('c50_sys', np.nan), 6, 0, True)} FWHM {_fmt(m.get('fwhm', np.nan), 5)} "
+            f"flux S/N {_fmt(m.get('broad_flux_snr', np.nan), 5, 1)} flags {','.join(c.get('flags', [])) or '-'}")
+    pair = (RV.pair_analysis(res2, res1, name=line, vmax=a.vmax, n_mc=a.nmc, details=True)
+            if (line in res1["fits"] and line in res2["fits"]) else None)
+    doc = dict(line=line, epochs=epochs)
+    if pair is None:
+        doc.update(measured=False, reason="the line is not fitted in both epochs or the cross-correlation failed")
+        out(f"  {line}: cross-correlation not possible: " + doc["reason"])
+        return doc, None
+    same_desi = sp1.get("kind") == "desi" and sp2.get("kind") == "desi"
+    grade = pair["profile_grade"]
+    # error floor: the DESI-DESI systematic for two DESI spectra, the graded
+    # cross-survey null otherwise (the grade inflates it for changed profiles)
+    if same_desi:
+        floor = RV.systematic_floor(line, pair.get("snr_proxy", np.nan)); floor_kind = "desi_sys"
+    else:
+        floor = RV.cross_survey_floor(line, grade); floor_kind = f"cross_survey_null_{grade}"
+    err_total = float(np.hypot(pair["err"], floor)) if (np.isfinite(pair["err"]) and np.isfinite(floor)) else np.nan
+    zp_ok = bool(pair.get("zp_ok", False))
+    dv_corr = pair["dv"] - pair["zp_dv"] if (line == "Hbeta" and zp_ok) else pair["dv"]
+    reliable = RV.is_reliable(pair)
+    cut = RV.CCF_DIR_CUT_KMS.get(line, np.nan)
+    why = ("at bound" if pair["at_bound"] else
+           (f"profile_z {pair['profile_z']:.1f} >= {RV.CCF_PROFILE_Z_MAX:.0f}" if not (pair["profile_z"] < RV.CCF_PROFILE_Z_MAX) else
+            (f"direction mismatch {pair['dir_mismatch']:.0f} >= {cut:.0f} km/s" if not (pair["dir_mismatch"] < cut) else "")))
+    s_ab = (pair.get("details") or {}).get("s_ab") or {}
+    doc.update(measured=True, dv=pair["dv"], err=pair["err"], err_dchi2=s_ab.get("err_dchi2", np.nan),
+               err_method="bootstrap" if a.nmc >= 10 else "dchi2",
+               profile_grade=grade, resid_frac=pair["resid_frac"], error_floor=floor, error_floor_kind=floor_kind,
+               err_total=err_total, sigma_sys_desi=RV.systematic_floor(line, pair.get("snr_proxy", np.nan)),
+               reliable_reason=why,
+               consistent=pair["consistent"], dir_mismatch=pair["dir_mismatch"], profile_z=pair["profile_z"],
+               chi2_red=pair["chi2_red"], at_bound=pair["at_bound"], regridded=pair["regridded"], npix=pair["npix"],
+               snr_proxy=pair["snr_proxy"], zp_dv=pair["zp_dv"], zp_err=pair["zp_err"], zp_line=pair["zp_line"], zp_ok=zp_ok,
+               zp_applied=bool(line == "Hbeta" and zp_ok), dv_corrected=dv_corr, reliable=bool(reliable),
+               significance=float(abs(dv_corr) / err_total) if (np.isfinite(err_total) and err_total > 0) else np.nan,
+               c50_difference=epochs[1]["c50_sys"] - epochs[0]["c50_sys"],
+               dv_abs_epoch1=epochs[0]["c50_sys"], dv_abs_epoch2=epochs[0]["c50_sys"] + dv_corr)
+    out(f"  {line}: shift of epoch 2 relative to epoch 1 {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s; "
+        f"with the {'DESI floor' if same_desi else 'cross-survey floor'} {floor:.0f} ({floor_kind}): +/- {err_total:.0f}; "
+        f"directions {'agree' if pair['consistent'] else 'DISAGREE'} (mismatch {pair['dir_mismatch']:.0f}); "
+        f"{'regridded' if pair['regridded'] else 'same grid'}; {'at bound' if pair['at_bound'] else 'inside search range'}")
+    out(f"  {line}: profile grade {grade} (z_prof {pair['profile_z']:.1f}, residual {100 * pair['resid_frac']:.1f} per cent of the peak); "
+        f"reliable tier {reliable}{(' (' + why + ')') if why else ''}")
+    out(f"  {line}: narrow-line zero-point ({pair['zp_line'] or 'none'}) {_fmt(pair['zp_dv'], 5, 0, True)} +/- {_fmt(pair['zp_err'], 4)} km/s "
+        f"({'applied' if doc['zp_applied'] else 'not applied'}) -> dv = {dv_corr:+.0f} km/s ({doc['significance']:.1f} sigma); "
+        f"c(1/2) difference of the two fits {doc['c50_difference']:+.0f}; offset from the narrow lines "
+        f"epoch 1 {epochs[0]['c50_sys']:+.0f}, epoch 2 {doc['dv_abs_epoch2']:+.0f} km/s")
+    return doc, pair
+
+
 def cmd_rv(a):
     tids = [t.strip() for t in (a.targetid or "").split(",") if t.strip()]
     tid1 = int(tids[0]) if tids else None
@@ -272,81 +334,57 @@ def cmd_rv(a):
     if a.ebv is not None:
         ebv2 = ebv1
     z = z1
-    line = {k.lower(): k for k in COMPLEX_WINDOW}.get(a.line.strip().lower(), a.line)
-    if line not in COMPLEX_WINDOW:
-        sys.exit(f"unknown line {line}; choose from {list(COMPLEX_WINDOW)}")
+    names = {k.lower(): k for k in COMPLEX_WINDOW}
+    lines = [names.get(s.strip().lower(), s.strip()) for s in a.line.split(",") if s.strip()]
+    bad = [s for s in lines if s not in COMPLEX_WINDOW]
+    if bad:
+        sys.exit(f"unknown line(s) {bad}; choose from {list(COMPLEX_WINDOW)}")
     if 0 < a.nmc < 10:
         sys.exit("--nmc must be at least 10: the bootstrap error is kept only when at least 10 realisations succeed")
-    complexes = ("Halpha", "Hbeta") if line in ("Halpha", "Hbeta") else ("MgII",)
+    complexes = tuple(c for c in ("Halpha", "Hbeta", "MgII") if c in lines or (c in ("Halpha", "Hbeta") and set(lines) & {"Halpha", "Hbeta"}))
     out = (lambda *x: None) if a.quiet else print
-    out(f"blrfit {__version__} rv: {line}, z = {z:.5f} ({zsrc1}), E(B-V) {ebv1:.4f} / {ebv2:.4f}")
+    out(f"blrfit {__version__} rv: {','.join(lines)}, z = {z:.5f} ({zsrc1}), E(B-V) {ebv1:.4f} / {ebv2:.4f}")
     res1 = fit_spectrum(sp1["wave"], sp1["flux"], sp1["ivar"], z, ebv=ebv1, complexes=complexes)
     res2 = fit_spectrum(sp2["wave"], sp2["flux"], sp2["ivar"], z, ebv=ebv2, complexes=complexes)
-    epochs = []
-    for path, sp, res, tid in ((a.epoch1, sp1, res1, tid1), (a.epoch2, sp2, res2, tid2)):
-        m = res["meas"].get(line, {}); c = res["cls"].get(line, {})
-        epochs.append(dict(path=os.path.abspath(path), kind=sp.get("kind"), targetid=tid, mjd=sp.get("mjd", np.nan),
-                           date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "",
-                           fitted=line in res["fits"], label=c.get("label", ""), flags=list(c.get("flags", [])),
-                           c50_sys=m.get("c50_sys", np.nan), v_peak_sys=m.get("v_peak_sys", np.nan),
-                           fwhm=m.get("fwhm", np.nan), broad_flux_snr=m.get("broad_flux_snr", np.nan),
-                           v_sys=m.get("v_sys", np.nan), line=_line_record(line, res)))
-        out(f"  {os.path.basename(path)}: MJD {_fmt(sp.get('mjd', np.nan), 8, 1)} {line} class {c.get('label', '-')} "
-            f"c50-sys {_fmt(m.get('c50_sys', np.nan), 6, 0, True)} FWHM {_fmt(m.get('fwhm', np.nan), 5)} "
-            f"flux S/N {_fmt(m.get('broad_flux_snr', np.nan), 5, 1)} flags {','.join(c.get('flags', [])) or '-'}")
-    pair = (RV.pair_analysis(res2, res1, name=line, vmax=a.vmax, n_mc=a.nmc, details=True)
-            if (line in res1["fits"] and line in res2["fits"]) else None)
-    doc = dict(blrfit_version=__version__, line=line, z=z, epochs=epochs, convention="dv > 0: epoch 2 redshifted relative to epoch 1")
-    mjd1, mjd2 = epochs[0]["mjd"], epochs[1]["mjd"]
+    epochs_meta = [dict(path=os.path.abspath(path), kind=sp.get("kind"), targetid=tid, mjd=sp.get("mjd", np.nan),
+                        date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "")
+                   for path, sp, tid in ((a.epoch1, sp1, tid1), (a.epoch2, sp2, tid2))]
+    doc = dict(blrfit_version=__version__, z=z, convention="dv > 0: epoch 2 redshifted relative to epoch 1", lines={})
+    mjd1, mjd2 = epochs_meta[0]["mjd"], epochs_meta[1]["mjd"]
     if np.isfinite(mjd1) and np.isfinite(mjd2):
         doc["baseline_days"] = float(mjd2 - mjd1); doc["baseline_rest_yr"] = float((mjd2 - mjd1) / 365.25 / (1 + z))
-    if pair is None:
-        doc.update(measured=False, reason="the line is not fitted in both epochs or the cross-correlation failed")
-        out("  cross-correlation not possible: " + doc["reason"])
-    else:
-        sig_sys = RV.systematic_floor(line, pair.get("snr_proxy", np.nan))
-        err_total = float(np.hypot(pair["err"], sig_sys)) if np.isfinite(pair["err"]) else np.nan
-        zp_ok = bool(pair.get("zp_ok", False))
-        dv_corr = pair["dv"] - pair["zp_dv"] if (line == "Hbeta" and zp_ok) else pair["dv"]
-        reliable = RV.is_reliable(pair)
-        cut = RV.CCF_DIR_CUT_KMS.get(line, np.nan)
-        why = ("at bound" if pair["at_bound"] else
-               (f"profile_z {pair['profile_z']:.1f} >= {RV.CCF_PROFILE_Z_MAX:.0f}" if not (pair["profile_z"] < RV.CCF_PROFILE_Z_MAX) else
-                (f"direction mismatch {pair['dir_mismatch']:.0f} >= {cut:.0f} km/s" if not (pair["dir_mismatch"] < cut) else "")))
-        s_ab = (pair.get("details") or {}).get("s_ab") or {}
-        doc.update(measured=True, dv=pair["dv"], err=pair["err"], err_dchi2=s_ab.get("err_dchi2", np.nan),
-                   err_method="bootstrap" if a.nmc >= 10 else "dchi2",
-                   reliable_reason=why, sigma_sys_desi=sig_sys, err_total=err_total,
-                   consistent=pair["consistent"], dir_mismatch=pair["dir_mismatch"], profile_z=pair["profile_z"],
-                   chi2_red=pair["chi2_red"], at_bound=pair["at_bound"], regridded=pair["regridded"], npix=pair["npix"],
-                   snr_proxy=pair["snr_proxy"], zp_dv=pair["zp_dv"], zp_err=pair["zp_err"], zp_line=pair["zp_line"], zp_ok=zp_ok,
-                   zp_applied=bool(line == "Hbeta" and zp_ok), dv_corrected=dv_corr, reliable=bool(reliable),
-                   c50_difference=epochs[1]["c50_sys"] - epochs[0]["c50_sys"],
-                   dv_abs_epoch1=epochs[0]["c50_sys"], dv_abs_epoch2=epochs[0]["c50_sys"] + dv_corr)
-        out(f"  shift of epoch 2 relative to epoch 1: {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s "
-            f"(with the DESI floor {sig_sys:.0f}: +/- {err_total:.0f}); directions {'agree' if pair['consistent'] else 'DISAGREE'} "
-            f"(mismatch {pair['dir_mismatch']:.0f}); profile_z {pair['profile_z']:.1f}; "
-            f"{'regridded' if pair['regridded'] else 'same grid'}; {'at bound' if pair['at_bound'] else 'inside search range'}")
-        out(f"  narrow-line zero-point ({pair['zp_line'] or 'none'}): {_fmt(pair['zp_dv'], 5, 0, True)} +/- {_fmt(pair['zp_err'], 4)} km/s "
-            f"({'applied' if doc['zp_applied'] else 'not applied'}) -> dv = {dv_corr:+.0f} km/s; "
-            f"reliable tier: {reliable}{(' (' + why + ')') if why else ''}; "
-            f"c(1/2) difference of the two fits {doc['c50_difference']:+.0f} km/s")
-        out(f"  offset from the narrow lines: epoch 1 {epochs[0]['c50_sys']:+.0f}, epoch 2 {doc['dv_abs_epoch2']:+.0f} km/s")
+    pairs = {}
+    for line in lines:
+        rec, pair = _rv_line(line, res1, res2, sp1, sp2, epochs_meta, a, out)
+        doc["lines"][line] = rec; pairs[line] = pair
+    first = doc["lines"][lines[0]]
+    doc.update({k: v for k, v in first.items() if k != "lines"})     # the first line's record at the top level
+    if "Halpha" in pairs and "Hbeta" in pairs:
+        tl = RV.two_line_consistent(pairs["Halpha"], pairs["Hbeta"])
+        doc["two_line"] = tl if tl is not None else dict(consistent=False, reason="one of the lines has no usable shift")
+        if tl is not None:
+            out(f"  two-line criterion (Halpha vs Hbeta): {'consistent' if tl['consistent'] else 'NOT consistent'} "
+                f"(difference {tl['difference']:+.0f} km/s, {tl['sigma']:.1f} sigma{'' if tl['same_sign'] else ', opposite signs'})")
     stem = a.stem or f"{_stem(a.epoch1, sp1, tid1)}_vs_{_stem(a.epoch2, sp2, tid2)}"
     os.makedirs(a.out, exist_ok=True)
     base = os.path.join(a.out, stem)
     with open(base + "_rv.json", "w") as fh:
         json.dump(_clean(doc), fh, indent=1)
     out(f"-> {base}_rv.json")
-    if not a.no_figure and pair is not None:
+    if not a.no_figure and any(p is not None for p in pairs.values()):
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         from .plot import plot_epochs_overlay, plot_ccf
-        fig, axes = plt.subplots(1, 2, figsize=(13, 4.6), gridspec_kw=dict(width_ratios=[1.6, 1]))
-        plot_epochs_overlay([res1, res2], [epochs[0]["date"] or "epoch 1", epochs[1]["date"] or "epoch 2"], name=line,
-                            title=f"{stem}: {line}", ax=axes[0])
-        plot_ccf(pair, title=f"dv = {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s", ax=axes[1])
+        shown = [l for l in lines if pairs.get(l) is not None]
+        fig, axes = plt.subplots(len(shown), 2, figsize=(13, 4.6 * len(shown)), squeeze=False,
+                                 gridspec_kw=dict(width_ratios=[1.6, 1]))
+        for k, line in enumerate(shown):
+            pair = pairs[line]
+            plot_epochs_overlay([res1, res2], [epochs_meta[0]["date"] or "epoch 1", epochs_meta[1]["date"] or "epoch 2"],
+                                name=line, title=f"{stem}: {line}", ax=axes[k, 0])
+            plot_ccf(pair, title=f"{line}: dv = {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s, grade {pair['profile_grade']}",
+                     ax=axes[k, 1])
         fig.tight_layout(); fig.savefig(base + "_rv.png", dpi=110)
         out(f"-> {base}_rv.png")
     return 0
@@ -421,7 +459,8 @@ def build_parser():
     r.add_argument("--ebv", default=None, help="Galactic E(B-V) for both epochs (default: per file as in fit)")
     r.add_argument("--ra", type=float, default=None, help="right ascension (deg), for --ebv sfd")
     r.add_argument("--dec", type=float, default=None, help="declination (deg)")
-    r.add_argument("--line", default="Halpha", help="Halpha (default), Hbeta or MgII")
+    r.add_argument("--line", default="Halpha", help="Halpha (default), Hbeta, MgII, or a comma-separated list; "
+                   "with Halpha,Hbeta the two-line criterion is evaluated")
     r.add_argument("--vmax", type=float, default=2000.0, help="search range of the shift, km/s (default 2000)")
     r.add_argument("--nmc", type=int, default=0,
                    help="bootstrap realisations for the cross-correlation error, at least 10 (default 0 = Delta chi-square error)")

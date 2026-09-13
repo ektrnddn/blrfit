@@ -80,9 +80,27 @@ def test_rv_two_sdss_epochs(tmp_path):
     assert doc["zp_line"] == "OIII" and abs(doc["zp_dv"]) < 40 and doc["zp_applied"]
     assert doc["dv_corrected"] == pytest.approx(doc["dv"] - doc["zp_dv"])
     assert doc["dv_abs_epoch2"] == pytest.approx(doc["epochs"][0]["c50_sys"] + doc["dv_corrected"])
-    assert doc["sigma_sys_desi"] == 79.0 and doc["err_total"] == pytest.approx(np.hypot(doc["err"], 79.0))
+    assert doc["sigma_sys_desi"] == 79.0
     assert doc["profile_z"] > 5 and doc["reliable"] is False     # the profile changed shape between 2001 and 2013
+    assert doc["profile_grade"] == "changed" and 0.0 < doc["resid_frac"] < 0.2
+    assert doc["error_floor_kind"] == "cross_survey_null_changed" and doc["error_floor"] == pytest.approx(147.0 * 1.5)
+    assert doc["err_total"] == pytest.approx(np.hypot(doc["err"], doc["error_floor"]))
+    assert doc["lines"]["Hbeta"]["dv"] == doc["dv"]
     assert (tmp_path / "spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.png").stat().st_size > 10000
+
+
+def test_rv_two_lines_and_the_two_line_criterion(tmp_path):
+    rc = main(["rv", SDSS_EXAMPLE, SDSS_EXAMPLE_2, "--z", str(Z_J001224), "--line", "Halpha,Hbeta", "--out", str(tmp_path),
+               "--no-figure", "--quiet"])
+    assert rc == 0
+    doc = json.load(open(tmp_path / "spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.json"))
+    assert set(doc["lines"]) == {"Halpha", "Hbeta"}
+    ha, hb = doc["lines"]["Halpha"], doc["lines"]["Hbeta"]
+    assert ha["measured"] and hb["measured"]
+    assert abs(ha["dv"] - (-219)) < 40 and abs(hb["dv"] - (-294)) < 40
+    assert ha["profile_grade"] == "changed" and hb["profile_grade"] == "changed"
+    assert doc["two_line"]["consistent"] and doc["two_line"]["same_sign"]
+    assert doc["line"] == "Halpha" and doc["dv"] == ha["dv"]        # the first line at the top level
 
 
 def test_version():

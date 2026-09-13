@@ -13,7 +13,9 @@ First public release.
   A/B/C/F/E/X/W, twelve quality flags, Monte Carlo errors and the DESI repeat-spectrum error model.
 * Cross-correlation of the broad profile between epochs (whole-pixel chi-square, profiled scale
   and baseline, narrow-line down-weighting, fixed outlier mask, bidirectional consistency,
-  narrow-line zero-point, profile-stability statistic) with the DESI on-sky floors.
+  narrow-line zero-point, profile-stability statistic) with the DESI on-sky floors; profile grades
+  (stable, mild, changed) with graded cross-survey error floors, the residual effect size and the
+  two-line consistency criterion.
 * Readers for SDSS spec files, DESI healpix and tile coadds (astropy only; desispec optional and
   identical), and generic tables with declared columns, units and frame.
 * `blrfit fit`, `blrfit rv` and `blrfit fetch` (SDSS through astroquery, DESI public releases

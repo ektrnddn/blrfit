@@ -266,3 +266,18 @@ CCF_SYS_KMS = {"Halpha": 155.0, "Hbeta": 79.0}      # on-sky floors from consecu
 CCF_SYS_HBETA_LOWSNR_KMS = 157.0                    # Hbeta at S/N proxy < 8
 CCF_DIR_CUT_KMS = {"Halpha": 466.0, "Hbeta": 238.0} # direction-mismatch cut of the reliable tier
 CCF_PROFILE_Z_MAX = 5.0                             # profile-stability cut of the reliable tier
+# Profile-stability grades for pairs across surveys (an SDSS spectrum against a
+# DESI template). z_prof is a significance: for DESI-DESI pairs its median is
+# -14 and 3 per cent of the pairs exceed 5, for SDSS-DESI pairs 43 per cent of
+# the Halpha points exceed 5 and the value rises with signal-to-noise, because
+# resolution, aperture and calibration differences between the surveys become
+# significant as the noise shrinks. The velocity scatter of such points does
+# not grow until z_prof is well above 5, so instead of the hard cut they are
+# graded and their error floor inflated. Measured on the SDSS-to-DESI velocity
+# change of the non-candidate objects of the DESI catalogue (direction cut
+# passed; Halpha 582 / 145 / 339 points, Hbeta 781 / 69 / 87 points in the
+# three grades): NMAD 143, 161, 262 km/s (Halpha) and 147, 208, 221 km/s (Hbeta).
+PROFILE_GRADE_Z = (("stable", 5.0), ("mild", 10.0), ("changed", np.inf))   # upper bounds of z_prof
+PROFILE_GRADE_INFLATION = {"Halpha": {"stable": 1.0, "mild": 1.15, "changed": 1.85},
+                           "Hbeta": {"stable": 1.0, "mild": 1.4, "changed": 1.5}}
+CCF_NULL_KMS = {"Halpha": 143.0, "Hbeta": 147.0}  # cross-survey floor of a stable-grade point (as above)

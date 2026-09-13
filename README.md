@@ -334,6 +334,31 @@ zero-point, the reliability tier and the absolute offset at the second epoch,
 Δv(t₂) = Δv(t₁) + v_rel. These floors are DESI numbers; for other instruments the same
 calibration should be repeated.
 
+**Profile grades for pairs across surveys.** z_prof is a significance, not a size: for pairs of
+DESI spectra its median is −14 and 3 per cent exceed 5, whereas for SDSS spectra against a DESI
+template 43 per cent of the Hα points exceed 5, and the value rises with signal-to-noise because
+resolution, aperture and calibration differences between the surveys become significant as the
+noise shrinks. The velocity scatter of such points does not grow until z_prof is well above 5.
+`pair_analysis` therefore also returns a grade, stable (z_prof < 5), mild (5–10) or changed
+(≥ 10), and an effect size, `resid_frac`, the rms of the residual after the best shift, scale
+and baseline as a fraction of the template peak. For a cross-survey pair the tool uses the null
+scatter of the stable grade as the error floor (143 km/s for Hα, 147 km/s for Hβ) inflated by the
+grade:
+
+| grade | z_prof | Hα floor | Hβ floor |
+|---|---|---|---|
+| stable | < 5 | × 1.0 | × 1.0 |
+| mild | 5–10 | × 1.15 | × 1.4 |
+| changed | ≥ 10 | × 1.85 | × 1.5 |
+
+measured on the SDSS-to-DESI velocity change of the non-candidate objects of the DESI catalogue
+with the direction cut applied (582 / 145 / 339 Hα points and 781 / 69 / 87 Hβ points per grade).
+The reliable tier above (the stable grade with the bound and direction conditions) remains the
+selection for population statistics; the graded error is what to use when asking whether one
+object moved. With `--line Halpha,Hbeta`, `blrfit rv` also evaluates the two-line criterion of
+Liu et al. (2014) and Guo et al. (2019): the shifts of the two lines agree within twice their
+combined error and, where both are significant, in sign.
+
 ![Two epochs of broad Hβ of SDSS J001224.01−102226.5](docs/spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.png)
 
 *`blrfit rv` on the 2001 and 2013 SDSS spectra of J001224: the two continuum- and narrow-line-

@@ -70,7 +70,8 @@ import numpy as np
 
 from .constants import (C_KMS, LAM, CCF_VMAX_KMS, CCF_WIN_FWHM, CCF_WIN_MIN_KMS, CCF_NSUB_FRAC,
                         CCF_CLIP_SIGMA, CCF_DCHI2_99, CCF_SIG_FROM_99, CCF_SYS_KMS,
-                        CCF_SYS_HBETA_LOWSNR_KMS, CCF_DIR_CUT_KMS, CCF_PROFILE_Z_MAX)
+                        CCF_SYS_HBETA_LOWSNR_KMS, CCF_DIR_CUT_KMS, CCF_PROFILE_Z_MAX,
+                        PROFILE_GRADE_Z, PROFILE_GRADE_INFLATION, CCF_NULL_KMS)
 from .model.lines import eval_components
 
 DCHI2_99 = CCF_DCHI2_99
@@ -292,8 +293,24 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
     dv_grid = ns_full * dpix
     okw = inwin & okT & np.isfinite(fT)
     snr_proxy = float(np.nanmax(np.abs(fT[okw])) / np.nanmedian(eT[okw])) if okw.any() else np.nan
+    # size of the profile change at the best shift: rms of the residual after the
+    # scale and baseline, as a fraction of the template peak (an effect size, unlike
+    # profile_z, which is a significance and grows with signal-to-noise)
+    resid_frac = np.nan
+    nshift = int(ns_full[k0]); i_lo = max(0, nshift); i_hi = min(nT, nT + nshift)
+    sl_p = slice(i_lo, i_hi); sl_t = slice(i_lo - nshift, i_hi - nshift)
+    good = (inwin[sl_p] & okP[sl_p] & okT[sl_t] & ~excl[sl_p] & np.isfinite(fP[sl_p]) & np.isfinite(fT[sl_t]))
+    if int(good.sum()) >= min_pix and okw.any():
+        y = fP[sl_p][good]; x = fT[sl_t][good]; gv = vT[sl_p][good]
+        sig2 = eP[sl_p][good] ** 2 + eT[sl_t][good] ** 2
+        if nsub_frac > 0:
+            sig2 = sig2 + (nsub_frac * nmP[sl_p][good]) ** 2 + (nsub_frac * nmT[sl_t][good]) ** 2
+        beta, X = _gls(y, x, gv, sig2, np.ones(y.size, bool), baseline)
+        if beta is not None and beta[0] != 0:
+            peak = float(np.nanmax(np.abs(fT[okw])))
+            resid_frac = float(np.sqrt(np.mean((y - X @ beta) ** 2)) / (abs(beta[0]) * peak))
     base = dict(npix=int(npixs[k0]), scale=float(scales[k0]), regridded=bool(regridded),
-                dv_pix=float(dpix), n_clipped=n_clipped, snr_proxy=snr_proxy,
+                dv_pix=float(dpix), n_clipped=n_clipped, snr_proxy=snr_proxy, resid_frac=resid_frac,
                 curve=(dv_grid, Gs), window=tuple(window))
     nfree = {"linear": 3, "const": 2}.get(baseline, 1) + 1
     dof = max(int(npixs[k0]) - nfree, 1)
@@ -410,6 +427,7 @@ def shift_bidirectional(prof_a, prof_b, **kw):
                 consistent=bool(mismatch <= tol), dir_mismatch=float(mismatch),
                 at_bound=False, chi2_red=float(max(s_ab["chi2_red"], s_ba["chi2_red"])),
                 npix=int(min(s_ab["npix"], s_ba["npix"])), regridded=bool(s_ab["regridded"] or s_ba["regridded"]),
+                resid_frac=float(max(s_ab.get("resid_frac", np.nan), s_ba.get("resid_frac", np.nan))),
                 s_ab=s_ab, s_ba=s_ba)
 
 
@@ -435,10 +453,11 @@ def narrow_zeropoint(res_a, res_b, prefer=("OIII", "SII"), vmax=800.0, **kw):
 def pair_analysis(res_a, res_b, name="Halpha", zp=True, details=False, **kw):
     """Full comparison of two fits of the same object at the same redshift:
     bidirectional broad-line shift of a relative to b plus the narrow-line
-    zero-point. Returns dict(name, dv, err, consistent, at_bound, chi2_red,
-    profile_z, npix, regridded, snr_proxy, dir_mismatch, zp_dv, zp_err,
-    zp_line, zp_ok) or None; ``details=True`` adds the two one-directional
-    ``ccf_shift`` results (including their curves) under 'details'."""
+    zero-point. Returns a flat dict(name, dv, err, consistent, at_bound,
+    chi2_red, profile_z, resid_frac, profile_grade, npix, regridded, snr_proxy,
+    dir_mismatch, zp_dv, zp_err, zp_line, zp_ok) or None; with ``details=True``
+    the two one-directional ``ccf_shift`` results (including their curves) are
+    added under 'details'."""
     pa = broad_profile_data(res_a, name=name)
     pb = broad_profile_data(res_b, name=name)
     if pa is None or pb is None:
@@ -453,7 +472,8 @@ def pair_analysis(res_a, res_b, name="Halpha", zp=True, details=False, **kw):
                npix=s.get("npix", 0), regridded=s.get("regridded", False),
                snr_proxy=min(s.get("s_ab", {}).get("snr_proxy", np.nan), s.get("s_ba", {}).get("snr_proxy", np.nan))
                if s.get("s_ab") else np.nan,
-               dir_mismatch=s.get("dir_mismatch", np.nan))
+               dir_mismatch=s.get("dir_mismatch", np.nan), resid_frac=s.get("resid_frac", np.nan))
+    out["profile_grade"] = profile_grade(out["profile_z"])
     if details:
         out["details"] = dict(s_ab=s.get("s_ab"), s_ba=s.get("s_ba"))
     if zp:
@@ -493,6 +513,46 @@ def systematic_floor(name, snr_proxy=np.nan):
     if name == "Hbeta" and np.isfinite(snr_proxy) and snr_proxy < 8:
         return CCF_SYS_HBETA_LOWSNR_KMS
     return CCF_SYS_KMS.get(name, np.nan)
+
+
+def profile_grade(profile_z):
+    """Profile-stability grade of a pair: 'stable' (z_prof < 5), 'mild' (5 to 10),
+    'changed' (10 and above), or 'unknown'. The reliable tier of the DESI
+    calibration is the 'stable' grade plus the bound and direction conditions;
+    the other grades keep the measurement with an inflated error."""
+    if profile_z is None or not np.isfinite(profile_z):
+        return "unknown"
+    for name, upper in PROFILE_GRADE_Z:
+        if profile_z < upper:
+            return name
+    return "changed"
+
+
+def error_inflation(name, grade):
+    """Factor by which the cross-survey error floor grows with the profile grade."""
+    return PROFILE_GRADE_INFLATION.get(name, PROFILE_GRADE_INFLATION["Halpha"]).get(grade, np.nan)
+
+
+def cross_survey_floor(name, grade):
+    """Error floor of a point measured against a template from another survey:
+    the null scatter of a stable-grade point times the inflation of its grade."""
+    return CCF_NULL_KMS.get(name, np.nan) * error_inflation(name, grade)
+
+
+def two_line_consistent(pair_a, pair_b, nsig=2.0):
+    """The two-line criterion of Liu et al. (2014) and Guo et al. (2019): the
+    shifts of two lines of the same pair of spectra agree within ``nsig`` times
+    their combined error and, where both are significant, in sign. Returns
+    dict(consistent, difference, sigma, same_sign) or None when either pair is
+    missing, at bound or without a finite error."""
+    for p in (pair_a, pair_b):
+        if p is None or p.get("at_bound") or not np.isfinite(p.get("err", np.nan)):
+            return None
+    d = float(pair_a["dv"] - pair_b["dv"]); e = float(np.hypot(pair_a["err"], pair_b["err"]))
+    sig_a = abs(pair_a["dv"]) > pair_a["err"]; sig_b = abs(pair_b["dv"]) > pair_b["err"]
+    same_sign = bool(np.sign(pair_a["dv"]) == np.sign(pair_b["dv"])) if (sig_a and sig_b) else True
+    return dict(consistent=bool(abs(d) <= nsig * e and same_sign), difference=d,
+                sigma=float(abs(d) / e) if e > 0 else np.nan, same_sign=same_sign)
 
 
 def is_reliable(pair):

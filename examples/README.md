@@ -47,6 +47,9 @@ realisations switch between three-Gaussian decompositions of this asymmetric pro
 own redshift (0.2244, 1035 km/s from the narrow lines) instead of 0.2288 changes the decomposition
 (Hα Δv −1041, Hβ −1262 km/s, FWHM 4550): the offsets are stable, the components are not. For
 J001247 (DESI, 2021) Hα is class F with Δv = −37 km/s and no flag; its Hβ is class C at about
-+90 km/s with the `poor_fit` flag (a narrow unmodelled feature near 5030 Å rest). Example 5 gives a
++90 km/s with the `poor_fit` flag (a narrow unmodelled feature near 5030 Å rest). With `--line Halpha,Hbeta` the tool also grades the profile change (both lines: grade
+"changed"; residuals of about 7 per cent of the peak) and uses the cross-survey floor of that
+grade, which makes the shifts 0.8σ (Hα, −219 ± 266) and 1.3σ (Hβ, −282 ± 224); the two lines
+agree within 1.6σ (two-line criterion satisfied). Example 5 gives a
 shift of +67 ± 11 km/s (±155 with the DESI floor) of the DESI spectrum relative to the 2001 SDSS
 spectrum in Hα, regridded, directions agreeing, z_prof 5.5, hence outside the reliable tier.

@@ -581,3 +581,53 @@ def test_pipeline_grid(fwhm, peak):
             assert np.mean(cons) >= 0.9
             if name == "Halpha":
                 assert PIPELINE_PULL_BAND[0] <= nmad(pulls) <= PIPELINE_PULL_BAND[1], nmad(pulls)
+
+
+# ---------------------------------------------------------------------------
+# profile grades, the effect size and the two-line criterion
+# ---------------------------------------------------------------------------
+def test_profile_grade_and_inflation():
+    assert rv.profile_grade(-14.0) == "stable" and rv.profile_grade(4.99) == "stable"
+    assert rv.profile_grade(5.0) == "mild" and rv.profile_grade(9.99) == "mild"
+    assert rv.profile_grade(10.0) == "changed" and rv.profile_grade(55.7) == "changed"
+    assert rv.profile_grade(np.nan) == "unknown" and rv.profile_grade(None) == "unknown"
+    assert rv.error_inflation("Halpha", "stable") == 1.0 and rv.error_inflation("Halpha", "changed") == 1.85
+    assert rv.error_inflation("Hbeta", "mild") == 1.4
+    assert np.isnan(rv.error_inflation("Hbeta", "unknown"))
+    assert rv.cross_survey_floor("Halpha", "stable") == 143.0
+    assert rv.cross_survey_floor("Hbeta", "changed") == pytest.approx(147.0 * 1.5)
+
+
+def test_two_line_consistent():
+    a = dict(dv=-300.0, err=40.0, at_bound=False); b = dict(dv=-220.0, err=30.0, at_bound=False)
+    r = rv.two_line_consistent(a, b)
+    assert r["consistent"] and r["same_sign"] and r["sigma"] == pytest.approx(80.0 / np.hypot(40.0, 30.0))
+    # opposite significant signs are inconsistent even when the difference is within 2 sigma
+    r = rv.two_line_consistent(dict(dv=120.0, err=100.0, at_bound=False), dict(dv=-110.0, err=100.0, at_bound=False))
+    assert r["sigma"] < 2.0 and not r["same_sign"] and not r["consistent"]
+    # a large error makes the second shift insignificant: no sign imposed, the difference decides
+    r = rv.two_line_consistent(dict(dv=200.0, err=50.0, at_bound=False), dict(dv=-150.0, err=300.0, at_bound=False))
+    assert r["same_sign"] and r["consistent"]
+    # a shift consistent with zero in one line imposes no sign
+    r = rv.two_line_consistent(dict(dv=200.0, err=50.0, at_bound=False), dict(dv=-20.0, err=80.0, at_bound=False))
+    assert r["same_sign"] and not r["consistent"]          # 220 km/s apart, 2.3 sigma
+    assert rv.two_line_consistent(a, None) is None
+    assert rv.two_line_consistent(a, dict(dv=-220.0, err=np.nan, at_bound=False)) is None
+    assert rv.two_line_consistent(a, dict(dv=-220.0, err=30.0, at_bound=True)) is None
+
+
+def test_resid_frac_measures_the_profile_change():
+    """The effect size is a few per cent of the peak for the same profile (noise
+    only) and several times larger when the width changed from 3000 to 5000
+    km/s; the grade follows z_prof."""
+    snr = continuum_snr_for_peak(FAST_PEAK, 3000)
+    rT = fit(3000, V0, FAST_PEAK, SEED_T)
+    rE_same = fit(3000, V0, FAST_PEAK, SEED_E)
+    sp = make_spectrum(z=Z, snr=snr, broad=broad_cfg(V0, 5000), seed=SEED_E + 1)
+    rE_wide = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z, complexes=("Halpha", "Hbeta"))
+    same = rv.pair_analysis(rE_same, rT, name="Halpha"); wide = rv.pair_analysis(rE_wide, rT, name="Halpha")
+    assert np.isfinite(same["resid_frac"]) and np.isfinite(wide["resid_frac"])
+    assert same["resid_frac"] < 0.06
+    assert wide["resid_frac"] > 2.0 * same["resid_frac"]
+    assert same["profile_grade"] == "stable" and wide["profile_grade"] == "changed"
+    assert rv.is_reliable(same) and not rv.is_reliable(wide)
