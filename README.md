@@ -1,5 +1,13 @@
 # blrfit
 
+**Development branch: 0.2.0.dev0.** Scientific corrections are in progress.
+The validation numbers below describe the frozen 0.1.0 release, not a newly
+validated catalogue. CHANGELOG.md lists the corrections of 0.2.0 and separates
+fixes from changes of policy; the on-sky calibration of the cross-correlation
+errors, the Monte Carlo coverage and the production comparison of the Fe II
+change are still to be done, so this branch is not ready for a production refit
+or a paper's final measurements.
+
 Fits the broad Hα, Hβ (and Mg II) emission lines of an active galactic nucleus against the
 systemic velocity defined by the narrow lines of the same spectrum, measures the displacement
 and shape of the broad profile, classifies it, flags the conditions under which the measurement
@@ -57,8 +65,11 @@ res["meas"]["Hbeta"]["c50_sys"], res["err"]["Hbeta"]["c50_sys"], res["cls"]["Hbe
 row = summary_row(res)                                                  # one flat dictionary (HA_*, HB_*, conti_*)
 ```
 
-`fit_spectrum` needs the observed-frame vacuum wavelength in Å, the flux in any linear unit
-(1e-17 erg s⁻¹ cm⁻² Å⁻¹ if luminosities are wanted), the inverse variance, and the redshift.
+`fit_spectrum` needs the observed-frame vacuum wavelength in Å, the flux in units of
+1e-17 erg s⁻¹ cm⁻² Å⁻¹ (the amplitude bounds and starting values of the model are set for
+continua of order 1–1000 in that unit; a spectrum in another unit is refused with a message,
+and `flux_scale=` brings it into range, after which every flux-bearing output is in the scaled
+unit), the inverse variance, and the redshift.
 The redshift only sets the ±1500 km/s window in which the narrow lines are sought: every velocity
 reported is a difference between two quantities measured in the same fit, so errors in the input
 redshift cancel to first order.
@@ -172,8 +183,11 @@ end of DESI; unconstrained fits placed components outside the data and manufactu
 
 The rules are applied in the order listed: a profile takes the first class whose condition
 holds. The significance test of class A uses the Monte Carlo error when one was computed
-(`--nmc`, as in the catalogue with 30 realisations) and the 300 km/s threshold alone otherwise,
-so a class can differ between runs with and without the Monte Carlo.
+(`--nmc`) and the 300 km/s threshold alone otherwise, so a class can differ between runs with and
+without the Monte Carlo. The classes of the DESI catalogue were assigned in the production run
+without Monte Carlo errors (nmc = 0), that is, with the 300 km/s threshold alone; the Monte Carlo
+subset (30 realisations) was run separately and its errors were merged into the catalogue as the
+error columns only, without reassigning the classes.
 
 | Class | Rule |
 |---|---|
@@ -311,6 +325,17 @@ and off changes Δv by −3 ± 42 km/s (median ± NMAD over 351 measurable contr
 reference changes it by less than 30 km/s; the host treatment matters at the ≲ 150 km/s level in
 the most host-dominated objects. All are small against the 1000 km/s selection threshold.
 
+**What changed in 0.2.0.** Version 0.2.0 corrects the defects listed in `CHANGELOG.md`, which
+separates bug fixes from changes of policy so that their effects on the catalogue can be told
+apart. The effect on every object is tabulated: `docs/deltas_0.1.0_to_0.2.0.csv` holds the four
+pinned spectra and the DESI example, `docs/deltas_anchor_0.1.0_to_0.2.0.csv` the 824 SDSS
+spectra of the Liu et al. (2014) and Eracleous et al. (2012) anchor (written by
+`tests/test_anchor_liu.py` with `BLRFIT_WRITE_DELTAS=1`), both fitted with 0.1.0 and with 0.2.0
+on the same numerical stack, one row per spectrum and line with the offsets, widths, classes and
+flags of both versions and the BIC margin of every class change; `docs/DELTAS.md` names the
+correction behind each delta. The tag `v0.1.0` reproduces the catalogue run; the numbers of this section were
+measured with it.
+
 ## Velocity changes between epochs
 
 The multi-Gaussian decomposition of a broad profile is not unique between two noisy
@@ -318,76 +343,89 @@ realisations, so c(1/2) of a refitted model can jump with no physical change. `b
 `blrfit.rv.pair_analysis` therefore measure the change by χ² cross-correlation of the continuum-
 and narrow-line-subtracted broad profiles, the method of Eracleous et al. (2012), Shen et al.
 (2013), Liu et al. (2014), Runnoe et al. (2017) and Guo et al. (2019), in which the fit enters
-only through the subtraction. Specifics: whole-pixel shifts on the template's native grid (two
-DESI spectra are compared with no interpolation; a spectrum on a different grid is regridded once
-and flagged); a flux scale and a linear baseline profiled analytically at each shift; a
-comparison window of ±1.5 FWHM (at least ±2000 km/s) about the template's c(1/2); 7 per cent of
-the narrow-line model added in quadrature to the pixel errors instead of masking (a masked hole
-migrates with the shift and creates false minima at low S/N); the excess G(n) = χ²(n) − N_pix(n)
-as the curve statistic; outliers beyond 5σ identified once at the first-pass minimum and excluded
-at every shift; a polynomial of degree ≤ 6 over ±10 pixels for the sub-pixel minimum and the
-Δχ² = 6.63 (99 per cent) interval, converted to 1σ; measurement in both directions (Runnoe et al.
-2017) with the mismatch recorded; a narrow-line zero-point from [O III] λ5007 (or [S II]) as a
-wavelength- and flux-calibration control (Shen et al. 2013; Runnoe et al. 2015), applied to Hβ
-shifts (it reduced the scatter between consecutive DESI epochs by 21 per cent; for Hα it gave no
-improvement and is not applied); and a profile-stability statistic z_prof = (χ²_min − ν)/√(2ν).
+only through the subtraction. Specifics: whole-pixel shifts on the template's grid. Two spectra on one pixel lattice (two DESI
+spectra, or two SDSS spectra on their logarithmic lattice) are compared by integer placement with no
+interpolation; only spectra on different lattices are interpolated, onto a uniform velocity grid,
+with the interpolation weights carried into the variance (`regridded`). Masked pixels stay masked
+in place, so a pixel dropped from one epoch never moves the others. A flux scale and a linear
+baseline are profiled at each shift with the noise of both spectra in the variance,
+σ²_y + a²σ²_x, so that a brighter or fainter epoch does not change the statistic. The comparison
+window is ±1.5 FWHM (at least ±2000 km/s) about the template's c(1/2); 7 per cent of the narrow-line
+model is added in quadrature to the pixel errors instead of masking (a masked hole migrates with
+the shift and creates false minima at low S/N); the curve statistic is the excess
+G(n) = χ²(n) − N_pix(n); outliers beyond 5σ are identified once at the first-pass minimum and
+excluded at every shift; a polynomial of degree ≤ 6 over ±10 pixels gives the sub-pixel minimum.
+The error is the Δχ² = 6.63 (99 per cent) interval converted to 1σ, its bracketed half when only
+one side is bracketed, or the local curvature when neither is, and `err_method` names which. The
+shift is measured in both directions (Runnoe et al. 2017) with the mismatch recorded, and a
+profile-stability statistic z_prof = (χ²_min − ν)/√(2ν) is reported with both directions' values,
+fitted scales and masked-pixel counts. Because χ² − N_pix favours the shifts that use the fewest
+pixels whenever the profiles differ, the search runs in two stages, each on the window pixels with
+data in both spectra at every one of its shifts: stage 1 locates the minimum over ±vmax (a reduced
+range when fewer than half the window's pixels would remain), stage 2 measures the shift, its error
+and z_prof within 600 km/s of it. Single-pixel artefacts are masked in both spectra first, and two
+checks guard against false minima: the fitted flux factors of the two directions must lie within
+1/4 to 4 with a product within 1/2 to 2 (`scale_ok`), and a second minimum within Δχ² = 6.63 of the
+first and at least 500 km/s away marks the shift `ambiguous`.
 
-The shipped synthetic suite (`tests/test_rv_synthetic.py`) measures, for Gaussian broad lines of
-FWHM 2500, 4000 and 5000 km/s and shifts of −600 to +900 km/s: the cross-correlation alone is
-unbiased at peak S/N 25 and 50 (pooled medians within ±5 km/s over 160 pairs per width), while at
-peak S/N 8–12 the largest shift is pulled toward zero by 30–45 km/s; the Δχ² errors have pull
-NMADs of 0.97, 1.33 and 1.64 at peak S/N 25 (0.79, 1.15, 1.31 at 50) and 1.9, 3.0 and 4.6 at peak
-S/N 8, so they undercover for FWHM ≥ 4000 km/s and more strongly below peak S/N 10 than the
-factors of 1.2–2 quoted from the development suite of the paper; the full pipeline (fit, narrow
-subtraction, cross-correlation) recovers the shifts within the sampling error at peak S/N 25–50,
-with a −17 km/s bias for FWHM 2500 km/s where the narrow-line-region wing takes broad flux; at
-peak S/N 10 the pipeline is biased by −25 to −43 km/s, its errors undercover by about 3 and a
-quarter of the pairs fail the direction check (the slow grid, `test_pipeline_grid`); the
-bidirectional, at-bound, regridded, zero-point and profile-change behaviours are as described
-above. `blrfit rv --nmc N` (N ≥ 10) replaces the Δχ² error by a bootstrap over both spectra's
-errors; the DESI floors below were calibrated with the Δχ² error. FWHM ≈ 8000 km/s at peak S/N 8 is a hard regime in which the errors are not trusted. The
-on-sky floors below absorb the undercoverage in the catalogue. On 570 pairs of
-consecutive DESI epochs the reliable tier (not at bound, z_prof < 5, direction mismatch below
-466 km/s for Hα and 238 km/s for Hβ) needs a systematic floor σ_sys = 155 km/s (Hα) and 79 km/s
-(Hβ; 157 km/s at S/N proxy < 8), added in quadrature, to bring the pulls to unity; on that tier
-the end-to-end scatter of consecutive epochs is 158 km/s in Hα and 101 km/s in zero-point-
-corrected Hβ, against 201 and 408 km/s for the differences of c(1/2) between the same fits. The
-tool reports the raw shift and error, the DESI floor, the direction mismatch, z_prof, the
-zero-point, the reliability tier and the absolute offset at the second epoch,
-Δv(t₂) = Δv(t₁) + v_rel. These floors are DESI numbers; for other instruments the same
-calibration should be repeated.
+**Narrow-line frame.** Each pair gets one zero point, the shift of the narrow lines of one epoch
+against the other, from [O III] λ5007, or from [S II] where [O III] is not measurable (Shen et al.
+2013; Runnoe et al. 2015). A zero point within ±200 km/s (`FRAME_VETO_KMS`, provisional) means the
+two spectra share a frame: Hβ is then corrected by it (in the 0.1.0 calibration this reduced the
+scatter between consecutive DESI epochs by 21 per cent) and Hα is not (no improvement there). A
+larger zero point, or one at the edge of its ±800 km/s search, vetoes the pair for both lines
+(`frame_ok` False, with `frame_reason`): a frame offset enters the two Balmer lines identically and
+would pass for the coincident two-line change the search looks for.
 
-**Profile grades for pairs across surveys.** z_prof is a significance, not a size: for pairs of
-DESI spectra its median is −14 and 3 per cent exceed 5, whereas for SDSS spectra against a DESI
-template 43 per cent of the Hα points exceed 5, and the value rises with signal-to-noise because
-resolution, aperture and calibration differences between the surveys become significant as the
-noise shrinks. The velocity scatter of such points does not grow until z_prof is well above 5.
-`pair_analysis` therefore also returns a grade, stable (z_prof < 5), mild (5–10) or changed
-(≥ 10), and an effect size, `resid_frac`, the rms of the residual after the best shift, scale
-and baseline as a fraction of the template peak. For a cross-survey pair the tool uses the null
-scatter of the stable grade as the error floor (143 km/s for Hα, 147 km/s for Hβ) inflated by the
-grade:
+**Validation and calibration.** The shipped synthetic suite (`tests/test_rv_synthetic.py`) uses
+Gaussian broad lines of FWHM 2500, 4000 and 5000 km/s shifted by −600 to +900 km/s. With 0.1.0 the
+cross-correlation alone was unbiased at peak S/N 25 and 50 (pooled medians within ±5 km/s over 160
+pairs per width), with Δχ² pull NMADs of 0.97, 1.33 and 1.64 at peak S/N 25; the full pipeline was
+biased by −25 to −43 km/s at peak S/N 10. Re-measured with 0.2.0 at low S/N, the errors still
+undercover: pull NMADs 1.7–2.7, 2.0–4.0 and 4.0–6.9 for the three widths at peak S/N 8, and
+1.3–2.0, 1.7–2.7 and 2.5–3.5 at peak S/N 12, with 30 of 160 errors unavailable at FWHM 5000 km/s and
+peak S/N 8 (all reported). FWHM ≈ 8000 km/s at peak S/N 8 is a hard regime in which the errors are
+not trusted. `blrfit rv --nmc N` (N ≥ 10) replaces the Δχ² error by a bootstrap over both
+spectra's errors.
 
-| grade | z_prof | Hα floor | Hβ floor |
-|---|---|---|---|
-| stable | < 5 | × 1.0 | × 1.0 |
-| mild | 5–10 | × 1.15 | × 1.4 |
-| changed | ≥ 10 | × 1.85 | × 1.5 |
+The on-sky floors of the 0.1.0 calibration were measured with the 0.1.0 estimator: on 570 pairs of
+consecutive DESI epochs its reliable tier (not at bound, z_prof < 5, direction mismatch below
+466 km/s for Hα and 238 km/s for Hβ) needed σ_sys = 155 km/s (Hα) and 79 km/s (Hβ; 157 km/s at S/N
+proxy < 8) in quadrature to bring the pulls to unity. They are reported as reference values
+(`legacy_error_floor`), not applied: the corrected estimator needs its own calibration. Until then
+`blrfit rv` reports the statistical error, labelled uncalibrated, and marks no pair as reliable
+(`reliable` is False; `diagnostic_quality_pass` gives the tier conditions of 0.1.0 plus the frame
+and plausibility checks). On a first real-data test, 29 objects of the catalogue with two to nine
+DESI epochs from the public DR1 release and their SDSS spectra (161 measurable pair records), the
+0.1.0 estimator with a 5000 km/s search scattered pairs of DESI epochs weeks apart by 398 km/s in Hα
+on its own reliable tier, with shifts of up to 2587 km/s; the corrected estimator gives 58 km/s on
+its reliable pairs (17 pairs, largest 355 km/s) and 32 km/s in Hβ (7 pairs), with no reliable shift
+above 1500 km/s while it can still search to a median of 3000 km/s. Its statistical errors are still
+about three times too small in Hα (pull NMAD 3.4), so an on-sky floor measured with the corrected
+estimator remains necessary (`docs/CCF_VALIDATION.md`). The tool reports the shift and its error, the direction
+mismatch, z_prof, the zero point and frame check, and the absolute offset at the second epoch,
+Δv(t₂) = Δv(t₁) + v_rel.
 
-measured on the SDSS-to-DESI velocity change of the non-candidate objects of the DESI catalogue
-with the direction cut applied (582 / 145 / 339 Hα points and 781 / 69 / 87 Hβ points per grade).
-The reliable tier above (the stable grade with the bound and direction conditions) remains the
-selection for population statistics; the graded error is what to use when asking whether one
-object moved. With `--line Halpha,Hbeta`, `blrfit rv` also evaluates the two-line criterion of
-Liu et al. (2014) and Guo et al. (2019): the shifts of the two lines agree within twice their
-combined error and, where both are significant, in sign.
+**Profile grades.** z_prof is a significance, not a size, and it rises with signal-to-noise as
+resolution, aperture and calibration differences between two spectra become significant.
+`pair_analysis` returns a grade, stable (z_prof < 5), mild (5–10) or changed (≥ 10), and an effect
+size, `resid_frac`, the rms of the residual after the best shift, scale and baseline as a fraction
+of the template peak. With 0.1.0, z_prof of a pair also grew with the flux ratio of the two epochs,
+and the error inflation per grade used by the 0.1.0 tool for pairs across surveys (a null scatter
+of 143 km/s for Hα and 147 km/s for Hβ in the stable grade, × 1.15 / × 1.85 for Hα and × 1.4 / × 1.5
+for Hβ in the mild and changed grades) was measured with that estimator on an early table of the
+catalogue; these values are kept in `constants.py` for reference until the corrected estimator is
+calibrated. With `--line Halpha,Hbeta`, `blrfit rv` also evaluates, as an uncalibrated diagnostic,
+the two-line criterion of Liu et al. (2014) and Guo et al. (2019): the shifts of the two lines agree
+within twice their combined error and, where both are significant, in sign.
 
 ![Two epochs of broad Hβ of SDSS J001224.01−102226.5](docs/spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.png)
 
-*`blrfit rv` on the 2001 and 2013 SDSS spectra of J001224: the two continuum- and narrow-line-
+*`blrfit rv` 0.1.0 on the 2001 and 2013 SDSS spectra of J001224: the two continuum- and narrow-line-
 subtracted Hβ profiles relative to their own systemic velocities (left) and the cross-correlation
-excess curve with the 99 per cent interval (right). The profile shape changed between the epochs
-(z_prof ≈ 10), so the pair is outside the reliable tier.*
+excess curve with the 99 per cent interval (right). The 0.1.0 estimator graded this pair 'changed'
+(z_prof ≈ 10) because the 2013 spectrum is 2.1 times brighter; with 0.2.0 the pair gives
+−293 ± 29 km/s with z_prof 0.8 (stable).*
 
 ## What the tool does not do
 
@@ -417,6 +455,16 @@ is the diagnostic figure; `--pickle` writes the full result. `<stem>_rv.json` ho
 each epoch's fit of the line (`epochs`, each with the line record described above), the
 cross-correlation quantities listed above, `err_method` and `reliable_reason`. The exit status is 0
 whenever the spectrum could be read.
+
+`conti_pl_norm` (the power law at 3000 Å rest) and `conti_feop_norm` are flux densities of the
+(1+z)-scaled rest-frame spectrum the fit works on, f_rest(λ_rest) = (1+z) f_obs(λ_obs) at
+λ_rest = λ_obs/(1+z), in units of 1e-17 erg s⁻¹ cm⁻² Å⁻¹ per rest-frame ångström (the factor
+(1+z) is the wavelength Jacobian). The monochromatic continuum luminosity is therefore
+λL_λ(5100) = 4π D_L² × 5100 Å × f_rest(5100) × 1e-17 erg/s with f_rest(5100) =
+`conti_pl_norm` (5100/3000)^`conti_pl_alpha` and no further redshift factor; dividing by (1+z)
+once more understates it by log10(1+z) dex. `blrfit.continuum_luminosity(res)` (and
+`blrfit.lambda_l_lambda(conti, z)` for a `conti` dictionary or a summary row) implements this
+with the Planck 2018 luminosity distance, the same one that `broad_lum` uses.
 
 ## Citing
 

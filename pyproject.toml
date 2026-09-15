@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blrfit"
-version = "0.1.0"
+version = "0.2.0.dev0"
 description = "Broad AGN emission lines fitted against the narrow-line systemic velocity: offsets, profile classes, quality flags and velocity changes between epochs"
 readme = "README.md"
 license = {text = "MIT"}

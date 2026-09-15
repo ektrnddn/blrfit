@@ -4,6 +4,12 @@ produced the DESI catalogue (``tests/data/pins.json``: summary row, fitted
 parameters, chi-square and BIC of every line complex, continuum parameters,
 host information and the [O III] pre-fit).
 
+These are frozen 0.1.0 fixtures. The historical parameter-reconstruction test
+explicitly restores that release's rounded Fe-width operator in a scoped
+monkeypatch. The fresh-fit test uses the current, continuous operator. Thus
+historical reproduction does not require reintroducing quantization into the
+production model. Current Fe-width recovery is tested in test_corrections.py.
+
 The check has two parts, because the pins hold two kinds of number.
 
 The first part is checked on every platform to tolerances that only a change
@@ -71,10 +77,25 @@ threshold), and a chi-square at most 10 per cent above the pin (lower is
 allowed); its rest-frame arrays must equal those of the first part. Every
 departure of a spectrum is reported in one message.
 
-BLRFIT_STRICT_PINS=1 makes both parts bit-exact, the fresh fit included (its
-host decision, eigenspectrum count, host fraction and host reason string are
-compared there only); that is the release check on the reference stack (numpy
+The third part is the pin of the corrected fitter itself,
+``tests/data/pins_0.2.0.json``, written by ``tools/make_pins.py fit`` from this
+tree on the same four spectra and on the DESI example coadd (at its redrock
+redshift, with the E(B-V) of its fibermap), with the content of ``pins.json``
+and a ``produced_by`` block (blrfit version, git description of the tree,
+library versions, platform, date). ``test_current_pin_reproduced`` holds a
+fresh fit to the tolerances of the second part (the same constants, the same
+comparison) and, under BLRFIT_STRICT_PINS, bit for bit: the fitted parameters,
+chi-square and the BIC list of every complex, the continuum parameters, the
+host decision (eigenspectrum count, host fraction, reason string), the [O III]
+pre-fit and every entry of the summary row, the solver bookkeeping columns
+included. That is the release check of 0.2.0 on the reference stack (numpy
 1.26.4, scipy 1.13.1, macOS arm64).
+
+BLRFIT_STRICT_PINS=1 makes the first part bit-exact as well. The fresh fit of
+the legacy pins is held to the loose tolerances in both modes: the 0.2.0 model
+differs from 0.1.0 by design (the continuous Fe II operator; the ultraviolet
+Fe II width fixed where its window is short), and what that changes on the
+pinned spectra is recorded in ``docs/deltas_0.1.0_to_0.2.0.csv``.
 """
 import json
 import os
@@ -88,11 +109,15 @@ from blrfit.constants import (BROAD_WIDTH_SLOPE, C_KMS, COMPLEX_LINE, COMPLEX_WI
                               ERR_FLOOR, HOST_CONTINUUM_ONLY, LAM, MIN_HOST_FRAC,
                               NARROW_PRIOR_MIN_SNR, O3_START_MIN_SNR, SYS_PRIOR_KMS,
                               SYS_PRIOR_MIN_SNR)
-from blrfit.io import read_sdss
+from blrfit.io import read_desi, read_sdss
+from blrfit.io.desi import read_redrock, redrock_sibling
 from blrfit.measure import measure_complex
 from blrfit.model.broad import (broad_parameter_pairs, covered_velocity_bounds, select_by_bic,
                                 width_offset_penalty)
 from blrfit.model.continuum import conti_model, fe_templates, host_continuum_only, pca_templates
+from blrfit.model.continuum import FeTemplate
+from blrfit.constants import S2F
+from scipy.ndimage import gaussian_filter1d
 from blrfit.model.extinction import deredden
 from blrfit.model.fit import PREFIX, _lumdist_cm
 from blrfit.model.lines import build_complex, eval_components
@@ -290,9 +315,14 @@ def pinned_result(pin, sp):
 
 
 @pytest.mark.parametrize("pin", _pins(), ids=lambda p: p["file"])
-def test_pin_evaluated_from_the_parameters(pin):
-    """The continuum, the line model, chi-square, BIC selection, the measures and
-    the classes recomputed at the pinned parameters reproduce the pin."""
+def test_legacy_pin_evaluated_from_the_parameters(pin, monkeypatch):
+    """Reconstruct frozen 0.1.0 values with its historical Fe operator."""
+    def historical_broadening(self, width):
+        f = int(round(max(width, self.intrinsic + 10.) / 50.)) * 50.
+        sigma = np.sqrt(max(f**2 - self.intrinsic**2, 100.)) / S2F / self.pix_kms
+        return gaussian_filter1d(self.flux, sigma, mode='nearest')
+
+    monkeypatch.setattr(FeTemplate, 'broadened', historical_broadening)
     sp = read_sdss(_spectrum_path(pin["file"]))
     res = pinned_result(pin, sp)
     departures = []
@@ -316,20 +346,24 @@ def test_pin_evaluated_from_the_parameters(pin):
 # ----------------------------------------------------------------------------
 # second part: the end point of a fresh fit
 # ----------------------------------------------------------------------------
-@pytest.mark.parametrize("pin", _pins(), ids=lambda p: p["file"])
-def test_pin_reproduced(pin):
-    """A fresh fit reaches the pinned classes, flags, component counts and
-    systemic sources, the pinned c50_sys within END_POINT_KMS and a chi-square
-    not more than CHI2_WORSE above the pin, from the rest-frame arrays of the
-    first part; bit for bit under BLRFIT_STRICT_PINS."""
-    sp = read_sdss(_spectrum_path(pin["file"]))
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"],
-                              complexes=tuple(pin["complexes"]))
-    row = blrfit.summary_row(res)
+def _same(a, b):
+    """Equal, with NaN equal to NaN."""
+    return a == b or (isinstance(a, float) and isinstance(b, float) and np.isnan(a) and np.isnan(b))
+
+
+def _end_point_departures(res, row, pin):
+    """What the science would notice in a fresh fit against a pin: a class, a
+    flag, a component count or a systemic source that differs, c50_sys further
+    than END_POINT_KMS, a chi-square more than CHI2_WORSE above the pin. The
+    host decision is not held here: it is platform dependent near the
+    threshold (strict mode compares it)."""
     ref = pin["summary"]
-    assert set(res["fits"]) == set(pin["params"])
     departures = []
+    if set(res["fits"]) != set(pin["params"]):
+        departures.append(f"complexes fitted {sorted(res['fits'])} vs pinned {sorted(pin['params'])}")
     for name in pin["params"]:
+        if name not in res["fits"]:
+            continue
         p = PREFIX[name]
         for k in ("class", "flags", "n_broad", "systemic_source"):
             if row[f"{p}_{k}"] != ref[f"{p}_{k}"]:
@@ -343,30 +377,136 @@ def test_pin_reproduced(pin):
         chi2, chi2_ref = res["fits"][name]["chi2"], pin["chi2"][name]
         if not chi2 <= (1 + CHI2_WORSE) * chi2_ref:
             departures.append(f"{name} chi2 {chi2:.2f} vs pinned {chi2_ref:.2f} (more than {100 * CHI2_WORSE:.0f} per cent worse)")
-    # the host decision is not held here: it is platform dependent near the threshold (strict mode compares it)
-    # the fresh fit started from the same rest-frame arrays as the first part
-    wr, fr, ir = rest_frame(sp, pin["z"], pin["ebv"])
-    for k, a in (("wave_rest", wr), ("flux_rest", fr), ("ivar_rest", ir)):
-        if not np.array_equal(res[k], a):
-            departures.append(f"{k} of the fresh fit differs from the preprocessing of the first part")
-    assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
-    if STRICT:
-        for name, pref in pin["params"].items():
-            d = res["fits"][name]["d"]
-            assert set(d) == set(pref)
-            for k, v in pref.items():
-                assert d[k] == v, (name, k)
-            assert res["fits"][name]["chi2"] == pin["chi2"][name]
-            assert [float(b) for b in res["fits"][name]["all_bic"]] == pin["all_bic"][name]
-        assert {k: float(v) for k, v in res["conti"].items()} == pin["conti"]
-        hi = res["host_info"]
-        assert bool(hi["applied"]) == pin["host_info"]["applied"] and int(hi["n_gal"]) == pin["host_info"]["n_gal"]
-        assert _nan(pin["host_info"]["host_frac_4200_5000"]) == hi["host_frac_4200_5000"]
-        assert hi["reason"] == pin["host_info"]["reason"]
-        assert res["o3_prefit"]["v_o3"] == _nan(pin["o3_prefit"]["v_o3"])
-        assert res["o3_prefit"]["snr"] == pin["o3_prefit"]["snr"]
-        assert not _row_departures(row, ref)
+    return departures
 
+
+def _rest_frame_departures(res, sp, pin):
+    """The fresh fit started from the rest-frame arrays of the first part."""
+    wr, fr, ir = rest_frame(sp, pin["z"], pin["ebv"])
+    return [f"{k} of the fresh fit differs from the preprocessing of the first part"
+            for k, a in (("wave_rest", wr), ("flux_rest", fr), ("ivar_rest", ir)) if not np.array_equal(res[k], a)]
+
+
+@pytest.mark.parametrize("pin", _pins(), ids=lambda p: p["file"])
+def test_pin_reproduced(pin):
+    """A fresh fit reaches the pinned classes, flags, component counts and
+    systemic sources, the pinned c50_sys within END_POINT_KMS and a chi-square
+    not more than CHI2_WORSE above the pin, from the rest-frame arrays of the
+    first part. Not bit for bit in strict mode: the model changed since 0.1.0
+    (the third part holds the corrected fitter to its own pins)."""
+    sp = read_sdss(_spectrum_path(pin["file"]))
+    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"],
+                              complexes=tuple(pin["complexes"]))
+    departures = _end_point_departures(res, blrfit.summary_row(res), pin) + _rest_frame_departures(res, sp, pin)
+    assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
+
+
+# ----------------------------------------------------------------------------
+# third part: the pins of the corrected fitter (tests/data/pins_0.2.0.json)
+# ----------------------------------------------------------------------------
+CURRENT_PINS = "pins_0.2.0.json"
+DESI_TARGETID = 39627574082538900
+
+
+def _current_pins():
+    with open(os.path.join(DATA, CURRENT_PINS)) as fh:
+        return json.load(fh)
+
+
+def _read_pinned_spectrum(pin):
+    """The spectrum of a pin of either survey. A DESI pin is read at its target
+    identifier; its pinned redshift and E(B-V) must be those of the redrock
+    file next to the coadd and of the fibermap."""
+    path = _spectrum_path(pin["file"])
+    if pin.get("kind") == "desi":
+        sp = read_desi(path, pin["targetid"], use_desispec=False)
+        assert read_redrock(redrock_sibling(path), pin["targetid"])["z"] == pin["z"]
+        assert sp["ebv"] == pin["ebv"]
+        return sp
+    return read_sdss(path)
+
+
+def _bit_exact_departures(res, row, pin):
+    """Every pinned number a fresh fit does not reproduce exactly: the
+    parameters, chi-square and BIC list of every complex, the continuum
+    parameters, the host decision, the [O III] pre-fit and the summary row."""
+    departures = []
+    for name, pref in pin["params"].items():
+        d = res["fits"][name]["d"]
+        if set(d) != set(pref):
+            departures.append(f"{name} parameter names differ from the pin")
+        departures += [f"{name} parameter {k} {d[k]!r} vs pinned {v!r}" for k, v in pref.items()
+                       if k in d and not _same(float(d[k]), v)]
+        if res["fits"][name]["chi2"] != pin["chi2"][name]:
+            departures.append(f"{name} chi2 {res['fits'][name]['chi2']!r} vs pinned {pin['chi2'][name]!r}")
+        if [float(b) for b in res["fits"][name]["all_bic"]] != pin["all_bic"][name]:
+            departures.append(f"{name} BIC list {[float(b) for b in res['fits'][name]['all_bic']]!r} vs pinned {pin['all_bic'][name]!r}")
+    conti = {k: float(v) for k, v in res["conti"].items()}
+    if set(conti) != set(pin["conti"]) or any(not _same(conti[k], v) for k, v in pin["conti"].items() if k in conti):
+        departures.append(f"continuum {conti!r} vs pinned {pin['conti']!r}")
+    hi, href = res["host_info"], pin["host_info"]
+    got = (bool(hi["applied"]), int(hi["n_gal"]), float(hi["host_frac_4200_5000"]), hi["reason"])
+    ref = (href["applied"], href["n_gal"], _nan(href["host_frac_4200_5000"]), href["reason"])
+    if not all(_same(a, b) for a, b in zip(got, ref)):
+        departures.append(f"host decision {got!r} vs pinned {ref!r}")
+    got = (float(res["o3_prefit"]["v_o3"]), float(res["o3_prefit"]["snr"]))
+    ref = (_nan(pin["o3_prefit"]["v_o3"]), _nan(pin["o3_prefit"]["snr"]))
+    if not all(_same(a, b) for a, b in zip(got, ref)):
+        departures.append(f"[O III] pre-fit {got!r} vs pinned {ref!r}")
+    departures += _row_departures(row, pin["summary"])
+    return departures
+
+
+@pytest.mark.parametrize("pin", _current_pins()["pins"], ids=lambda p: p["file"])
+def test_current_pin_reproduced(pin):
+    """A fresh fit of the corrected fitter reproduces its own pin: the classes,
+    flags, component counts and systemic sources, c50_sys within END_POINT_KMS
+    and chi-square within CHI2_WORSE (the tolerances of the second part), from
+    the rest-frame arrays of the first part; bit for bit under
+    BLRFIT_STRICT_PINS, the summary row included."""
+    sp = _read_pinned_spectrum(pin)
+    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"],
+                              complexes=tuple(pin["complexes"]))
+    row = blrfit.summary_row(res)
+    departures = _end_point_departures(res, row, pin) + _rest_frame_departures(res, sp, pin)
+    if STRICT:
+        departures += _bit_exact_departures(res, row, pin)
+    assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
+
+
+def test_current_pins_provenance():
+    """The 0.2.0 pin file names its producer, holds the four SDSS spectra of
+    the legacy pins at their redshifts, E(B-V) and complexes with the legacy
+    classes and component counts (no class changed between the versions on
+    these spectra), and the DESI example (F for Halpha, C for Hbeta); every
+    pinned line was fitted from a converged continuum by a converged attempt,
+    so the flag-and-keep rule of the solver is not exercised by the pins."""
+    cur = _current_pins()
+    made = cur["produced_by"]
+    for k in ("blrfit", "git", "numpy", "scipy", "astropy", "python", "platform", "date"):
+        assert made[k], k
+    assert made["blrfit"].startswith("0.2.0")
+    legacy = {p["file"]: p for p in _pins()}
+    pins = {p["file"]: p for p in cur["pins"]}
+    assert set(legacy) < set(pins)
+    for fn, old in legacy.items():
+        new = pins[fn]
+        assert (new["z"], new["ebv"], new["complexes"]) == (old["z"], old["ebv"], old["complexes"])
+        assert set(new["params"]) == set(old["params"])
+        for name in old["params"]:
+            p = PREFIX[name]
+            assert new["summary"][f"{p}_class"] == old["summary"][f"{p}_class"], (fn, name)
+            assert new["summary"][f"{p}_n_broad"] == old["summary"][f"{p}_n_broad"], (fn, name)
+    desi = [p for p in cur["pins"] if p.get("kind") == "desi"]
+    assert len(desi) == 1 and desi[0]["targetid"] == DESI_TARGETID
+    assert desi[0]["summary"]["HA_class"] == "F" and desi[0]["summary"]["HB_class"] == "C"
+    for pin in cur["pins"]:
+        assert pin["summary"]["continuum_status"] == "success", pin["file"]
+        assert isinstance(pin["summary"]["conti_at_bound"], str) and isinstance(pin["summary"]["conti_feuv_fwhm_fixed"], bool)
+        for name in pin["params"]:
+            p = PREFIX[name]
+            assert pin["summary"][f"{p}_fit_status"] == "success" and pin["summary"][f"{p}_converged"] is True, (pin["file"], name)
+            assert pin["summary"][f"{p}_bic_margin"] is not None, (pin["file"], name)
 
 def test_penalty_terms_pinned():
     """The five penalty terms of the chi-square at hand-chosen parameter values

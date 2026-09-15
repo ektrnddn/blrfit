@@ -262,9 +262,9 @@ CCF_NSUB_FRAC = 0.07              # narrow-subtraction uncertainty, fraction of 
 CCF_CLIP_SIGMA = 5.0              # outlier clip at the first-pass minimum
 CCF_DCHI2_99 = 6.63               # Delta chi-square for a 99 per cent interval on one parameter
 CCF_SIG_FROM_99 = 2.576           # 99 per cent two-sided <-> 1 sigma
-CCF_SYS_KMS = {"Halpha": 155.0, "Hbeta": 79.0}      # on-sky floors from consecutive DESI epochs
-CCF_SYS_HBETA_LOWSNR_KMS = 157.0                    # Hbeta at S/N proxy < 8
-CCF_DIR_CUT_KMS = {"Halpha": 466.0, "Hbeta": 238.0} # direction-mismatch cut of the reliable tier
+CCF_SYS_KMS = {"Halpha": 155.0, "Hbeta": 79.0}      # on-sky floors from consecutive DESI epochs (0.1.0 calibration, to be re-measured with the corrected estimator)
+CCF_SYS_HBETA_LOWSNR_KMS = 157.0                    # Hbeta at S/N proxy < 8 (0.1.0 calibration, as above)
+CCF_DIR_CUT_KMS = {"Halpha": 466.0, "Hbeta": 238.0} # direction-mismatch cut of the reliable tier (0.1.0 calibration, to be re-measured with the corrected estimator)
 CCF_PROFILE_Z_MAX = 5.0                             # profile-stability cut of the reliable tier
 # Profile-stability grades for pairs across surveys (an SDSS spectrum against a
 # DESI template). z_prof is a significance: for DESI-DESI pairs its median is
@@ -277,7 +277,116 @@ CCF_PROFILE_Z_MAX = 5.0                             # profile-stability cut of t
 # change of the non-candidate objects of the DESI catalogue (direction cut
 # passed; Halpha 582 / 145 / 339 points, Hbeta 781 / 69 / 87 points in the
 # three grades): NMAD 143, 161, 262 km/s (Halpha) and 147, 208, 221 km/s (Hbeta).
+# The grade bounds, inflation factors and null floor are the 0.1.0 calibration,
+# measured with the frozen estimator; they stand until re-measured with the
+# corrected estimator and the narrow-line frame veto.
 PROFILE_GRADE_Z = (("stable", 5.0), ("mild", 10.0), ("changed", np.inf))   # upper bounds of z_prof
 PROFILE_GRADE_INFLATION = {"Halpha": {"stable": 1.0, "mild": 1.15, "changed": 1.85},
                            "Hbeta": {"stable": 1.0, "mild": 1.4, "changed": 1.5}}
-CCF_NULL_KMS = {"Halpha": 143.0, "Hbeta": 147.0}  # cross-survey floor of a stable-grade point (as above)
+CCF_NULL_KMS = {"Halpha": 143.0, "Hbeta": 147.0}  # cross-survey floor of a stable-grade point (as above; 0.1.0 calibration)
+
+# ----------------------------------------------------------------------------
+# Monte Carlo alias diagnostic (errors.py)
+# ----------------------------------------------------------------------------
+# A draw whose systemic velocity or offset lands more than MC_ALIAS_KMS from
+# the unperturbed estimate has changed basin, not scattered: narrow Halpha
+# mistaken for [N II] 6548 or 6584 displaces the group by 674 or 943 km/s, far
+# above any statistical scatter of the narrow group.
+MC_ALIAS_KMS = 400.0
+# The flag 'mc_multimodal' needs two groups of draws separated by more than
+# MC_ALIAS_KMS with more than this fraction of the draws on each side (one in
+# ten already distorts the 16-84 range); a wide unimodal scatter is an honest
+# error and is not flagged. The percentile error of a flagged line is not a
+# valid statistical error.
+MC_ALIAS_MAX_FRACTION = 0.1
+
+# ----------------------------------------------------------------------------
+# Continuum luminosity (physics.py)
+# ----------------------------------------------------------------------------
+FLUX_UNIT_CGS = 1e-17     # input flux unit assumed for every luminosity, erg/s/cm^2/A (SDSS and DESI files)
+LUM_REF_WAVE = 5100.0     # rest wavelength of lambda L_lambda, Angstrom: the reference of the Hbeta virial mass estimators
+
+# ----------------------------------------------------------------------------
+# Ultraviolet Fe II width (continuum.py)
+# ----------------------------------------------------------------------------
+# The width of the ultraviolet Fe II template is free only where the spectrum
+# covers enough of it. The template is fitted in the continuum windows between
+# 2200 and 3090 A; with few pixels there the width has no leverage on
+# chi-square, and a free width then runs to one end of the 1200-10000 km/s
+# range (spec-1237 at z = 0.48 ends on 10000 km/s). Below the pixel count the
+# width is held at the value the catalogue fits effectively carried.
+FE_UV_FWHM_FIXED_KMS = 3000.0   # the 0.1.0 start value, at which the width effectively stayed in every catalogue fit
+FE_UV_FREE_MIN_PIXELS = 300     # below this many covered UV-window pixels the width is unconstrained and runs to a bound
+
+# ----------------------------------------------------------------------------
+# Input flux scale (fit_spectrum)
+# ----------------------------------------------------------------------------
+# The amplitude bounds and starting values of the model are set for fluxes of
+# order 1-1000 in 1e-17 erg/s/cm^2/A, the unit of SDSS and DESI spectra: the
+# line amplitudes are bounded by 5 x max|flux| floored at 1e-2 and started at
+# fractions of the local maximum floored at 1e-3, the continuum reference flux
+# is floored at 1e-3. A spectrum in erg/s/cm^2/A (median ~1e-15) sits far
+# below those floors and its classes change silently. fit_spectrum refuses a
+# median positive flux outside this range and asks for flux_scale instead.
+FLUX_SCALE_MIN = 1e-2     # median of the positive input flux below this is refused
+FLUX_SCALE_MAX = 1e4      # ... and above this
+
+# ----------------------------------------------------------------------------
+# Narrow-line frame veto of an epoch pair (rv.py, frame_check)
+# ----------------------------------------------------------------------------
+# Two spectra of one object share a wavelength frame only if their narrow-line
+# zero point (the [O III] 5007 shift of one against the other, or [S II] where
+# [O III] is not measurable) is close to zero. A zero point of hundreds of km/s
+# is a calibration, reduction or aperture difference that enters the broad
+# shifts of Halpha and Hbeta identically, which is exactly what a coincident
+# two-line change rewards: a long-baseline object of the first catalogue run
+# (-640 / -632 km/s in the two lines) carried a +613 km/s zero point on every
+# SDSS row. Pairs beyond this bound are vetoed for both lines. Provisional
+# value: 200 km/s (three narrow-line pixels); it is to be replaced by three
+# times the width of the zero-point null distribution measured on repeat DESI
+# epochs with the corrected estimator.
+FRAME_VETO_KMS = 200.0
+
+# ----------------------------------------------------------------------------
+# Plausibility of an epoch-pair match (rv.py: ccf_shift, shift_bidirectional)
+# ----------------------------------------------------------------------------
+# The fitted flux factor of the template (profile = factor x template + baseline).
+# Broad-line fluxes of one object differ between epochs by factors of order two
+# (SDSS against DESI broad Halpha of the Eracleous et al. 2012 objects: 0.62 to
+# 2.32 for 5 to 95 per cent; two DESI epochs of the DR1 bench: 0.78 to 1.25 for
+# 16 to 84 per cent). A factor beyond this range means the scan matched a sliver
+# of the profile rather than the profile: on the DR1 bench 16 of the 17
+# measurable pair records with a factor outside 1/3 to 3 had a shift above
+# 1500 km/s.
+CCF_SCALE_RANGE = (0.25, 4.0)
+# The two directions of an honest match fit reciprocal factors (product one).
+CCF_SCALE_PRODUCT_RANGE = (0.5, 2.0)
+# A second local minimum of the cross-correlation curve within Delta chi-square
+# 6.63 of the first, and at least this far from it (or three statistical
+# errors, whichever is larger), makes the shift ambiguous: one peak of a
+# double-peaked or flat-topped profile can be matched onto the other with a
+# changed flux factor.
+CCF_ALT_MIN_SEP_KMS = 500.0
+
+# ----------------------------------------------------------------------------
+# Two-stage shift search (rv.py, ccf_shift)
+# ----------------------------------------------------------------------------
+# The curve statistic G = chi-square - N_pix compares shifts that may use
+# different numbers of pixels. Where the two profiles differ (reduced
+# chi-square above one) every pixel removed lowers G, so a search over shifts
+# with different pixel sets drifts toward the shifts at which the template
+# leaves the window: on the DR1 bench two DESI epochs 22 days apart gave
+# -4480 km/s with a 5000 km/s search. Every scan therefore uses the window
+# pixels that have data in both spectra at each of its shifts. A floor on the
+# overlap fraction does not work instead: the windows of broad lines (+/- 1.5
+# FWHM) reach the edges of the fitted spectrum (median width 23000 km/s in
+# Halpha on the bench), so every shift loses overlap and a floor of 0.95 caps
+# the search at about 900 km/s.
+# Stage 1 keeps at least this fraction of the window's pixels; where +/- vmax
+# would keep fewer, the search range is reduced until it does.
+CCF_COMMON_MIN_FRAC = 0.5
+# Stage 2 measures the shift over shifts within this range of the stage-1
+# minimum (at least CCF_REFINE_HALF_PIX pixels, room for the polynomial
+# refinement over +/- 10 pixels), on nearly the whole window.
+CCF_REFINE_HALF_KMS = 600.0
+CCF_REFINE_HALF_PIX = 20

@@ -45,7 +45,7 @@ def vacuum_to_air(wave_vac_aa):
 def _load_table(path, hdu=1):
     """Return a mapping column name -> array (case-insensitive lookup) and the list of names."""
     p = str(path); ext = os.path.splitext(p)[1].lower()
-    if ext in (".fits", ".fit", ".fts", ".fits.gz"):
+    if ext in (".fits", ".fit", ".fts") or p.lower().endswith((".fits.gz", ".fit.gz", ".fts.gz")):
         from astropy.io import fits
         with fits.open(p, memmap=False) as h:
             data = h[hdu].data

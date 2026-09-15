@@ -6,7 +6,9 @@ The first extension holds the coadded spectrum (columns ``flux``, ``loglam``,
 units of 1e-17 erg/s/cm^2/A; the second holds the pipeline redshift. Pixels
 flagged in ``and_mask`` are not removed: the pipeline sets their inverse
 variance to zero where they are unusable, and the DESI catalogue fits used the
-inverse variance alone. The files carry no Galactic E(B-V).
+inverse variance alone. The files carry no Galactic E(B-V). Files compressed
+with gzip (``spec-*.fits.gz``) are read in place; astropy decompresses them
+transparently.
 """
 from __future__ import annotations
 
@@ -55,7 +57,7 @@ def read_sdss(path):
 
 
 def is_sdss_spec(path):
-    """True for a file named like an SDSS spec file."""
+    """True for a file named like an SDSS spec file, plain or gzipped."""
     import os
     name = os.path.basename(str(path)).lower()
-    return name.startswith("spec-") and name.endswith(".fits")
+    return name.startswith("spec-") and name.endswith((".fits", ".fits.gz"))

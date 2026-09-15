@@ -17,6 +17,10 @@ The redshift is not in the coadd. It is taken from the sibling
 the coadd, and must otherwise be given. The Galactic E(B-V) of the target
 (``FIBERMAP['EBV']``) and the exposure dates (``EXP_FIBERMAP['MJD']``) are
 returned as well.
+
+Coadd and redrock files compressed with gzip (``*.fits.gz``) are read in
+place; the redrock sibling of a coadd may be compressed or not independently
+of the coadd.
 """
 from __future__ import annotations
 
@@ -29,26 +33,44 @@ CAMERAS = ("B", "R", "Z")
 WAVE_TOLERANCE = 1e-4
 
 
+FITS_SUFFIXES = (".fits", ".fits.gz")
+
+
 def is_desi_coadd(path):
-    """True for a DESI healpix or tile coadd (``coadd-*.fits``)."""
+    """True for a DESI healpix or tile coadd (``coadd-*.fits``, plain or gzipped)."""
     name = os.path.basename(str(path)).lower()
-    return name.startswith("coadd-") and name.endswith(".fits")
+    return name.startswith("coadd-") and name.endswith(FITS_SUFFIXES)
 
 
 def is_desi_spectra(path):
-    """True for a per-exposure DESI ``spectra-*.fits`` file, which holds one row
-    per exposure of a target and is not what the fitter should read."""
+    """True for a per-exposure DESI ``spectra-*.fits`` file (plain or gzipped),
+    which holds one row per exposure of a target and is not what the fitter
+    should read."""
     name = os.path.basename(str(path)).lower()
-    return name.startswith("spectra-") and name.endswith(".fits")
+    return name.startswith("spectra-") and name.endswith(FITS_SUFFIXES)
 
 
 def redrock_sibling(path):
-    """Path of the redrock file next to a coadd, or None if it does not exist."""
+    """Path of the redrock file next to a coadd, or None if it does not exist.
+    The sibling is sought with the coadd's own suffix first, then with the other
+    one (``.fits`` for a gzipped coadd, ``.fits.gz`` for a plain one)."""
     d, name = os.path.split(str(path))
     if not name.lower().startswith("coadd-"):
         return None
-    rr = os.path.join(d, "redrock-" + name[6:])
-    return rr if os.path.exists(rr) else None
+    stem = name[6:]
+    for suf in FITS_SUFFIXES:
+        if stem.lower().endswith(suf):
+            stem = stem[:-len(suf)]
+            break
+    else:
+        rr = os.path.join(d, "redrock-" + stem)
+        return rr if os.path.exists(rr) else None
+    own = name.lower().endswith(".fits.gz")
+    for suf in ((".fits.gz", ".fits") if own else (".fits", ".fits.gz")):
+        rr = os.path.join(d, "redrock-" + stem + suf)
+        if os.path.exists(rr):
+            return rr
+    return None
 
 
 def coadd_cameras(waves, fluxes, ivars, masks=None):
