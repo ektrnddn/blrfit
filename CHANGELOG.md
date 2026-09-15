@@ -97,7 +97,11 @@ and 0.2.0 can be attributed. The tag `v0.1.0` reproduces the catalogue run.
   `frame_reason`): a zero point beyond `FRAME_VETO_KMS` = 200 km/s
   (provisional; to be replaced by three times the width of the zero-point null
   measured with the corrected estimator) or at the search bound vetoes the pair
-  for both lines, and `is_reliable` requires a good frame. Hbeta is corrected by
+  for both lines, and `is_reliable` requires a good frame. The zero point is
+  measured in both directions (swapping the spectra only changes its sign; one
+  direction alone differed between the two orders of an SDSS-DESI pair by up to
+  720 km/s on the DR1 bench), and a zero point whose directions disagree beyond
+  twice their combined error vetoes the frame. Hbeta is corrected by
   the zero point when the frame is good, Halpha never, as the 0.1.0
   calibration decided. This replaces two rules: the 0.1.0 command line applied
   the zero point when |zp| < max(30, 2 err), and the production scripts applied

@@ -78,11 +78,11 @@ shift is close to zero and their scatter is the null of the method.
 | SDSS–DESI | Halpha | 0.1.0 | every finite shift | 72 | 27 | 553 | 102 | 4.06 | 22 | 5064 |
 | SDSS–DESI | Halpha | 0.1.0 | not at bound, z_prof < 5 | 46 | 20 | 683 | 125 | 4.36 | 13 | 2480 |
 | SDSS–DESI | Halpha | 0.2.0 | every finite shift | 72 | 27 | 587 | 51 | 6.83 | 24 | 5041 |
-| SDSS–DESI | Halpha | 0.2.0 | reliable | 13 | 9 | 181 | 44 | 5.68 | 0 | 375 |
+| SDSS–DESI | Halpha | 0.2.0 | reliable | 12 | 8 | 235 | 58 | 6.03 | 0 | 375 |
 | SDSS–DESI | Hbeta | 0.1.0 | every finite shift | 33 | 12 | 393 | 120 | 3.79 | 6 | 5020 |
 | SDSS–DESI | Hbeta | 0.1.0 | not at bound, z_prof < 5 | 22 | 10 | 277 | 120 | 3.79 | 4 | 2748 |
-| SDSS–DESI | Hbeta | 0.2.0 | every finite shift | 33 | 12 | 247 | 57 | 6.13 | 3 | 4036 |
-| SDSS–DESI | Hbeta | 0.2.0 | reliable | 14 | 8 | 164 | 49 | 3.20 | 0 | 1427 |
+| SDSS–DESI | Hbeta | 0.2.0 | every finite shift | 33 | 12 | 240 | 57 | 4.85 | 3 | 4034 |
+| SDSS–DESI | Hbeta | 0.2.0 | reliable | 13 | 7 | 146 | 47 | 2.74 | 0 | 1422 |
 
 "Reliable" is `rv.is_reliable`: not at bound, finite error, z_prof < 5, direction mismatch below
 the 0.1.0 cut, a good narrow-line frame, plausible flux factors and no second minimum of similar
@@ -134,11 +134,16 @@ overlap of the two spectra is smallest.
   pixels around a broad and a narrow line). The narrow-line zero point, whose profile is itself
   sharp, is not despiked.
 * `scale_ok`: both directions' flux factors within 1/4 to 4 and their product within 1/2 to 2.
+* The narrow-line zero point is measured in both directions, so that swapping the two spectra only
+  changes its sign; measured one way, it differed between the two orders of an SDSS–DESI pair by
+  up to 720 km/s on the bench (DESI–DESI pairs, on one lattice, were already exact). A zero point
+  whose two directions disagree beyond twice their combined error vetoes the frame: 2 of the
+  SDSS–DESI records of the bench.
 * `ambiguous`: a second local minimum of the stage-1 curve within Δχ² = 6.63 of the first and at
   least 500 km/s or three statistical errors away, the alias of a double-peaked profile matched
-  peak onto peak. It flags 41 of the 122 usable records (not at bound, good frame, finite error).
+  peak onto peak. It flags 41 of the 120 usable records (not at bound, good frame, finite error).
 
-With all of this, 19 of the 122 usable records have a shift above 1500 km/s and none is reliable:
+With all of this, 19 of the 120 usable records have a shift above 1500 km/s and none is reliable:
 14 fail the flux-factor or ambiguity check, the other 5 the profile or direction conditions.
 
 A synthetic 3900 km/s translation (the size of the largest change in the catalogue) of a FWHM

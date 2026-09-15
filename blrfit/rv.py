@@ -838,10 +838,18 @@ def narrow_zeropoint(res_a, res_b, prefer=("OIII", "SII"), vmax=800.0, **kw):
     narrow lines: the shift of the broad-subtracted [O III] 5007 region of a
     relative to b (``line`` 'OIII'), or of the [S II] doublet when [O III] is
     not measurable in both fits ('SII'). One zero point serves the whole pair,
-    whichever broad line is analysed. Returns the ``ccf_shift`` record with
-    ``line``, ``source`` (the same name) and ``at_bound`` (the search of
-    +/- ``vmax`` km/s ended at its edge: the zero point is then not
-    measured), or None when neither line has 12 valid pixels in both fits."""
+    whichever broad line is analysed.
+
+    Measured in both directions, like the broad-line shift: dv = (dv_ab -
+    dv_ba) / 2, so that swapping the two spectra changes only its sign (a
+    one-directional zero point of an SDSS-DESI pair differs between the two
+    orders by up to hundreds of km/s, because the two spectra have different
+    lattices and noise). ``err`` is the larger directional error, ``at_bound``
+    is set when either direction ends at the edge of the +/- ``vmax`` search,
+    ``dir_mismatch`` is |dv_ab + dv_ba| and ``consistent`` compares it with
+    max(2 hypot(err_ab, err_ba), one pixel). Returns that record with ``line``
+    and ``source`` (the same name), or None when neither line gives a shift in
+    both directions with 12 valid pixels in both fits."""
     for which in prefer:
         cplx = "Hbeta" if which == "OIII" else "Halpha"
         pa = narrow_profile_data(res_a, name=cplx, which=which)
@@ -853,14 +861,27 @@ def narrow_zeropoint(res_a, res_b, prefer=("OIII", "SII"), vmax=800.0, **kw):
         # The zero-point window is the whole narrow-line region with no data
         # beyond it: one stage over that window, as in 0.1.0; the +/- vmax
         # (800 km/s) search keeps the minimum from drifting.
-        s = ccf_shift(pa, pb, vmax=vmax, window=(lo, hi), baseline="const",
-                      min_pix=10, two_stage=False, **kw)
-        if s is not None:
-            s["line"] = s["source"] = which
-            s["at_bound"] = bool(s.get("at_bound", False))
-            return s
+        opts = dict(vmax=vmax, window=(lo, hi), baseline="const", min_pix=10, two_stage=False, **kw)
+        s_ab = ccf_shift(pa, pb, **opts)
+        s_ba = ccf_shift(pb, pa, **opts)
+        if s_ab is None or s_ba is None:
+            continue
+        shifts = (float(s_ab["dv"]), float(s_ba["dv"]))
+        errors = (float(s_ab.get("err", np.nan)), float(s_ba.get("err", np.nan)))
+        finite_err = all(np.isfinite(e) and e > 0 for e in errors)
+        mismatch = float(abs(shifts[0] + shifts[1]))
+        tolerance = max(2.0 * float(np.hypot(*errors)), float(s_ab["dv_pix"]), float(s_ba["dv_pix"])) if finite_err else np.nan
+        methods = (s_ab.get("err_method", "unavailable"), s_ba.get("err_method", "unavailable"))
+        rec = dict(s_ab)
+        rec.update(dv=0.5 * (shifts[0] - shifts[1]), err=float(max(errors)) if finite_err else np.nan,
+                   err_method=(methods[0] if methods[0] == methods[1] else "mixed") if finite_err else "unavailable",
+                   bracket=(s_ab.get("bracket") if s_ab.get("bracket") == s_ba.get("bracket") else "mixed"),
+                   at_bound=bool(s_ab.get("at_bound", False) or s_ba.get("at_bound", False)),
+                   dv_ab=shifts[0], dv_ba=shifts[1], err_ab=errors[0], err_ba=errors[1],
+                   dir_mismatch=mismatch, consistent=bool(finite_err and mismatch <= tolerance),
+                   line=which, source=which)
+        return rec
     return None
-
 
 def frame_check(zeropoint, name, dv, err):
     """Narrow-line frame check of a pair and the one zero-point rule.
@@ -880,7 +901,8 @@ def frame_check(zeropoint, name, dv, err):
     Returns dict(zp_dv, zp_err, zp_err_method, zp_line, zp_source, zp_at_bound,
     frame_ok, frame_reason, zp_applied, dv_corrected, err_corrected).
     ``frame_reason`` is '' when the frame is good, else 'no narrow zero point',
-    'zero point at search bound' or 'zero point NNN km/s exceeds veto'."""
+    'zero point at search bound', 'zero point inconsistent between the two
+    directions' or 'zero point NNN km/s exceeds veto'."""
     z = zeropoint
     zp_dv = float(z["dv"]) if (z is not None and np.isfinite(z.get("dv", np.nan))) else np.nan
     zp_err = float(z["err"]) if (z is not None and np.isfinite(z.get("err", np.nan)) and z["err"] > 0) else np.nan
@@ -890,6 +912,8 @@ def frame_check(zeropoint, name, dv, err):
         ok, reason = False, "no narrow zero point"
     elif at_bound:
         ok, reason = False, "zero point at search bound"
+    elif z.get("consistent") is False:
+        ok, reason = False, "zero point inconsistent between the two directions"
     elif abs(zp_dv) > FRAME_VETO_KMS:
         ok, reason = False, f"zero point {zp_dv:+.0f} km/s exceeds veto"
     else:
@@ -1032,17 +1056,29 @@ def two_line_consistent(pair_a, pair_b, nsig=2.0, covariance=0.0):
                 sigma=float(abs(d) / e) if e > 0 else np.nan, same_sign=same_sign)
 
 
-def is_reliable(pair):
+def is_reliable(pair, dir_cut=None):
     """The reliable tier: a finite shift and positive error, not at bound,
     profile_z < 5, direction mismatch below the per-line cut (466 km/s Halpha,
     238 km/s Hbeta; the 0.1.0 calibration) and a good narrow-line frame
     (``frame_ok``: a measured zero point within FRAME_VETO_KMS), plausible flux
     factors (``scale_ok``) and no second minimum of similar depth
-    (``ambiguous``). Records built by hand without the last two keys pass them."""
+    (``ambiguous``). Records built by hand without the last two keys pass them.
+
+    ``dir_cut`` (km/s, optional) replaces CCF_DIR_CUT_KMS for this call: a
+    number is the cut for the pair's line, a mapping {line name: cut} is looked
+    up with the pair's ``name`` (a line missing from it has no finite cut, so the
+    pair is not reliable). This is how a run applies a recalibrated cut (three
+    times the recalibrated floor) without changing the package constant."""
     if (pair is None or pair.get("at_bound") or not np.isfinite(pair.get("dv", np.nan))
             or not np.isfinite(pair.get("err", np.nan)) or pair["err"] <= 0):
         return False
-    cut = CCF_DIR_CUT_KMS.get(pair.get("name"), np.nan)
+    if dir_cut is None:
+        cut = CCF_DIR_CUT_KMS.get(pair.get("name"), np.nan)
+    elif hasattr(dir_cut, "get"):
+        cut = dir_cut.get(pair.get("name"), np.nan)
+    else:
+        cut = dir_cut
+    cut = float(cut) if cut is not None else np.nan
     return bool(np.isfinite(pair.get("profile_z", np.nan)) and pair["profile_z"] < CCF_PROFILE_Z_MAX
                 and np.isfinite(pair.get("dir_mismatch", np.nan)) and pair["dir_mismatch"] < cut
                 and pair.get("frame_ok", False) and pair.get("scale_ok", True)

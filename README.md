@@ -370,7 +370,9 @@ first and at least 500 km/s away marks the shift `ambiguous`.
 
 **Narrow-line frame.** Each pair gets one zero point, the shift of the narrow lines of one epoch
 against the other, from [O III] λ5007, or from [S II] where [O III] is not measurable (Shen et al.
-2013; Runnoe et al. 2015). A zero point within ±200 km/s (`FRAME_VETO_KMS`, provisional) means the
+2013; Runnoe et al. 2015), measured in both directions so that swapping the spectra only changes
+its sign; a zero point whose two directions disagree beyond twice their combined error vetoes the
+frame. A zero point within ±200 km/s (`FRAME_VETO_KMS`, provisional) means the
 two spectra share a frame: Hβ is then corrected by it (in the 0.1.0 calibration this reduced the
 scatter between consecutive DESI epochs by 21 per cent) and Hα is not (no improvement there). A
 larger zero point, or one at the edge of its ±800 km/s search, vetoes the pair for both lines

@@ -583,3 +583,48 @@ def test_single_pixel_spike_is_masked_before_the_search():
                  + rng.normal(0.0, 0.02, v.size))
     assert rv._spikes(quiet, 5.0).sum() <= 1
 
+
+
+def test_direction_cut_can_be_replaced_per_call():
+    """A recalibrated direction cut is applied by the caller through dir_cut
+    (a number for the pair's line or a per-line mapping); without it the
+    package constant decides, and a line missing from a mapping is never
+    reliable."""
+    pair = dict(name="Halpha", dv=100., err=10., at_bound=False, profile_z=0., dir_mismatch=300., frame_ok=True,
+                scale_ok=True, ambiguous=False)
+    assert rv.CCF_DIR_CUT_KMS["Halpha"] > 300.0 and rv.is_reliable(pair)
+    assert not rv.is_reliable(pair, dir_cut=250.0)
+    assert rv.is_reliable(pair, dir_cut=350.0)
+    assert not rv.is_reliable(pair, dir_cut={"Halpha": 290.0, "Hbeta": 900.0})
+    assert rv.is_reliable(pair, dir_cut={"Halpha": 310.0})
+    assert not rv.is_reliable(pair, dir_cut={"Hbeta": 900.0})
+    assert not rv.is_reliable(dict(pair, dir_mismatch=np.nan), dir_cut=1e9)
+    hb = dict(pair, name="Hbeta")
+    assert not rv.is_reliable(hb) and rv.is_reliable(hb, dir_cut={"Hbeta": 400.0})
+
+
+def test_zero_point_is_antisymmetric_and_checks_its_directions():
+    """The zero point is measured both ways: swapping the spectra flips its
+    sign exactly, and a zero point whose two directions disagree beyond their
+    errors vetoes the frame."""
+    v = np.arange(-1500.0, 1500.01, 69.0)
+    w = np.arange(-1500.0, 1500.01, 40.0)
+    rng = np.random.default_rng(3)
+
+    def narrow(grid, centre, err, seed):
+        r = np.random.default_rng(seed)
+        f = np.exp(-0.5 * ((grid - centre) / 150.0) ** 2) + r.normal(0.0, err, grid.size)
+        return dict(v=grid, f=f, e=np.full(grid.size, err), ok=np.ones(grid.size, bool), nmod=np.zeros(grid.size))
+
+    a, b = narrow(v, 45.0, 0.03, 1), narrow(w, 0.0, 0.05, 2)
+    opts = dict(vmax=800.0, window=(-1500.0, 1500.0), baseline="const", min_pix=10, two_stage=False)
+    ab = rv.ccf_shift(a, b, **opts); ba = rv.ccf_shift(b, a, **opts)
+    assert abs(ab["dv"] + ba["dv"]) > 0.0            # one direction alone is not antisymmetric
+    zp = dict(dv=0.5 * (ab["dv"] - ba["dv"]), err=max(ab["err"], ba["err"]), line="OIII", source="OIII",
+              at_bound=False, err_method="delta_chi2", consistent=True)
+    assert abs(zp["dv"] - 45.0) < 25.0
+    assert rv.frame_check(zp, "Hbeta", 100.0, 20.0)["frame_ok"]
+    bad = dict(zp, consistent=False)
+    f = rv.frame_check(bad, "Hbeta", 100.0, 20.0)
+    assert not f["frame_ok"] and "inconsistent" in f["frame_reason"] and not f["zp_applied"]
+
