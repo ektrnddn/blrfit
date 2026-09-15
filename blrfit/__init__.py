@@ -16,12 +16,13 @@ from .classify import classify, is_measurable, is_strong_offset, DEFAULT_THRESH,
 from .errors import monte_carlo, empirical_error
 from .plot import plot_fit, plot_epochs_overlay, plot_ccf, broad_residual_profile, rv_curve, plot_rv_curve
 from .io import read_spectrum, read_sdss, read_desi, read_table
-from . import constants, rv
+from .physics import lambda_l_lambda, continuum_luminosity
+from . import constants, rv, physics
 
-__version__ = "0.1.0"
+__version__ = "0.2.0.dev0"
 
 __all__ = ["fit_spectrum", "remeasure", "summary_row", "measure_complex", "profile_measures",
            "classify", "is_measurable", "is_strong_offset", "DEFAULT_THRESH", "LABEL_TEXT", "FLAG_TEXT",
            "monte_carlo", "empirical_error", "plot_fit", "plot_epochs_overlay", "plot_ccf",
            "broad_residual_profile", "rv_curve", "plot_rv_curve", "read_spectrum", "read_sdss", "read_desi", "read_table",
-           "constants", "rv", "__version__"]
+           "lambda_l_lambda", "continuum_luminosity", "constants", "rv", "physics", "__version__"]

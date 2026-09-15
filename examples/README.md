@@ -34,6 +34,22 @@ blrfit rv data/spec-0652-52138-0326.fits data/coadd-main-dark-17260-396275740825
 blrfit fetch --ra 3.1997083 --dec -8.7834722 --out output/spectra
 ```
 
+DESI epochs from the public release: the healpix coadd that `blrfit fetch` extracts stacks every
+exposure of a survey/program, so it is one spectrum, not an epoch. The functions `list_desi_epochs`
+and `fetch_desi_epochs` of `blrfit.io.fetch` (no subcommand yet) give the epochs of a target: the
+exposure table (`EXP_FIBERMAP`) of its healpix coadd names the tiles it was observed on, with the
+nights, exposure ids and petal; the tiles table of the release (`tiles-iron.csv`, downloaded once)
+gives the last night of each tile; and the tile-cumulative coadd
+`tiles/cumulative/<TILEID>/<LASTNIGHT>/coadd-<PETAL>-<TILEID>-thru<LASTNIGHT>.fits` is range-read into a
+single-target bundle next to the healpix one, with the same checksums and provenance (tile, last night,
+petal, nights, exposure ids, redrock redshift). Tile-cumulative coadds are per tile: they hold all
+exposures of one tile through its last night, one file per petal of about 500 targets, so an object
+observed on three tiles has three epochs, each with its own fibre assignment and night(s) (the epoch
+key `<TILEID>-<LASTNIGHT>-<PETAL>` is the one of the long-baseline analysis). DR1 (`iron`) stops in
+June 2022 (observations through 2022-06-13); later epochs exist only in the daily and subsequent
+reductions. `tools/bench_dr1.py` builds a local bench of such objects, with their SDSS spectra, from
+the public release.
+
 Expected results (blrfit 0.1.0 with numpy 1.26.4 and scipy 1.13.1 on macOS; on other numerical stacks the
 least-squares solver ends at another point, or another local minimum, with the same number of components, which
 moves the bisector velocities by up to about 30 km/s and the widths by up to about 200 km/s without changing a

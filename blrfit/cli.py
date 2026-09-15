@@ -143,9 +143,12 @@ def _line_record(name, res):
     """The JSON record of one line."""
     if name not in res["fits"]:
         lo, hi = COMPLEX_WINDOW[name]
+        state = res.get('fit_status', {}).get(name, {})
+        status = state.get('status', 'unknown')
+        reason = (f'complex not fitted: {status}' if status not in ('unknown', 'unusable_window', 'uncovered_core')
+                  else f'complex not fitted: insufficient usable coverage in {lo:.0f}-{hi:.0f} A')
         return dict(fitted=False, label="", class_text="not fitted",
-                    reasons=[f"complex not fitted: the rest-frame window {lo:.0f}-{hi:.0f} A is not covered "
-                             f"(the line core must be covered to +/-3500 km/s with at least 60 pixels)"],
+                    reasons=[reason], fit_status=state,
                     flags=[], flag_text=[], measurable=False, strong_offset=False, dv=None)
     m = res["meas"][name]; c = res["cls"][name]; e = res["err"].get(name, {})
     dv = m.get("c50_sys", np.nan)
@@ -166,6 +169,14 @@ def _line_record(name, res):
     for k in LINE_KEYS:
         rec[k] = m.get(k, np.nan)
     rec["errors_mc"] = dict(e)
+    rec['fit_status'] = res.get('fit_status', {}).get(name, {})
+    rec['converged'] = bool(res['fits'][name].get('converged', True))
+    rec['continuum_status'] = res.get('continuum_status', 'unknown')
+    rec['bic_margin'] = res['fits'][name].get('bic_margin', np.nan)
+    rec['solver'] = res['fits'][name].get('solver', {})
+    rec['fit_statistics'] = {k: res['fits'][name].get(k) for k in
+                            ('data_chi2', 'penalty_chi2', 'selection_score', 'selection_score_kind',
+                             'data_score_at_penalized_fit')}
     rec["bic_all"] = list(m.get("bic_all", []))
     return rec
 
@@ -179,7 +190,7 @@ def _print_fit_table(lines, res, out):
             continue
         L = lines[name]
         if not L["fitted"]:
-            out(f"{name:7} {'-':3} {'not fitted (window not covered)':>12}")
+            out(f"{name:7} {'-':3} {L['reasons'][0]}")
             continue
         out(f"{name:7} {L['label']:3} {_fmt(L['dv'], 12, 0, True)} {_fmt(L['dv_err_mc'], 6)} {_fmt(L['dv_err_model'], 6)} "
             f"{_fmt(L['v_peak_sys'], 7, 0, True)} {_fmt(L['centroid_sys'], 7, 0, True)} {_fmt(L['fwhm'], 6)} {L['n_broad']:>2} "
@@ -215,9 +226,12 @@ def cmd_fit(a):
     out(f"blrfit {__version__}: {a.spectrum}" + (f" TARGETID {int(a.targetid)}" if a.targetid else "")
         + f"  z = {z:.5f} ({zsrc})  E(B-V) = {ebv:.4f} ({esrc})  lines {','.join(lines)}"
         + (f"  Monte Carlo {a.nmc}" if a.nmc else ""))
-    res = fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z, ebv=ebv, host=not a.no_host, fe=not a.no_fe,
-                       complexes=tuple(lines), max_broad=a.max_broad, dbic=a.dbic, nmc=a.nmc, seed=a.seed,
-                       err_floor=a.err_floor)
+    try:
+        res = fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z, ebv=ebv, host=not a.no_host, fe=not a.no_fe,
+                           complexes=tuple(lines), max_broad=a.max_broad, dbic=a.dbic, nmc=a.nmc, seed=a.seed,
+                           err_floor=a.err_floor)
+    except ValueError as e:
+        sys.exit(f"cannot fit {a.spectrum}: {e}")
     recs = {name: _line_record(name, res) for name in lines}
     _print_fit_table(recs, res, out)
 
@@ -239,7 +253,8 @@ def cmd_fit(a):
                               feuv_norm=res["conti"].get("feuv_norm", np.nan),
                               host_applied=bool(hi.get("applied", False)), host_frac=hi.get("host_frac_4200_5000", np.nan),
                               host_n_gal=hi.get("n_gal", 0), host_reason=hi.get("reason", "")),
-               o3_prefit=res.get("o3_prefit", {}),
+               o3_prefit=res.get("o3_prefit", {}), mc_info=res.get('mc_info', {}),
+               continuum_solver=res.get('continuum_info', {}),
                lines=recs, summary_row=summary_row(res))
     with open(base + "_fit.json", "w") as fh:
         json.dump(_clean(doc), fh, indent=1)
@@ -282,43 +297,51 @@ def _rv_line(line, res1, res2, sp1, sp2, epochs_meta, a, out):
         doc.update(measured=False, reason="the line is not fitted in both epochs or the cross-correlation failed")
         out(f"  {line}: cross-correlation not possible: " + doc["reason"])
         return doc, None
-    same_desi = sp1.get("kind") == "desi" and sp2.get("kind") == "desi"
+    from .rv_policy import measurement_policy
+    policy = measurement_policy(pair, line, sp1.get("kind"), sp2.get("kind"))
     grade = pair["profile_grade"]
-    # error floor: the DESI-DESI systematic for two DESI spectra, the graded
-    # cross-survey null otherwise (the grade inflates it for changed profiles)
-    if same_desi:
-        floor = RV.systematic_floor(line, pair.get("snr_proxy", np.nan)); floor_kind = "desi_sys"
-    else:
-        floor = RV.cross_survey_floor(line, grade); floor_kind = f"cross_survey_null_{grade}"
-    err_total = float(np.hypot(pair["err"], floor)) if (np.isfinite(pair["err"]) and np.isfinite(floor)) else np.nan
-    zp_ok = bool(pair.get("zp_ok", False))
-    dv_corr = pair["dv"] - pair["zp_dv"] if (line == "Hbeta" and zp_ok) else pair["dv"]
-    reliable = RV.is_reliable(pair)
+    err_total = policy["err_total"]
+    dv_corr = policy["dv_corrected"]
+    reliable = policy["reliable"]
     cut = RV.CCF_DIR_CUT_KMS.get(line, np.nan)
-    why = ("at bound" if pair["at_bound"] else
-           (f"profile_z {pair['profile_z']:.1f} >= {RV.CCF_PROFILE_Z_MAX:.0f}" if not (pair["profile_z"] < RV.CCF_PROFILE_Z_MAX) else
-            (f"direction mismatch {pair['dir_mismatch']:.0f} >= {cut:.0f} km/s" if not (pair["dir_mismatch"] < cut) else "")))
+    checks = [(pair["at_bound"], "at bound"),
+              (not pair.get("frame_ok", False), f"narrow-line frame: {pair.get('frame_reason', '')}"),
+              (not pair.get("scale_ok", True),
+               f"implausible flux factors {pair.get('scale_ab', np.nan):.2f} / {pair.get('scale_ba', np.nan):.2f}"),
+              (bool(pair.get("ambiguous", False)), "a second cross-correlation minimum of similar depth"),
+              (not (pair["profile_z"] < RV.CCF_PROFILE_Z_MAX), f"profile_z {pair['profile_z']:.1f} >= {RV.CCF_PROFILE_Z_MAX:.0f}"),
+              (not (pair["dir_mismatch"] < cut), f"direction mismatch {pair['dir_mismatch']:.0f} >= {cut:.0f} km/s")]
+    why = next((text for failed, text in checks if failed), "")
     s_ab = (pair.get("details") or {}).get("s_ab") or {}
     doc.update(measured=True, dv=pair["dv"], err=pair["err"], err_dchi2=s_ab.get("err_dchi2", np.nan),
-               err_method="bootstrap" if a.nmc >= 10 else "dchi2",
-               profile_grade=grade, resid_frac=pair["resid_frac"], error_floor=floor, error_floor_kind=floor_kind,
+               err_method=pair.get("err_method", s_ab.get("err_method", "unknown")),
+               n_mc_requested=pair.get("n_mc_requested", a.nmc),
+               n_mc_success=pair.get("n_mc_success", 0),
+               bootstrap_fallback_reason=pair.get("bootstrap_fallback_reason", ""),
+               algorithm_version=pair.get("algorithm_version", "unknown"),
+               covariance_mode=pair.get("covariance_mode", "unknown"),
+               profile_grade=grade, resid_frac=pair["resid_frac"],
                err_total=err_total, sigma_sys_desi=RV.systematic_floor(line, pair.get("snr_proxy", np.nan)),
-               reliable_reason=why,
+               reliable_reason=why or policy["calibration_status"],
                consistent=pair["consistent"], dir_mismatch=pair["dir_mismatch"], profile_z=pair["profile_z"],
                chi2_red=pair["chi2_red"], at_bound=pair["at_bound"], regridded=pair["regridded"], npix=pair["npix"],
-               snr_proxy=pair["snr_proxy"], zp_dv=pair["zp_dv"], zp_err=pair["zp_err"], zp_line=pair["zp_line"], zp_ok=zp_ok,
-               zp_applied=bool(line == "Hbeta" and zp_ok), dv_corrected=dv_corr, reliable=bool(reliable),
+               snr_proxy=pair["snr_proxy"], zp_dv=pair["zp_dv"], zp_err=pair["zp_err"], zp_line=pair["zp_line"],
+               zp_source=pair.get("zp_source"), frame_ok=bool(pair.get("frame_ok", False)),
+               frame_reason=pair.get("frame_reason", ""), zp_applied=bool(pair.get("zp_applied", False)),
+               dv_corrected=dv_corr, reliable=bool(reliable),
                significance=float(abs(dv_corr) / err_total) if (np.isfinite(err_total) and err_total > 0) else np.nan,
                c50_difference=epochs[1]["c50_sys"] - epochs[0]["c50_sys"],
                dv_abs_epoch1=epochs[0]["c50_sys"], dv_abs_epoch2=epochs[0]["c50_sys"] + dv_corr)
+    doc.update(policy)
     out(f"  {line}: shift of epoch 2 relative to epoch 1 {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s; "
-        f"with the {'DESI floor' if same_desi else 'cross-survey floor'} {floor:.0f} ({floor_kind}): +/- {err_total:.0f}; "
-        f"directions {'agree' if pair['consistent'] else 'DISAGREE'} (mismatch {pair['dir_mismatch']:.0f}); "
+        f"corrected shift {dv_corr:+.0f} +/- {err_total:.0f} (statistical approximation, error {pair.get('err_method', 'unknown')}); "
+        f"calibration pending; directions {'agree' if pair['consistent'] else 'DISAGREE'} "
+        f"(mismatch {pair['dir_mismatch']:.0f}); "
         f"{'regridded' if pair['regridded'] else 'same grid'}; {'at bound' if pair['at_bound'] else 'inside search range'}")
     out(f"  {line}: profile grade {grade} (z_prof {pair['profile_z']:.1f}, residual {100 * pair['resid_frac']:.1f} per cent of the peak); "
         f"reliable tier {reliable}{(' (' + why + ')') if why else ''}")
     out(f"  {line}: narrow-line zero-point ({pair['zp_line'] or 'none'}) {_fmt(pair['zp_dv'], 5, 0, True)} +/- {_fmt(pair['zp_err'], 4)} km/s "
-        f"({'applied' if doc['zp_applied'] else 'not applied'}) -> dv = {dv_corr:+.0f} km/s ({doc['significance']:.1f} sigma); "
+        f"(frame {'ok' if doc['frame_ok'] else 'VETOED, ' + doc['frame_reason']}; {'applied' if doc['zp_applied'] else 'not applied'}) -> dv = {dv_corr:+.0f} km/s ({doc['significance']:.1f} statistical error units, uncalibrated); "
         f"c(1/2) difference of the two fits {doc['c50_difference']:+.0f}; offset from the narrow lines "
         f"epoch 1 {epochs[0]['c50_sys']:+.0f}, epoch 2 {doc['dv_abs_epoch2']:+.0f} km/s")
     return doc, pair
@@ -344,8 +367,11 @@ def cmd_rv(a):
     complexes = tuple(c for c in ("Halpha", "Hbeta", "MgII") if c in lines or (c in ("Halpha", "Hbeta") and set(lines) & {"Halpha", "Hbeta"}))
     out = (lambda *x: None) if a.quiet else print
     out(f"blrfit {__version__} rv: {','.join(lines)}, z = {z:.5f} ({zsrc1}), E(B-V) {ebv1:.4f} / {ebv2:.4f}")
-    res1 = fit_spectrum(sp1["wave"], sp1["flux"], sp1["ivar"], z, ebv=ebv1, complexes=complexes)
-    res2 = fit_spectrum(sp2["wave"], sp2["flux"], sp2["ivar"], z, ebv=ebv2, complexes=complexes)
+    try:
+        res1 = fit_spectrum(sp1["wave"], sp1["flux"], sp1["ivar"], z, ebv=ebv1, complexes=complexes)
+        res2 = fit_spectrum(sp2["wave"], sp2["flux"], sp2["ivar"], z, ebv=ebv2, complexes=complexes)
+    except ValueError as e:
+        sys.exit(f"cannot fit the epochs: {e}")
     epochs_meta = [dict(path=os.path.abspath(path), kind=sp.get("kind"), targetid=tid, mjd=sp.get("mjd", np.nan),
                         date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "")
                    for path, sp, tid in ((a.epoch1, sp1, tid1), (a.epoch2, sp2, tid2))]
@@ -360,9 +386,10 @@ def cmd_rv(a):
     first = doc["lines"][lines[0]]
     doc.update({k: v for k, v in first.items() if k != "lines"})     # the first line's record at the top level
     if "Halpha" in pairs and "Hbeta" in pairs:
-        tl = RV.two_line_consistent(pairs["Halpha"], pairs["Hbeta"])
+        from .rv_policy import two_line_policy
+        tl = two_line_policy(doc["lines"]["Halpha"], doc["lines"]["Hbeta"])
         doc["two_line"] = tl if tl is not None else dict(consistent=False, reason="one of the lines has no usable shift")
-        if tl is not None:
+        if "difference" in tl:
             out(f"  two-line criterion (Halpha vs Hbeta): {'consistent' if tl['consistent'] else 'NOT consistent'} "
                 f"(difference {tl['difference']:+.0f} km/s, {tl['sigma']:.1f} sigma{'' if tl['same_sign'] else ', opposite signs'})")
     stem = a.stem or f"{_stem(a.epoch1, sp1, tid1)}_vs_{_stem(a.epoch2, sp2, tid2)}"
@@ -410,8 +437,17 @@ def cmd_fetch(a):
             searched += 1
         except ImportError as e:
             print(f"DESI lookup skipped: {e} (pip install 'blrfit[fetch]')")
-    with open(os.path.join(a.out, "fetch_manifest.json"), "w") as fh:
-        json.dump(_clean(found), fh, indent=1)
+    import tempfile
+    fd, temp_path = tempfile.mkstemp(prefix=".fetch_manifest_", suffix=".json", dir=a.out)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(_clean(found), fh, indent=1)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_path, os.path.join(a.out, "fetch_manifest.json"))
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
     n = len(found["sdss"]) + len(found["desi"])
     print(f"{n} spectrum(s) in {a.out}; manifest {os.path.join(a.out, 'fetch_manifest.json')}")
     if searched == 0:
