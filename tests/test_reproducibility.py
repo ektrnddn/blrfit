@@ -34,15 +34,18 @@ km/s: on the 2001 epoch it moves by 0.11 km/s while every offset moves by less
 than 0.02 km/s (between platforms it is the least stable statistic of all,
 see ``tests/test_pins.py``).
 
-The 0.1 km/s holds on the numerical stack of the catalogue run (numpy 1.26,
-scipy 1.13; macOS and the Linux runner) and under BLRFIT_STRICT_PINS. With
-current releases (numpy 2, scipy 1.16, Linux) the same rescaling moves the
-Halpha centroid of the 2001 epoch by 0.29 km/s and its W25 by 0.32 km/s: there
-the host-decomposed end point is reproducible to about 1 km/s (CHANGELOG,
-known open items), and the tolerance is REPRO_KMS_OTHER = 1.5 km/s
+The 0.1 km/s holds on the reference machine (macOS arm64, numpy 1.26.4,
+scipy 1.13.1) and is checked under BLRFIT_STRICT_PINS=1, the release check of
+tests/test_pins.py. On the Linux runners the end point depends on the runner's
+CPU (its BLAS kernels), whatever the numpy and scipy versions: the same
+rescaling moved the Halpha centroid of the 2001 epoch by 0.29-0.30 km/s and its
+W25 by up to 0.32 km/s on two runners, one with numpy 1.26 / scipy 1.13 and one
+with current releases, and by less than 0.1 km/s on a third. The
+host-decomposed end point is reproducible to about 1 km/s there (CHANGELOG,
+known open items), and the default tolerance is REPRO_KMS_OTHER = 1.5 km/s
 (REPRO_MOMENT_KMS_OTHER = 3 km/s for sigma_line), twenty times below the
 30 km/s that the 0.1.0 width rounding produced. Classes, flags, component
-counts and systemic sources must agree exactly on every stack.
+counts and systemic sources must agree exactly everywhere.
 
 (b) Two identical calls give identical results, every number of the summary
 row, every fitted parameter and the continuum bit for bit: the fit has no
@@ -50,7 +53,6 @@ hidden state.
 """
 import numpy as np
 import pytest
-import scipy
 
 import blrfit
 from blrfit.constants import C_KMS
@@ -60,11 +62,9 @@ from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, Z_J001224
 from test_pins import KMS_STATS, STRICT
 
 EPS = 1e-13
-# the numerical stack of the catalogue run, on which the end point is held to 0.1 km/s
-REFERENCE_STACK = np.__version__.startswith("1.26.") and scipy.__version__.startswith("1.13.")
-REPRO_KMS_OTHER, REPRO_MOMENT_KMS_OTHER = 1.5, 3.0      # other stacks, see the module docstring
-REPRO_KMS = 0.1 if (REFERENCE_STACK or STRICT) else REPRO_KMS_OTHER                # every velocity and width
-REPRO_MOMENT_KMS = 0.5 if (REFERENCE_STACK or STRICT) else REPRO_MOMENT_KMS_OTHER  # the second-moment width
+REPRO_KMS_OTHER, REPRO_MOMENT_KMS_OTHER = 1.5, 3.0      # without BLRFIT_STRICT_PINS, see the module docstring
+REPRO_KMS = 0.1 if STRICT else REPRO_KMS_OTHER                # every velocity and width of the summary row
+REPRO_MOMENT_KMS = 0.5 if STRICT else REPRO_MOMENT_KMS_OTHER  # the second-moment width
 EPOCHS = {"2001": SDSS_EXAMPLE, "2013": SDSS_EXAMPLE_2}
 # the entries undefined at the end point, per epoch (see the module docstring)
 UNDEFINED = {"2001": {"conti_feop_fwhm", "HA_nw_sig", "HB_nw_sig"}, "2013": set()}

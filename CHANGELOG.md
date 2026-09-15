@@ -252,9 +252,10 @@ and 0.2.0 can be attributed. The tag `v0.1.0` reproduces the catalogue run.
   whether that is too strict must be judged on the production pairs.
 * Host-decomposed fits are reproducible to about 1.3 km/s, not 0.1 km/s, under
   a last-bit flux rescaling: the joint host solver stops at slightly different
-  points. `tests/test_reproducibility.py` holds 0.1 km/s on the numerical stack
-  of the catalogue run (numpy 1.26, scipy 1.13) and 1.5 km/s with current
-  releases, where the J001224 2001 epoch moves by up to 0.32 km/s.
+  points. `tests/test_reproducibility.py` holds 0.1 km/s on the reference
+  machine under BLRFIT_STRICT_PINS=1 and 1.5 km/s elsewhere: on the Linux
+  runners the J001224 2001 epoch moves by up to 0.32 km/s, depending on the
+  runner's CPU and not on the numpy version.
 * Frozen calibration constants in `constants.py` are unchanged.
 
 ## 0.1.0 (2026-09-13)
