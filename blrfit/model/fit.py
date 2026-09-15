@@ -171,9 +171,26 @@ def fit_spectrum(wave_obs, flux, ivar, z, ebv=0.0, host=True, fe=True,
     flux_scale = float(flux_scale)
     if not (np.isfinite(flux_scale) and flux_scale > 0):
         raise ValueError(f"flux_scale must be a positive finite number, got {flux_scale!r}")
+    zf, sbm = float(z), float(sig_broad_min)
+    if not (np.isfinite(zf) and zf > -1.0):
+        raise ValueError(f"z must be a finite number above -1, got {z!r}")
+    if not (np.isfinite(sbm) and sbm >= 0):
+        raise ValueError(f"sig_broad_min must be finite and non-negative, got {sig_broad_min!r}")
     wave_obs = np.asarray(wave_obs, float); flux = np.asarray(flux, float) * flux_scale
     ivar = np.asarray(ivar, float) / flux_scale**2
+    wv = wave_obs[np.isfinite(wave_obs)]
+    if wv.size > 1 and np.any(np.diff(wv) < 0):
+        # descending (or unordered) wavelengths are fitted in increasing order
+        order = np.argsort(wave_obs, kind="stable")
+        wave_obs, flux, ivar = wave_obs[order], flux[order], ivar[order]
+        wv = wave_obs[np.isfinite(wave_obs)]
+    if wv.size > 1 and not np.median(np.diff(wv)) > 0:
+        raise ValueError("more than half of the wavelength steps are zero (repeated pixels, e.g. two exposures "
+                         "concatenated): combine the repeated wavelengths first")
     bad = ~np.isfinite(flux) | ~np.isfinite(ivar) | (ivar <= 0)
+    if bad.all():
+        raise ValueError("no usable pixel: every pixel has a non-finite flux or inverse variance, "
+                         "or an inverse variance <= 0 (a masked spectrum)")
     flux = np.where(bad, 0.0, flux); ivar = np.where(bad, 0.0, ivar)
     # Input-scale guard: the model is set up for fluxes of order 1-1000 in
     # 1e-17 erg/s/cm^2/A (see FLUX_SCALE_MIN); another unit has to be declared

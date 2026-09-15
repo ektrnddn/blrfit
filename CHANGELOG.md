@@ -48,7 +48,54 @@ and 0.2.0 can be attributed. The tag `v0.1.0` reproduces the catalogue run.
 * Gzipped SDSS spec files and DESI coadds are recognised by name; the redrock
   sibling of a coadd is found whether either file is compressed.
 
+* A spectrum without a single usable pixel (every pixel with a non-finite flux
+  or inverse variance, or an inverse variance <= 0) is refused with a
+  ValueError that says so. It used to reach the continuum fit, whose reference
+  flux was then the median of an empty set: the power-law bound became NaN and
+  the solver refused the start ("Initial guess is outside of provided bounds").
+  This happened to 6 of the 1,630 spectra of the September 2026 validation
+  subset (three of them DESI tile coadds of zero exposures), none of which has
+  a fit in the 0.1.0 catalogue run either.
+  Effect: an explicit error instead of a solver error; no spectrum that fitted
+  before is affected.
+* A continuum fit left with no more pixels outside the line complexes than it
+  has free parameters (a spectrum covering little more than one complex)
+  raises ValueError. Least squares on no residual returned the starting values
+  as a successful continuum: for a synthetic spectrum trimmed to 6410-6790 A
+  the continuum came out 2.5 times too low and the broad equivalent width 5.6
+  times too high, with no flag.
+  Effect: none on spectra with continuum pixels.
+* The host fraction is NaN, so the host is not subtracted, when the flux summed
+  over 4200-5000 A is not positive. The denominator was clamped to 1e-30, so a
+  positive host gave fractions near 1e33 that passed the 0.1 threshold.
+  Effect: none when that flux sum is positive.
+* Input checks: z must be finite and above -1 and sig_broad_min finite and
+  non-negative (z = NaN used to end in "no usable pixel"). Observed wavelengths
+  given in descending order are sorted before the fit. A spectrum in which more
+  than half of the wavelength steps are zero (every pixel repeated, as when two
+  exposures are concatenated) is refused: its median pixel spacing was zero and
+  the line measurements divided by it (ZeroDivisionError). Repeats in camera
+  overlaps alone are fitted as before.
+  Effect: none on increasing wavelength arrays; a descending array now gives
+  the fit of the same spectrum in increasing order.
+* The starting vector handed to the solver is always inside valid bounds. A
+  start is clipped to 1e-9 inside its bounds as before; a NaN start, or an
+  infinite one on the side of an infinite bound, is replaced by the middle of
+  the bounds (the finite bound when only one is finite) with a RuntimeWarning;
+  bounds of a free parameter that are not an increasing pair of numbers raise
+  ValueError naming it, which is how the first case above was traced.
+  Effect: none on spectra that fitted before (their starting vector is
+  unchanged bit for bit).
+
 ### Fixes (cross-correlation; on-sky calibration still to be redone)
+
+* The default comparison window of `ccf_shift` is centred on the template's
+  c(1/2) relative to the input redshift when its systemic velocity is not
+  measured (Mg II fitted without a narrow component); it was centred on
+  0 km/s, which cut an offset profile. Synthetic Mg II at +4500 km/s with a true
+  change of 200 km/s: 292 +/- 96 km/s before, 200 +/- 5 km/s now. NaN values of
+  `nsub_frac`, `mismatch`, `win_fwhm`, `win_min` and `clip` are refused.
+  Effect: none when the systemic velocity is measured.
 
 * The variance of the chi-square scan includes the fitted flux scale of the
   template (var_y + a^2 var_x, the profile likelihood of two noisy spectra);
@@ -94,9 +141,9 @@ and 0.2.0 can be attributed. The tag `v0.1.0` reproduces the catalogue run.
 * Narrow-line frame veto of an epoch pair (policy change of the cross-
   correlation). Every pair gets one zero point from [O III] 5007, or [S II]
   where [O III] is not measurable, and a frame check (`frame_ok`,
-  `frame_reason`): a zero point beyond `FRAME_VETO_KMS` = 200 km/s
-  (provisional; to be replaced by three times the width of the zero-point null
-  measured with the corrected estimator) or at the search bound vetoes the pair
+  `frame_reason`): a zero point beyond `FRAME_VETO_KMS` = 200 km/s (set on the
+  zero points of 1,099 epoch pairs; docs/CCF_VALIDATION.md) or at the search
+  bound vetoes the pair
   for both lines, and `is_reliable` requires a good frame. The zero point is
   measured in both directions (swapping the spectra only changes its sign; one
   direction alone differed between the two orders of an SDSS-DESI pair by up to
@@ -198,8 +245,9 @@ and 0.2.0 can be attributed. The tag `v0.1.0` reproduces the catalogue run.
 
 * The on-sky floors of the cross-correlation (155/79 km/s DESI-DESI, 143/147
   km/s cross-survey) and the profile-grade inflation factors were calibrated
-  with the 0.1.0 estimator and must be re-measured, as must the frame-veto
-  threshold and the range of the flux-factor check. Low-S/N errors under-cover
+  with the 0.1.0 estimator and must be re-measured, as must the range of the
+  flux-factor check (the frame-veto threshold is set on the zero points of the
+  validation subset: docs/CCF_VALIDATION.md, Frame veto). Low-S/N errors under-cover
   (see above). The ambiguity check flags a third of the usable bench pairs;
   whether that is too strict must be judged on the production pairs.
 * Host-decomposed fits are reproducible to about 1.3 km/s, not 0.1 km/s, under

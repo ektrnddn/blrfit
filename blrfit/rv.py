@@ -72,7 +72,7 @@ def broad_profile_data(res, name="Halpha", mask_narrow_kms=0.0):
     m = res["meas"].get(name, {}) or {}
     return dict(v=v, f=f, e=e, ok=ok, nmod=np.abs(narrow),
                 v_sys=float(m.get("v_sys", np.nan)), fwhm=float(m.get("fwhm", np.nan)),
-                c50_sys=float(m.get("c50_sys", np.nan)))
+                c50_sys=float(m.get("c50_sys", np.nan)), c50=float(m.get("c50", np.nan)))
 
 
 def narrow_profile_data(res, name="Hbeta", which="OIII"):
@@ -97,7 +97,7 @@ def narrow_profile_data(res, name="Hbeta", which="OIII"):
         ok &= np.asarray(r["native_mask"], bool)
     ok &= (x >= lo) & (x <= hi)
     v = (x / lam0 - 1.0) * C_KMS
-    return dict(v=v, f=f, e=e, ok=ok, nmod=np.zeros_like(f), v_sys=np.nan, fwhm=np.nan, c50_sys=np.nan)
+    return dict(v=v, f=f, e=e, ok=ok, nmod=np.zeros_like(f), v_sys=np.nan, fwhm=np.nan, c50_sys=np.nan, c50=np.nan)
 
 
 def _pixel_scale(v):
@@ -328,8 +328,10 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
     rng = np.random.default_rng(seed)
     if not np.isfinite(vmax) or vmax <= 0 or int(n_mc) != n_mc or n_mc < 0:
         raise ValueError("vmax must be positive and n_mc a nonnegative integer")
-    if nsub_frac < 0 or mismatch < 0:
-        raise ValueError("subtraction and mismatch fractions must be nonnegative")
+    if not (np.isfinite(nsub_frac) and nsub_frac >= 0 and np.isfinite(mismatch) and mismatch >= 0):
+        raise ValueError("subtraction and mismatch fractions must be finite and nonnegative")
+    if any(x is not None and np.isnan(x) for x in (win_fwhm, win_min, clip)):
+        raise ValueError("win_fwhm, win_min and clip must not be NaN")
     prof = _validated_profile(prof)
     native_template = _validated_profile(template)
     ok_prof0, ok_template0 = np.asarray(prof["ok"], bool).copy(), np.asarray(native_template["ok"], bool).copy()
@@ -348,9 +350,13 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
     vT = np.asarray(template["v"], float)
     dpix = _pixel_scale(vT)
     if window is None:
-        c0 = template.get("c50_sys", np.nan)
+        cs = template.get("c50_sys", np.nan)
         vs = template.get("v_sys", np.nan)
-        c0 = (0.0 if not np.isfinite(c0) else c0) + (vs if np.isfinite(vs) else 0.0)
+        c50 = template.get("c50", np.nan)
+        if not (np.isfinite(cs) and np.isfinite(vs)) and np.isfinite(c50):
+            c0 = c50        # no systemic velocity: c(1/2) relative to the input redshift, the frame of v
+        else:
+            c0 = (0.0 if not np.isfinite(cs) else cs) + (vs if np.isfinite(vs) else 0.0)
         fw = template.get("fwhm", np.nan)
         half = max(win_fwhm * fw, win_min) if np.isfinite(fw) else 3000.0
         window = (c0 - half, c0 + half)

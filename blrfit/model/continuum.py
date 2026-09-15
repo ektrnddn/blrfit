@@ -246,6 +246,9 @@ def fit_continuum(wave, flux, ivar, windows=CONTI_WINDOWS, fit_fe=True, clip=Tru
     """
     fe_op, fe_uv = fe_templates()
     good = np.isfinite(flux) & (ivar > 0)
+    if not good.any():
+        # the reference flux below would be the median of an empty set (NaN)
+        raise ValueError("fit_continuum: no usable pixel (no finite flux with a positive inverse variance)")
     inwin = np.zeros_like(good)
     for lo, hi in windows:
         inwin |= (wave >= lo) & (wave <= hi)
@@ -272,6 +275,12 @@ def fit_continuum(wave, flux, ivar, windows=CONTI_WINDOWS, fit_fe=True, clip=Tru
             if k.startswith("fe"):
                 ps.fixed[k] = 0.0 if k.endswith("norm") else ps.val[ps.names.index(k)]
 
+    n_free = len(ps.free_names)
+    if m.sum() <= n_free:
+        # every usable pixel lies inside the line complexes: least squares on
+        # no residual would return the starting values as a solution
+        raise ValueError(f"fit_continuum: {int(m.sum())} usable pixels outside the line complexes "
+                         f"for {n_free} free continuum parameters")
     w = np.sqrt(ivar[m]); x = wave[m]; y = flux[m]
 
     def resid(p):
@@ -398,7 +407,10 @@ def fit_continuum_host(wave, flux, ivar, fit_fe=True, n_gal_max=N_GAL_MAX,
         host = host_of(d, ng)
         n_neg = int(np.sum(host[inhost] < -1e-3 * max(np.nanmax(np.abs(host)), 1e-9)))
         sel = inhost & (wave > 4200) & (wave < 5000) & good
-        frac = float(np.sum(host[sel]) / max(np.sum(flux[sel]), 1e-30)) if sel.sum() > 20 else np.nan
+        # a flux sum that is not positive leaves the fraction undefined (NaN), and
+        # the host is then not subtracted
+        fsum = float(np.sum(flux[sel]))
+        frac = float(np.sum(host[sel]) / fsum) if sel.sum() > 20 and fsum > 0 else np.nan
         cand = dict(d=d, ps=ps, ng=ng, host=host, n_neg=n_neg, frac=frac,
                     chi2=float(np.sum(sol.fun ** 2)), solver=solver, at_bound=_at_bound(sol, ps))
         if ng == 0 or n_neg <= max(50, 0.02 * inhost.sum()):

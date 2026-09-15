@@ -151,14 +151,32 @@ A synthetic 3900 km/s translation (the size of the largest change in the catalog
 window (`test_large_true_shift_is_recovered_by_the_two_stage_search`). Whether the real spectra of
 that object leave enough data for such a range has to be checked on its production epochs.
 
+## Frame veto
+
+The narrow-line zero point of 1,099 epoch pairs of the September 2026 validation subset (360 pairs
+of DESI epochs, 572 SDSS–DESI and 167 SDSS–SDSS; one value per pair, measured in both directions)
+has a core of NMAD 11, 16 and 11 km/s in the three kinds, and a tail:
+
+| distance from the median (km/s) | 0–30 | 30–50 | 50–100 | 100–150 | 150–200 | 200–300 | 300–450 | 450–600 | 600–900 |
+|---|---|---|---|---|---|---|---|---|---|
+| epoch pairs | 896 | 76 | 80 | 10 | 1 | 4 | 4 | 12 | 16 |
+
+A veto at 30 km/s, three times the NMAD of the calibration pairs (10 km/s), would remove 18 per cent
+of these pairs, most of them consistent with no offset: the formal errors of the zero point are too small by a factor of 1.5 (DESI–DESI)
+to 2.2 (SDSS–DESI), the NMAD of the pulls. The tail thins out above 100 km/s, and beyond 200 km/s
+lies a separate group reaching 900 km/s (36 pairs, 28 of them beyond 450 km/s): offsets of that
+size are reduction or aperture failures, not scatter. `FRAME_VETO_KMS` stays at 200 km/s; any value
+from 150 to 300 km/s changes the decision for 5 of the 1,099 pairs. The table counts distances from
+the median and the veto acts on the distance from zero; the medians of the three kinds lie within
+6 km/s of zero, so the two agree.
+
 ## Not yet calibrated
 
 * The on-sky error floors: the 0.1.0 floors (155 and 79 km/s for pairs of DESI epochs, 143 and
   147 km/s across surveys) were measured with the 0.1.0 estimator and are reported as reference
   values only.
-* The frame-veto threshold (200 km/s), the range of the flux-factor check, the minimum common
-  fraction (0.5) and the refinement range (600 km/s), all set on the evidence above and to be
-  re-measured on the production epoch pairs.
+* The range of the flux-factor check, the minimum common fraction (0.5) and the refinement range
+  (600 km/s), set on the evidence above and to be re-measured on the production epoch pairs.
 * The ambiguity check flags a third of the usable bench pairs; whether it is too strict must be
   judged on the production pairs, where the reliable sample has to stay large enough for the
   population statistics.

@@ -341,10 +341,12 @@ FLUX_SCALE_MAX = 1e4      # ... and above this
 # shifts of Halpha and Hbeta identically, which is exactly what a coincident
 # two-line change rewards: a long-baseline object of the first catalogue run
 # (-640 / -632 km/s in the two lines) carried a +613 km/s zero point on every
-# SDSS row. Pairs beyond this bound are vetoed for both lines. Provisional
-# value: 200 km/s (three narrow-line pixels); it is to be replaced by three
-# times the width of the zero-point null distribution measured on repeat DESI
-# epochs with the corrected estimator.
+# SDSS row. Pairs beyond this bound are vetoed for both lines. The value is
+# set on the zero points of 1,099 epoch pairs (docs/CCF_VALIDATION.md, Frame
+# veto): a core of NMAD 11-16 km/s, a tail that thins out above 100 km/s, and
+# beyond 200 km/s a separate group reaching 900 km/s. A veto at 30 km/s (three
+# times the NMAD of the calibration pairs) would remove 18 per cent of the
+# pairs, most of them consistent with no offset.
 FRAME_VETO_KMS = 200.0
 
 # ----------------------------------------------------------------------------

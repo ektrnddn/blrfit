@@ -11,6 +11,8 @@ the trust-region solver is not exactly invariant to it.
 """
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
 from ..constants import C_KMS
@@ -49,10 +51,32 @@ class ParamSet:
         return [n for n in self.names if n not in self.fixed and n not in self.tie]
 
     def p0(self):
-        """Starting vector of the free parameters, kept strictly inside the bounds."""
+        """Starting vector of the free parameters, kept strictly inside the bounds.
+
+        A start is clipped as np.clip(x, lo + 1e-9, hi - 1e-9), as before, with a
+        margin of a quarter of the interval when that is narrower than 1e-9. A
+        NaN start, or an infinite one on the
+        side of an infinite bound, is replaced by the middle of the bounds (the
+        finite bound when only one is finite, zero when neither is), with a
+        RuntimeWarning naming the parameter. Bounds of a free parameter that are
+        not an increasing pair of numbers raise ValueError naming it."""
         v = dict(zip(self.names, self.val))
-        return np.array([np.clip(v[n], self.lb[self.names.index(n)] + 1e-9,
-                                 self.ub[self.names.index(n)] - 1e-9) for n in self.free_names])
+        out = []
+        for n in self.free_names:
+            i = self.names.index(n)
+            lo, hi, x = self.lb[i], self.ub[i], v[n]
+            if np.isnan(lo) or np.isnan(hi) or not lo < hi:
+                raise ValueError(f"parameter {n}: bounds [{lo}, {hi}] are not an increasing pair of numbers")
+            eps = 1e-9 if hi - lo >= 1e-9 else 0.25 * (hi - lo)
+            start = np.nan if np.isnan(x) else np.clip(x, lo + eps, hi - eps)
+            if not np.isfinite(start):
+                mid = (0.5 * (lo + hi) if np.isfinite(lo) and np.isfinite(hi)
+                       else (lo if np.isfinite(lo) else (hi if np.isfinite(hi) else 0.0)))
+                start = np.clip(mid, lo + eps, hi - eps)
+                warnings.warn(f"parameter {n}: start {x} replaced by {float(start):g}, inside its bounds [{lo}, {hi}]",
+                              RuntimeWarning, stacklevel=2)
+            out.append(start)
+        return np.array(out)
 
     def bounds(self):
         idx = [self.names.index(n) for n in self.free_names]
