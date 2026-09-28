@@ -97,3 +97,39 @@ def select_by_bic(bics, dbic):
         if bics[i] - bics[best] < dbic:
             chosen = i; break
     return chosen
+
+
+def selection_margin(scores, dbic):
+    """Smallest change of any single selection score that changes the choice of
+    ``select_by_bic`` over the whole vector.
+
+    ``scores`` are the penalised selection scores of the fitted component
+    counts in order of complexity: the chi-square of the penalised fit (data
+    residuals and penalty terms) plus k ln N, which is not a textbook BIC.
+    With the chosen index c and the best index b, a simpler model j < c is
+    chosen once its score falls by more than s_j - s_b - dbic, and the chosen
+    model loses once its own score rises by dbic - (s_c - min_{i != c} s_i)
+    (equally, once the next-best score falls by that much). The margin is the
+    smaller of these, floored at zero; ties follow the strict inequality of
+    ``select_by_bic``; failed counts are absent from the vector as they are
+    from the selection. Returns ``(margin, index, direction)``: the index of
+    the score whose move attains the margin and the sign of that move. A vector
+    of one score has no margin: ``(nan, -1, 0)``."""
+    s = np.asarray(scores, float)
+    if s.size < 2:
+        return float("nan"), -1, 0
+    c = select_by_bic(s, dbic)
+    b = int(np.argmin(s))
+    candidates = [(float(s[j] - s[b] - dbic), j, -1) for j in range(c)]
+    candidates.append((float(dbic - (s[c] - np.min(np.delete(s, c)))), c, 1))
+    margin, index, direction = min(candidates, key=lambda t: t[0])
+    return max(margin, 0.0), int(index), int(direction)
+
+
+def score_gap(scores, index):
+    """Raw distance of one score from the nearest other, min |s_index - s_j|
+    (NaN for a vector of one score)."""
+    s = np.asarray(scores, float)
+    if s.size < 2:
+        return float("nan")
+    return float(np.min(np.abs(s[index] - np.delete(s, index))))

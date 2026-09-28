@@ -1,12 +1,48 @@
 # Changelog
 
-## 0.2.0.dev0 (unreleased)
+## 0.2.0rc1 (2026-09-28)
 
 Corrections of the defects found in the September 2026 audit of the frozen
 fitter. Every entry states its effect on results; fixes and policy changes are
 listed separately so that the change of any catalogue quantity between 0.1.0
 and 0.2.0 can be attributed. The tag `v0.1.0` reproduces the catalogue run.
 `docs/DELTAS.md` and `docs/deltas_*.csv` tabulate the per-object effect.
+
+This release candidate concerns single-spectrum Balmer point fitting. Current
+evidence and unresolved scientific limits are recorded in
+`docs/VALIDATION_STATUS.md`; velocity-analysis validation remains separate.
+The default UV Fe II policy remains A with the existing 3000 km/s fallback.
+No final policy winner or general Monte Carlo error calibration is claimed;
+the conditional synthetic-grid evidence and its unresolved tails are listed below.
+
+### Implementation updates since the initial correction review
+
+* New fits preserve supplied statistical variance separately from the variance
+  floor used for weighting. The default MC perturbations use supplied pixel noise
+  (`mc_noise_policy="input"`); the 2% floor, ordinary line model and fitting weights
+  are unchanged. This can change MC errors and error-dependent classifications,
+  not the ordinary profiles/offsets/widths. Explicit `"effective"` reproduces the
+  historical floor-inclusive perturbations, with distinct uncertainty metadata;
+  legacy saved results without a policy retain that behavior. Missing statistical
+  variance under an input policy is an error, not a fallback. The six-case saved-fit
+  diagnosis supports the variance distinction. Fresh 1,980-spectrum confirmation
+  passes all formal pooled point-accuracy and one-error checks; three two-error
+  checks remain inconclusive, leaving the overall gate inconclusive. The original
+  failed study is preserved. No empirical rescaling or further fitting change was
+  selected from this result.
+* Monte Carlo continuum refits use the Fe II policy and fallback stored with
+  the original fit. Old results without these settings resolve explicitly to
+  A and 3000 km/s. Draw diagnostics retain the actual policy used.
+* Optional policy C preserves the free-fit diagnostic record after a fixed-width
+  host-continuum refit. This corrects provenance, without selecting C as default.
+* Monte Carlo alias counts distinguish assessable and unassessable draws;
+  contributing, finite and solver-converged counts remain separate. Exported
+  summaries include host-undetermined, raw selection gap and MC diagnostics.
+* The broad velocity search now checks common pixel support across internal
+  masked gaps as well as spectrum endpoints. Insufficient support returns no
+  measurement instead of falling back to varying pixels. The estimator identity
+  is `profile-eiv-v3`. This fixes a search inconsistency; end-to-end response and
+  interval coverage are not thereby validated.
 
 ### Fixes (single-epoch fitter)
 
@@ -204,8 +240,9 @@ and 0.2.0 can be attributed. The tag `v0.1.0` reproduces the catalogue run.
   active bounds), `fit_status` per line (`success`, `success_unconverged`,
   `unusable_window`, `uncovered_core`, `solver_failed`), the data and penalty
   parts of the chi-square stored separately from the penalised selection score
-  (the `bic` key keeps the 0.1.0 meaning), and `bic_margin`, the distance of
-  the chosen component count to the next in BIC (column `{p}_bic_margin`).
+  (the `bic` key keeps the 0.1.0 meaning), and `bic_margin`, the smallest change
+  to any single selection score that changes the selected component count
+  (column `{p}_bic_margin`). `bic_gap` retains the raw nearest-score distance.
 * Per-pair records of the search and plausibility checks: `common_frac`,
   `search_reach`, `search_range` and `npix_search` (per direction), `n_spikes`,
   `scale_ok`, `ambiguous`, `dv_alt_ab`, `dv_alt_ba`,

@@ -71,7 +71,7 @@ def test_unperturbed_mc_matches_production_estimator(weak_narrow_spectrum, monke
         assert info["lines"][name]["alias_count"] == 0
         assert info["lines"][name]["alias_fraction"] == 0.
         assert info["lines"][name]["n_unconverged_continuum"] == 0
-        assert info["lines"][name]["flags"] == []
+        assert info["lines"][name]["flags"] == ["mc_too_few"]  # only five draws; estimator equality still exact
     if tied:
         assert res["o3_prefit"]["snr"] > 10
         assert abs(res["meas"]["Halpha"]["v_sys"] - 700.) < 150.
@@ -313,11 +313,11 @@ def test_alias_bookkeeping_flags_a_bimodal_sample(weak_narrow_spectrum, monkeypa
     res = fit_weak(weak_narrow_spectrum)
     monkeypatch.setattr(fit_module, "_fit_line_sequence",
                         _sequence_with_pattern(res, [(0., 0.), (ALIAS_KMS, -ALIAS_KMS)]))
-    mc, err, info = errors.monte_carlo(res, nmc=8, return_diagnostics=True)
+    mc, err, info = errors.monte_carlo(res, nmc=30, return_diagnostics=True)
     assert info["multimodality_assessed"] is True
     ha = info["lines"]["Halpha"]
-    assert ha["n_success"] == 8
-    assert ha["alias_count"] == 4
+    assert ha["n_success"] == 30
+    assert ha["alias_count"] == 15
     assert ha["alias_fraction"] == 0.5
     assert "mc_multimodal" in ha["flags"]
     # The percentile error of the flagged line spans both basins.
@@ -328,30 +328,30 @@ def test_alias_bookkeeping_flags_a_bimodal_sample(weak_narrow_spectrum, monkeypa
     assert "mc_multimodal" not in hb["flags"]
 
 
-def test_alias_threshold_applies_to_either_offset_and_fraction_is_strict(weak_narrow_spectrum, monkeypatch):
+def test_alias_threshold_applies_to_either_offset_with_the_declared_cluster_size(weak_narrow_spectrum, monkeypatch):
     res = fit_weak(weak_narrow_spectrum)
-    # One draw in ten displaced in c50_sys only, within the threshold in v_sys.
+    # One draw in thirty displaced in c50_sys only, within the threshold in v_sys.
     below = 0.5 * MC_ALIAS_KMS
     above = 1.25 * MC_ALIAS_KMS
-    pattern = [(below, 0.)] * 9 + [(0., above)]
+    pattern = [(below, 0.)] * 29 + [(0., above)]
     monkeypatch.setattr(fit_module, "_fit_line_sequence", _sequence_with_pattern(res, pattern))
-    _, _, info = errors.monte_carlo(res, nmc=10, return_diagnostics=True)
+    _, _, info = errors.monte_carlo(res, nmc=30, return_diagnostics=True)
     ha = info["lines"]["Halpha"]
     assert ha["alias_count"] == 1
-    assert ha["alias_fraction"] == pytest.approx(MC_ALIAS_MAX_FRACTION)
+    assert ha["alias_fraction"] == pytest.approx(1 / 30)
     assert "mc_multimodal" not in ha["flags"]
-    # Two in ten, displaced together in v_sys, form a second group and cross the fraction.
-    pattern = [(0., 0.)] * 8 + [(above, 0.), (above, 0.)]
+    # Six in thirty, displaced together in v_sys, form a qualifying second group.
+    pattern = [(0., 0.)] * 24 + [(above, 0.)] * 6
     monkeypatch.setattr(fit_module, "_fit_line_sequence", _sequence_with_pattern(res, pattern))
-    _, _, info = errors.monte_carlo(res, nmc=10, return_diagnostics=True)
+    _, _, info = errors.monte_carlo(res, nmc=30, return_diagnostics=True)
     ha = info["lines"]["Halpha"]
-    assert ha["alias_count"] == 2
+    assert ha["alias_count"] == 6
     assert ha["alias_fraction"] == pytest.approx(0.2)
     assert "mc_multimodal" in ha["flags"]
     # Two single outliers on different axes are counted but do not form a second group.
-    pattern = [(0., 0.)] * 8 + [(-above, 0.), (0., above)]
+    pattern = [(0., 0.)] * 28 + [(-above, 0.), (0., above)]
     monkeypatch.setattr(fit_module, "_fit_line_sequence", _sequence_with_pattern(res, pattern))
-    _, _, info = errors.monte_carlo(res, nmc=10, return_diagnostics=True)
+    _, _, info = errors.monte_carlo(res, nmc=30, return_diagnostics=True)
     ha = info["lines"]["Halpha"]
     assert ha["alias_count"] == 2 and not ha["bimodal"]
     assert "mc_multimodal" not in ha["flags"]

@@ -229,7 +229,7 @@ def cmd_fit(a):
     try:
         res = fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z, ebv=ebv, host=not a.no_host, fe=not a.no_fe,
                            complexes=tuple(lines), max_broad=a.max_broad, dbic=a.dbic, nmc=a.nmc, seed=a.seed,
-                           err_floor=a.err_floor)
+                           err_floor=a.err_floor, mc_noise_policy=a.mc_noise_policy)
     except ValueError as e:
         sys.exit(f"cannot fit {a.spectrum}: {e}")
     recs = {name: _line_record(name, res) for name in lines}
@@ -480,6 +480,8 @@ def build_parser():
     f.add_argument("--max-broad", type=int, default=MAX_BROAD, help=f"maximum number of broad Gaussians (default {MAX_BROAD})")
     f.add_argument("--dbic", type=float, default=DBIC, help=f"BIC improvement required for one more component (default {DBIC:.0f})")
     f.add_argument("--err-floor", type=float, default=ERR_FLOOR, help="fractional error floor (default 0.02)")
+    f.add_argument("--mc-noise-policy", choices=("input", "effective"), default="input",
+                   help="MC perturbations: supplied pixel noise (input, default), or historical noise including the fitting floor (effective)")
     f.add_argument("--out", default=".", help="output directory"); f.add_argument("--stem", default=None, help="output file stem")
     f.add_argument("--no-figure", action="store_true", help="do not write the diagnostic figure")
     f.add_argument("--pickle", action="store_true", help="also write the full result as <stem>_fit.pkl")

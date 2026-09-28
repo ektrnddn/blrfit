@@ -1,12 +1,22 @@
 # blrfit
 
-**Development branch: 0.2.0.dev0.** Scientific corrections are in progress.
-The validation numbers below describe the frozen 0.1.0 release, not a newly
-validated catalogue. CHANGELOG.md lists the corrections of 0.2.0 and separates
-fixes from changes of policy; the on-sky calibration of the cross-correlation
-errors, the Monte Carlo coverage and the production comparison of the Fe II
-change are still to be done, so this branch is not ready for a production refit
-or a paper's final measurements.
+**Release candidate: 0.2.0rc1.** This candidate supports the scoped Halpha/Hbeta
+single-spectrum point-fit milestone with explicit quality diagnostics.
+Between-epoch velocity validation follows separately.
+[Current validation status](docs/VALIDATION_STATUS.md) records the supported
+synthetic accuracy results, failed/inconclusive Monte Carlo calibration and weak-spectrum
+limits, and the measured failure of an end-to-end velocity-response test.
+The validation numbers later in this README describe the historical 0.1.0
+release unless explicitly stated otherwise. CHANGELOG.md separates fixes from
+policy changes. This is a prerelease, not a fully validated scientific catalogue. The author has
+approved a first primary point-fit pass with host enabled, Fe II policy A
+(3000 km/s fallback), at most three broad components, a 2% fitting-weight floor
+and no Monte Carlo draws (`nmc=0`). Calibrated uncertainty and velocity claims
+remain excluded; deployment and returned catalogue outcomes are checked separately. The fixed real-data NERSC preflight now accounts for all 577 inputs;
+its quality limits and completed fixed comparison review are documented above.
+The comparison found identical point fits from old and current source on the
+same local inputs/runtime, while preserving the observed numerical sensitivity
+of some real spectra across runtime stacks.
 
 Fits the broad Hα, Hβ (and Mg II) emission lines of an active galactic nucleus against the
 systemic velocity defined by the narrow lines of the same spectrum, measures the displacement
@@ -32,7 +42,7 @@ the narrow lines and classified C (asymmetric).*
 ## Install
 
 ```bash
-pip install git+https://github.com/ektrnddn/blrfit.git
+pip install git+https://github.com/ektrnddn/blrfit.git@v0.2.0rc1
 ```
 
 Python ≥ 3.9 with numpy, scipy, astropy and matplotlib; from a clone, `pip install .`. Optional
@@ -52,6 +62,10 @@ blrfit fit J001224_rest_air_nm.csv --wave lambda_nm --flux f_lambda --err sigma 
 blrfit rv spec-0651-52141-0072.fits spec-7169-56628-0344.fits --z 0.2288 --line Hbeta
 blrfit fetch --ra 3.1997083 --dec -8.7834722 --out spectra/                # public SDSS and DESI spectra of a position
 ```
+
+`blrfit rv` remains available for development and reproduction. Its outputs are
+not validated velocity-change detections; see the limitations above. A successful
+`fit` command likewise does not establish calibrated uncertainty or a binary.
 
 The `examples/data` directory holds the files used above (two SDSS epochs of J001224, a DESI DR1
 coadd reduced to one target with its redrock file, a CSV with rest-frame air wavelengths in nm)
@@ -228,9 +242,20 @@ cross-check.
 ## Errors
 
 **Monte Carlo** (`--nmc 30`, `fit_spectrum(nmc=30)`): the spectrum is perturbed with Gaussian
-noise from its error array and refitted with the host model held fixed and the number of broad
+noise from its supplied pixel-error array, before the 2% fitting floor, and refitted with the host model held fixed and the number of broad
 components fixed to the selected one; the error is half the 16th–84th percentile range (as in
-Shen et al. 2013 and Liu et al. 2014). This is the statistical error only.
+Shen et al. 2013 and Liu et al. 2014). This is the conditional statistical error only.
+The fitting weights still include the floor; this change adds no model component.
+Fresh-noise confirmation passes the stated pooled synthetic-grid point-accuracy
+and one-error checks at S/N 15/30. Three two-error checks remain inconclusive;
+general error calibration and the overall release gate are not established.
+See [current validation status](docs/VALIDATION_STATUS.md) for the exact scope. It can change MC errors and error-dependent
+classes, while leaving ordinary fitted profiles, offsets and widths unchanged.
+Use `--mc-noise-policy effective` (or `mc_noise_policy="effective"`) to reproduce
+the historical perturbations including the floor. Those errors are labelled
+`conditional_effective_noise`. Recomputing MC on an old saved result without a
+noise-policy setting keeps that historical policy explicitly. Input-noise MC
+requires the saved `ivar_stat_rest`; it never silently substitutes floored weights.
 
 **Empirical model** (`dv_err_model` in the output): the total error of Δv, including the
 systematics of the continuum and narrow-line decomposition, was measured on the sky from 8377 pairs
@@ -332,7 +357,10 @@ pinned spectra and the DESI example, `docs/deltas_anchor_0.1.0_to_0.2.0.csv` the
 spectra of the Liu et al. (2014) and Eracleous et al. (2012) anchor (written by
 `tests/test_anchor_liu.py` with `BLRFIT_WRITE_DELTAS=1`), both fitted with 0.1.0 and with 0.2.0
 on the same numerical stack, one row per spectrum and line with the offsets, widths, classes and
-flags of both versions and the BIC margin of every class change; `docs/DELTAS.md` names the
+flags of both versions and the selection margin of every class change (`bic_margin`, the
+smallest change of a single selection score that would change the chosen component count;
+zero on the selection edge, recomputable from the persisted score list `bic_all`; `bic_gap`
+keeps the raw score distance to the nearest other count); `docs/DELTAS.md` names the
 correction behind each delta. The tag `v0.1.0` reproduces the catalogue run; the numbers of this section were
 measured with it.
 

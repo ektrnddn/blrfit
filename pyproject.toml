@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blrfit"
-version = "0.2.0.dev0"
-description = "Broad AGN emission lines fitted against the narrow-line systemic velocity: offsets, profile classes, quality flags and velocity changes between epochs"
+version = "0.2.0rc1"
+description = "Single-spectrum broad AGN line fitting with measured offsets, profile classes and explicit quality diagnostics"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "Ekaterine Dadiani", email = "edadiani@andrew.cmu.edu"}]

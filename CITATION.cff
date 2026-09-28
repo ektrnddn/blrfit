@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below, together with the paper that describes and validates the method."
 type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
-version: 0.1.0
-date-released: 2026-09-13
+version: 0.2.0rc1
+date-released: 2026-09-28
 license: MIT
 repository-code: "https://github.com/ektrnddn/blrfit"
 authors:
@@ -23,5 +23,7 @@ abstract: >-
   the systemic velocity defined by the narrow lines of the same spectrum, measures the
   displacement and shape of the broad profile, classifies it, flags the conditions under which
   the measurement should not be trusted, and measures velocity changes between epochs by
-  chi-square cross-correlation. Works on DESI coadds, SDSS spec files or any wavelength, flux
-  and error table.
+  chi-square cross-correlation. The 0.2.0rc1 milestone is limited to single-spectrum
+  Halpha/Hbeta point fits and quality diagnostics; calibrated uncertainty and
+  velocity-change claims are not established. Works on DESI coadds, SDSS spec files
+  or any wavelength, flux and error table.

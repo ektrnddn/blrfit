@@ -20,7 +20,7 @@ of its fibermap, Halpha and Hbeta). It is written by
 | `fwhm_0.1.0`, `fwhm_0.2.0` | FWHM of the broad profile, km/s |
 | `n_broad_0.1.0`, `n_broad_0.2.0` | number of broad Gaussian components chosen by BIC |
 | `chi2_0.1.0`, `chi2_0.2.0` | chi-square of the line complex (weighted residuals plus the penalty terms) |
-| `bic_margin_0.2.0` | distance in BIC between the chosen component count and the nearest other count (0.2.0 only; a small margin marks a decomposition on the edge) |
+| `bic_margin_0.2.0` | selection margin of the chosen component count (0.2.0 only): the smallest change of any single selection score (chi-square of the penalised fit plus k ln N) that would change the choice of `select_by_bic` over the fitted counts; zero on the selection edge, recomputable from the persisted score list; a small margin marks a decomposition on the edge. In tables written before the margin was defined this way (2026-09-16) the column holds the raw distance min |score(chosen) − score(other)|, now persisted as `bic_gap` |
 | `conti_feop_fwhm_0.1.0`, `conti_feop_fwhm_0.2.0` | FWHM of the optical Fe II template, km/s; undefined when the Fe II norm is zero |
 | `conti_at_bound` | continuum parameters that ended on a bound in 0.2.0 (comma separated; empty when none) |
 | `feuv_fwhm_fixed` | whether 0.2.0 fixed the ultraviolet Fe II width at 3000 km/s because fewer than 300 continuum pixels fall in 2200-3090 A |

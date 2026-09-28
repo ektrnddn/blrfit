@@ -453,7 +453,20 @@ def _bit_exact_departures(res, row, pin):
     ref = (_nan(pin["o3_prefit"]["v_o3"]), _nan(pin["o3_prefit"]["snr"]))
     if not all(_same(a, b) for a, b in zip(got, ref)):
         departures.append(f"[O III] pre-fit {got!r} vs pinned {ref!r}")
-    departures += _row_departures(row, pin["summary"])
+    # The September 14 pin predates the explicit raw BIC gap and the host
+    # guard flag. Preserve every numerical pin: its old ``bic_margin`` meant
+    # the raw gap, now exported as ``bic_gap``. The actual selection margin
+    # has its own threshold-crossing tests in test_bic_margin.py.
+    additions = {"host_undetermined"}
+    additions.update(k.replace("_bic_margin", "_bic_gap")
+                     for k in pin["summary"] if k.endswith("_bic_margin"))
+    assert set(row) == set(pin["summary"]) | additions
+    assert row["host_undetermined"] is False  # the guard is inactive on this roster
+    projected = {k: row[k] for k in pin["summary"]}
+    for k in projected:
+        if k.endswith("_bic_margin"):
+            projected[k] = row[k.replace("_bic_margin", "_bic_gap")]
+    departures += _row_departures(projected, pin["summary"])
     return departures
 
 

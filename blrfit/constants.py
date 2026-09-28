@@ -60,6 +60,15 @@ FE_SHIFT_MAX = 0.01                          # fractional velocity shift of the 
 FE_INTRINSIC_FWHM = 900.0                    # intrinsic width of the I Zw 1 templates
 N_GAL_MAX = 5              # galaxy eigenspectra, stepped down until non-negative
 MIN_HOST_FRAC = 0.10       # host kept only above this fraction of the 4200-5000 A flux (Shen et al. 2011)
+# The host fraction is undetermined, and the host is not subtracted, when the
+# 4200-5000 A window that defines it carries no signal: the inverse-variance
+# weighted flux sum of the window is not positive or lies below this many
+# sigma of its own noise (the variance summed from ivar, pixels taken as
+# independent), or more than this fraction of the window's pixels is masked.
+# Sky over-subtraction and masked cameras produced host fractions of either
+# sign from a window of pure noise; such a fit continues without the host.
+HOST_GUARD_MIN_SNR = 3.0
+HOST_GUARD_MAX_MASKED_FRAC = 0.5
 HOST_CONTINUUM_ONLY = True # host contributes continuum only under the emission lines
 HOST_LINE_HALFWIDTH_KMS = 900.0   # +/- window interpolated over in the host model
 HOST_ZMAX = 1.2            # no host decomposition above this redshift (an adopted limit of the production run)
@@ -317,6 +326,16 @@ LUM_REF_WAVE = 5100.0     # rest wavelength of lambda L_lambda, Angstrom: the re
 # width is held at the value the catalogue fits effectively carried.
 FE_UV_FWHM_FIXED_KMS = 3000.0   # the 0.1.0 start value, at which the width effectively stayed in every catalogue fit
 FE_UV_FREE_MIN_PIXELS = 300     # below this many covered UV-window pixels the width is unconstrained and runs to a bound
+# One recorded setting chooses between three treatments of that width (the
+# keyword fe_uv_width_policy of fit_spectrum, persisted in ``settings``):
+#   "A"  held at the fallback width where the window is short (the rule above);
+#   "B"  always free, its bound state recorded (continuum_info['fe_width_state']);
+#   "C"  free, and refitted at the fallback width when the free width ends on
+#        a bound.
+# The fallback width (keyword fe_uv_fallback_kms) defaults to
+# FE_UV_FWHM_FIXED_KMS; a value estimated on the anchor set is recorded with
+# the fit when set.
+FE_UV_WIDTH_POLICY = "A"
 
 # ----------------------------------------------------------------------------
 # Input flux scale (fit_spectrum)
