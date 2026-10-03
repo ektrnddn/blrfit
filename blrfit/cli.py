@@ -5,8 +5,9 @@ Command-line interface.
     blrfit rv    EPOCH1 EPOCH2 --z Z --line Halpha [...]           velocity change between two spectra
     blrfit fetch --ra RA --dec DEC [--out DIR] [...]                 public SDSS and DESI spectra of a position
 
-``fit`` always exits with status 0 when the spectrum could be read: a line
-that cannot be fitted or classified is reported as such in the JSON.
+Successful point fits include explicit unavailable-line outcomes. Input or
+fitting exceptions return a nonzero status; public batches retain failed products
+in their manifests. Between-epoch routines are experimental.
 """
 from __future__ import annotations
 
@@ -71,7 +72,7 @@ def _add_table_args(p):
     g.add_argument("--frame", default="obs", help="obs (default) or rest; rest needs --z")
     g.add_argument("--air", action="store_true", help="wavelengths are in air (converted to vacuum)")
     g.add_argument("--flux-scale", type=float, default=1.0,
-                   help="factor bringing the flux to 1e-17 erg/s/cm^2/A (needed for luminosities only)")
+                   help="multiply flux and statistical error into 1e-17 erg/s/cm^2/observed-A")
     g.add_argument("--hdu", type=int, default=1, help="extension of a FITS table (default 1)")
     g.add_argument("--row", type=int, help="zero-based spectrum row for a vector table or 2-D image")
     g.add_argument("--z-column", help="redshift column for a generic table")
@@ -467,15 +468,15 @@ def _public_args(p):
 # ----------------------------------------------------------------------------
 def build_parser():
     p = argparse.ArgumentParser(prog="blrfit", formatter_class=argparse.RawDescriptionHelpFormatter,
-                                description="Broad AGN emission lines against the narrow-line systemic velocity: "
-                                            "offsets, profile classes, quality flags and velocity changes between epochs.")
+                                description="Single-spectrum broad AGN line fitting: narrow-reference offsets, "
+                                            "profile classes and quality flags. Between-epoch routines are experimental.")
     p.add_argument("--version", action="version", version=f"blrfit {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     f = sub.add_parser("fit", help="fit one spectrum", description="Fit one spectrum; writes <stem>_fit.json and <stem>_fit.png.")
-    f.add_argument("spectrum", nargs="?", help="SDSS spec-*.fits, DESI coadd-*.fits (with --targetid) or a table")
+    f.add_argument("spectrum", nargs="?", help="local spectrum; DESI default, --survey sdss or generic for other formats")
     from .io.public import exact_targetid
-    f.add_argument("--targetid", type=exact_targetid, default=None, help="DESI TARGETID (coadd input)")
+    f.add_argument("--targetid", type=exact_targetid, default=None, help="exact DESI TARGETID for a local file or public lookup")
     f.add_argument("--survey", choices=("desi", "sdss", "generic", "auto"), default="desi",
                    help="input format; DESI default, auto restores legacy filename dispatch")
     f.add_argument("--redrock", help="explicit DESI redrock file")
@@ -506,7 +507,7 @@ def build_parser():
     _add_table_args(f)
     f.set_defaults(func=cmd_fit)
 
-    r = sub.add_parser("rv", help="velocity change between two spectra of one object",
+    r = sub.add_parser("rv", help="experimental between-epoch diagnostics; not validated velocity measurements",
                        description="Cross-correlate the broad line of two epochs; writes <stem>_rv.json and <stem>_rv.png.")
     r.add_argument("epoch1"); r.add_argument("epoch2")
     r.add_argument("--targetid", default=None, help="DESI TARGETID, or two comma-separated (one per epoch)")

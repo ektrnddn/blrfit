@@ -11,6 +11,12 @@
   formula to SDSS or present it as an RC1-calibrated uncertainty.
 - Document installation of the frozen RC1 and this development branch separately.
 - Numerical model, optimizer, MC implementation and archived production results unchanged.
+- Clean test installations include the dependency used by mocked public lookups;
+  missing retrieval dependencies produce an actionable installation message.
+- Current examples declare SDSS/general formats explicitly. Historical numerical
+  examples are retained separately; CLI help labels between-epoch work experimental.
+- Document the quantity-specific uncertainty evidence and the pending fixed study;
+  no new coverage result or general uncertainty calibration is claimed.
 
 
 ## 0.2.0rc1 (2026-09-28)

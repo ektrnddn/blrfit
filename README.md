@@ -263,27 +263,24 @@ end of DESI; unconstrained fits placed components outside the data and manufactu
 ## Classes and flags
 
 The rules are applied in the order listed: a profile takes the first class whose condition
-holds. The significance test of class A uses the Monte Carlo error when one was computed
-(`--nmc`) and the 300 km/s threshold alone otherwise, so a class can differ between runs with and
-without the Monte Carlo. The classes of the DESI catalogue were assigned in the production run
-without Monte Carlo errors (nmc = 0), that is, with the 300 km/s threshold alone; the Monte Carlo
-subset (30 realisations) was run separately and its errors were merged into the catalogue as the
-error columns only, without reassigning the classes.
+holds. Class A uses the Monte Carlo center error when that error is finite, and the
+300 km/s threshold alone otherwise. A class can therefore differ between point-only
+and MC runs. The RC1 primary, DESI-night and staged SDSS campaigns used `nmc=0`;
+they do not contain a newly calibrated uncertainty catalogue. The labels describe
+the fitted profiles and do not establish orbital motion.
 
 | Class | Rule |
 |---|---|
 | **E** no broad line | FWHM < 1200 km/s, or integrated S/N < 5, or peak S/N < 1.5 |
 | **X** no systemic | narrow-line reference not detected (S/N < 3) |
 | **W** not classifiable | FWHM < 2000 km/s or integrated S/N < 8: something broad is there, but narrow-line residuals dominate such profiles |
-| **B** double-peaked / disk-like | two resolved peaks separated by > max(0.4 FWHM, 1500 km/s) with a dip > 8 per cent and FWHM ≥ 3000; or FWHM ≥ 7000 with A.I. ≥ 0.20 or K.I. ≥ 0.50 |
+| **B** double-peaked / disk-like | two resolved peaks separated by > max(0.4 FWHM, 1500 km/s) with a dip > 8 per cent and FWHM ≥ 3000; or FWHM ≥ 7000 with \|A.I.\| ≥ 0.20 or K.I. ≥ 0.50 |
 | **A** bulk shift | \|Δv\| > 300 km/s at > 3σ (when an error is available) and a symmetric profile: \|c(1/4) − c(3/4)\| < 0.10 FWHM, \|A.I.\| < 0.12, \|v_peak − centroid\| < 0.20 FWHM |
 | **C** asymmetric | single-peaked and not symmetric |
 | **F** normal | symmetric, no significant offset |
 
-B and C are not cleanly separable from single-epoch shape statistics: in the double-peaked
-emitters of Strateva et al. (2003) that DESI has observed, the K.I. distribution is
-indistinguishable from that of class C, and a physical separation would require disk-model fits
-(Eracleous & Halpern 1994). The operative distinction is A against the rest.
+B and C are descriptive shape classes. This code does not fit a disk model or
+identify a unique physical explanation for either class.
 
 | Flag | Condition |
 |---|---|
@@ -292,19 +289,21 @@ indistinguishable from that of class C, and a physical separation would require 
 | `low_snr` | integrated broad S/N < 10 |
 | `low_peak_snr` | broad peak < 5σ per pixel: a component significant only by integration over thousands of km/s is degenerate with continuum-subtraction residuals |
 | `host_dominated` | host ≥ 80 per cent of the 4200–5000 Å light: template mismatch at the few-per-cent level mimics a very broad line |
-| `pl_at_bound` | power-law slope at a bound |
+| `pl_at_bound` | power-law slope ≤ −4.9 or ≥ 2.9, within 0.1 of the bounds −5 and 3 |
 | `peak_disagree` | model peak and data peak differ by > 0.25 FWHM |
 | `sii_disagree` | [S II] velocity > 150 km/s from v_n |
 | `sys_disagree` | v_n and the [O III] core > 400 km/s apart ([O III] S/N ≥ 5) |
-| `narrow_at_bound` | narrow group at the edge of its ±1500 km/s window |
+| `narrow_at_bound` | \|v_n\| ≥ 1425 km/s, within 5% of the ±1500 km/s search boundary |
 | `edge` | data cover less than ±6000 km/s around the line |
-| `extreme_offset` | \|Δv\| > 4000 km/s (classes A, C and F; a class-B profile is not flagged): beyond the Roche ceiling of almost any bound binary; a disk-emitter component, an artefact or a misidentified line |
+| `extreme_offset` | \|Δv\| > 4000 km/s for classes A, C and F; a project quality threshold, not a universal physical ceiling |
 
-A measurement with no flag is *clean*. The DESI catalogue definitions are provided as functions:
+The absence of a flag does not guarantee a valid measurement: E, W and X return
+before these quality checks, and solver/MC diagnostics must also be inspected.
+The project's selection definitions are provided as functions:
 *measurable* = class A/B/C/F, integrated S/N ≥ 8, FWHM ≥ 2000 km/s, no `edge`; *strong offset* =
 measurable and 1000 ≤ |Δv| ≤ 4000 km/s. Both lines are always fitted when the data cover them;
-in the DESI catalogue the selection, classes and Δv are Hα quantities and Hβ is the independent
-cross-check.
+the Halpha and Hbeta measurements are returned separately. Hbeta can inherit its
+narrow-line reference from Halpha, so the two offsets are not necessarily independent.
 
 ## Errors
 
@@ -377,7 +376,8 @@ c(1/2) − v_n, `dv_err_mc`, `dv_err_model`, the measures of the profile and of 
 `summary_row`, the flat dictionary of the catalogue (`HA_*`, `HB_*`, `conti_*`). `<stem>_fit.png`
 is the diagnostic figure; `--pickle` writes the full result. `<stem>_rv.json` holds a summary of
 each epoch's fit of the line (`epochs`, each with the line record described above), the
-cross-correlation quantities listed above, `err_method` and `reliable_reason`. A fit
+experimental cross-correlation diagnostics, `err_method` and `reliable_reason`.
+Those legacy names do not establish validated between-epoch uncertainties. A fit
 returns zero when it completes, including explicitly uncovered lines. Input/fit failures
 return nonzero; a public batch also returns nonzero when a download or individual fit fails.
 
@@ -393,9 +393,9 @@ with the Planck 2018 luminosity distance, the same one that `broad_lum` uses.
 
 ## Citing
 
-If you use blrfit, please cite the software (`CITATION.cff`) and the paper that describes and
-validates the method, Dadiani & Palmese, *Cosmic Pairs: A DESI Census of Massive Black Hole
-Binaries* (in preparation). The Fe II templates and the galaxy eigenspectra were obtained from the
+If you use blrfit, please cite the software (`CITATION.cff`) and the methodological
+references relevant to the quantities you use. The project manuscript is in
+preparation; it is not a published validation reference. The Fe II templates and the galaxy eigenspectra were obtained from the
 PyQSOFit repository (Guo, Shen & Wang 2018; GPL-3.0 code licence) and are the published data of
 the authors listed in `blrfit/templates/README.md`; the MIT licence of this package covers its
 code.
