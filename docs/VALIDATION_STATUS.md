@@ -1,5 +1,12 @@
 # Current validation status
 
+> Interface development note (2026-10-03): `0.2.0rc2.dev0` changes public/local
+> input handling and output labels while retaining the RC1 numerical core.
+> The scientific outcomes below are unchanged. Input software tests and live
+> retrieval examples do not complete uncertainty calibration. See
+> [the input-interface note](INPUT_INTERFACE.md).
+
+
 Updated September 28, 2026. Version: **0.2.0rc1, scoped release candidate**.
 
 The immediate milestone is Halpha/Hbeta single-spectrum fitting. The numerical

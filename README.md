@@ -1,92 +1,159 @@
 # blrfit
 
-**Release candidate: 0.2.0rc1.** This candidate supports the scoped Halpha/Hbeta
-single-spectrum point-fit milestone with explicit quality diagnostics.
-Between-epoch velocity validation follows separately.
-[Current validation status](docs/VALIDATION_STATUS.md) records the supported
-synthetic accuracy results, failed/inconclusive Monte Carlo calibration and weak-spectrum
-limits, and the measured failure of an end-to-end velocity-response test.
-The validation numbers later in this README describe the historical 0.1.0
-release unless explicitly stated otherwise. CHANGELOG.md separates fixes from
-policy changes. This is a prerelease, not a fully validated scientific catalogue. The author has
-approved a first primary point-fit pass with host enabled, Fe II policy A
-(3000 km/s fallback), at most three broad components, a 2% fitting-weight floor
-and no Monte Carlo draws (`nmc=0`). Calibrated uncertainty and velocity claims
-remain excluded; deployment and returned catalogue outcomes are checked separately. The fixed real-data NERSC preflight now accounts for all 577 inputs;
-its quality limits and completed fixed comparison review are documented above.
-The comparison found identical point fits from old and current source on the
-same local inputs/runtime, while preserving the observed numerical sensitivity
-of some real spectra across runtime stacks.
+Fit the broad Hα and Hβ profiles of one AGN spectrum, measure their offsets relative
+to the fitted narrow-line reference, and save profile measurements, classes, quality
+flags and a diagnostic figure. DESI is the default input survey; SDSS and general
+spectral tables/images are explicit alternatives.
 
-Fits the broad Hα, Hβ (and Mg II) emission lines of an active galactic nucleus against the
-systemic velocity defined by the narrow lines of the same spectrum, measures the displacement
-and shape of the broad profile, classifies it, flags the conditions under which the measurement
-should not be trusted, and measures the change of the broad-line velocity between two epochs by
-cross-correlation. It is the fitter behind the DESI search for sub-parsec supermassive black hole
-binaries, released so that the measurements can be reproduced on the same or on other data.
+**Version status.** This branch is `0.2.0rc2.dev0`, an input-interface development
+version built on the unchanged numerical core of
+[v0.2.0rc1](https://github.com/ektrnddn/blrfit/releases/tag/v0.2.0rc1).
+RC1 is the scoped prerelease used for the project’s primary and subsequent observing-date
+point fits. GitHub’s `main` branch is older: an unpinned Git install does not select RC1.
+The commands below describe this development branch, not the immutable RC1 tag.
 
-Input: a DESI coadd, an SDSS spec file, or any table with a wavelength, a flux and an error
-column. Output: a table on the terminal, a JSON file with every quantity, and a diagnostic
-figure. The physics is fixed: every number that defines the model, a class, a flag or a selection
-is set to the value used for the DESI catalogue and is listed, with its reason, in
-`blrfit/constants.py`; tolerances of the fitting machinery stay next to the code they serve.
-
-![Diagnostic figure of SDSS J001224.01−102226.5](docs/spec-0651-52141-0072_fit.png)
-
-*SDSS J001224.01−102226.5 (SDSS spectrum of 2001, z = 0.2288), one of the binary candidates of
-Eracleous et al. (2012): the continuum decomposition on top, the Hβ and Hα complexes below with
-the narrow model (green), the broad components (dashed), the total (red), the c(1/4), c(1/2),
-c(3/4) bisector points and the residuals. Both lines are displaced by more than 1000 km/s from
-the narrow lines and classified C (asymmetric).*
+**Scientific scope.** Successful execution is not proof that every decomposition or
+error bar is reliable. The default `--nmc 0` produces point estimates and **no Monte
+Carlo uncertainties**. Optional MC errors are conditional statistical estimates;
+real-data and survey-wide calibration remains incomplete. Mg II and between-epoch
+velocity analysis are experimental. See [validation status](docs/VALIDATION_STATUS.md).
 
 ## Install
 
-```bash
-pip install git+https://github.com/ektrnddn/blrfit.git@v0.2.0rc1
-```
-
-Python ≥ 3.9 with numpy, scipy, astropy and matplotlib; from a clone, `pip install .`. Optional
-extras: `blrfit[fetch]` (astroquery, fsspec, aiohttp, requests) for downloading public spectra,
-`blrfit[desi]` to read DESI files through desispec instead of the built-in reader (the two give
-identical arrays), `blrfit[dust]` for dust-map look-ups of E(B−V), `blrfit[test]` (pytest, healpy)
-for the test suite. Tests: `python -m pytest -m "not slow and not network"` from the clone runs
-the fast suite (about 5 minutes); `-m slow` adds the full synthetic grids, the Monte Carlo pulls
-and, with `BLRFIT_ANCHOR_DIR` set, the Liu et al. (2014) anchor (`tests/test_anchor_liu.py`).
-
-## Quick start
+Use an isolated environment (Python 3.9 or later):
 
 ```bash
-blrfit fit spec-0651-52141-0072.fits --z 0.2288
-blrfit fit coadd-main-dark-17260-39627574082538900.fits --targetid 39627574082538900   # z from the redrock file next to it
-blrfit fit J001224_rest_air_nm.csv --wave lambda_nm --flux f_lambda --err sigma --wave-unit nm --frame rest --air --z 0.2288 --flux-scale 10
-blrfit rv spec-0651-52141-0072.fits spec-7169-56628-0344.fits --z 0.2288 --line Hbeta
-blrfit fetch --ra 3.1997083 --dec -8.7834722 --out spectra/                # public SDSS and DESI spectra of a position
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install 'blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@feature/public-spectrum-inputs'
+python -m blrfit --version
 ```
 
-`blrfit rv` remains available for development and reproduction. Its outputs are
-not validated velocity-change detections; see the limitations above. A successful
-`fit` command likewise does not establish calibrated uncertainty or a binary.
+For reproducibility, replace the branch name with its full commit hash. The frozen
+**RC1** installation is `python -m pip install git+https://github.com/ektrnddn/blrfit.git@v0.2.0rc1`;
+it has the older interface. From a checkout of this branch use `python -m pip install '.[fetch]'`.
+Local files need only the base dependencies; public retrieval needs the `fetch` extra.
+`dust` adds dust-map access; `test` adds the software test dependencies.
 
-The `examples/data` directory holds the files used above (two SDSS epochs of J001224, a DESI DR1
-coadd reduced to one target with its redrock file, a CSV with rest-frame air wavelengths in nm)
-and `examples/README.md` the commands that run them with the expected results. From Python:
+## Fit a public DESI target
 
-```python
-from blrfit import read_spectrum, fit_spectrum, summary_row, plot_fit
-sp  = read_spectrum("spec-0651-52141-0072.fits")                      # or read_desi(path, targetid), read_table(...)
-res = fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z=0.2288, complexes=("Halpha", "Hbeta"), nmc=30)
-res["meas"]["Hbeta"]["c50_sys"], res["err"]["Hbeta"]["c50_sys"], res["cls"]["Hbeta"]["label"]   # err is empty without nmc
-row = summary_row(res)                                                  # one flat dictionary (HA_*, HB_*, conti_*)
+No coordinates are needed when its TARGETID is known. Only public DR1 is searched by
+default. Each returned survey/program coadd is fitted separately and recorded in a
+manifest; none is silently selected as a representative observing night.
+
+```bash
+blrfit fit --targetid 39627574082538900 --out result_desi
 ```
 
-`fit_spectrum` needs the observed-frame vacuum wavelength in Å, the flux in units of
-1e-17 erg s⁻¹ cm⁻² Å⁻¹ (the amplitude bounds and starting values of the model are set for
-continua of order 1–1000 in that unit; a spectrum in another unit is refused with a message,
-and `flux_scale=` brings it into range, after which every flux-bearing output is in the scaled
-unit), the inverse variance, and the redshift.
-The redshift only sets the ±1500 km/s window in which the narrow lines are sought: every velocity
-reported is a difference between two quantities measured in the same fit, so errors in the input
-redshift cancel to first order.
+The lookup uses the public [Data Lab DESI catalogue](https://datalab.noirlab.edu/data/desi)
+and downloads the matching target from the DESI archive. `--releases edr` selects EDR;
+`--releases dr1,edr` searches both, whose observations can overlap. Public retrieval
+is limited by those releases and the availability of the catalogue and file servers.
+It does not search proprietary DESI data or assemble all nights.
+
+## Search by position, optionally including SDSS
+
+Coordinates are ICRS degrees. The default search is DESI within 1.5 arcsec. Add
+`--include-sdss` to retrieve SDSS DR17 spectra within **at most 1.5 arcsec** as well.
+
+```bash
+blrfit fit --ra 3.1997148876 --dec -8.7834904331 --include-sdss --out result_position
+# Download only, without fitting:
+blrfit fetch --targetid 39627574082538900 --include-sdss --out downloaded
+# SDSS alone:
+blrfit fit --survey sdss --ra 3.1001 --dec -10.374 --out result_sdss_position
+```
+
+Multiple DESI TARGETIDs cause a clear stop with the candidate list saved. Choose
+`--targetid` or explicitly request `--all-matches` to keep each object separate.
+SDSS matches are **positional candidates**, not confirmed associations: review their
+coordinates, redshifts and spectra. Repeat products are retained. The search is not
+a complete SDSS-V/DR20 census; a local compatible SDSS FITS file can still be read.
+A failed query is reported as an error, not as “no spectrum exists.” Use a fresh
+output directory for each public search so earlier manifests remain intact.
+
+## Fit a local file
+
+```bash
+# DESI is the default. A multi-row file needs an exact TARGETID.
+blrfit fit coadd-main-dark-17260.fits --targetid 39627574082538900 --out result_local
+# Supply z if there is no matching redrock file beside it:
+blrfit fit my_desi.fits --targetid 39627574082538900 --z 0.2203154 --out result_local_z
+# SDSS: file contents, not its name, identify the spectral columns.
+blrfit fit my_sdss.fits --survey sdss --z 0.2288 --out result_local_sdss
+```
+
+A DESI file containing exactly one spectral row can omit TARGETID. An explicit
+`--redrock path.fits` is also supported. Multiple rows with the same TARGETID must
+be separated into observations before fitting; exposure rows are never flattened
+together. The standard public DESI retrieval returns a full-depth coadd, which may
+contain multiple nights. Local SDSS `spec` files supply their pipeline coadd from
+extension 1; their individual-exposure extensions are not fitted by this command.
+
+SDSS inputs are read on their native vacuum `10**loglam` grid, with flux and IVAR in
+the supplied units. By default nonzero native MASK/AND_MASK and invalid statistical
+pixels are excluded, matching the conservative project input policy. The Python
+reader retains its historical `mask_policy="ivar"` default for compatibility;
+the CLI uses `--sdss-mask-policy conservative`. Select `ivar` explicitly to reproduce
+the older reader. No extra heliocentric/barycentric or air-to-vacuum correction is
+applied to these already reduced SDSS products. No SDSS-wide uncertainty or resolution
+calibration is implied. Insufficient continuum support remains an unusable fit;
+it is not repaired by inventing data or changing the model.
+
+For DESI, E(B−V) defaults to the FIBERMAP value. For SDSS/general files it defaults
+to zero: supply `--ebv VALUE`, or `--ebv sfd` with installed SFD dust maps, when
+Galactic dereddening is needed. Redshifts are not remeasured automatically; `--z`
+overrides the file value. Review catalogue redshift warnings in the saved metadata.
+
+## Fit general FITS tables or images
+
+**Wavelength, flux and redshift alone are insufficient for this weighted fit.**
+Supply a per-pixel 1σ error or inverse variance; the program does not invent errors.
+The fit also needs sufficient wavelength coverage outside the emission-line windows
+to constrain the continuum.
+
+```bash
+# FITS table (also CSV/ECSV): explicit column names, including the noise column.
+blrfit fit spectrum.fits --survey generic --hdu 1 --wave WAVE --flux FLUX --ivar IVAR --z 0.2 --out result_table
+# Read one row of a vector-valued FITS table, including its redshift column:
+blrfit fit spectra.fits --survey generic --row 2 --wave LAMBDA --flux FLUX --err SIGMA --z-column Z --out result_row
+# Separate image extensions, with Z in a FITS header:
+blrfit fit arrays.fits --survey generic --wave-hdu WAVE --flux-hdu FLUX --err-hdu ERROR --z-key Z --out result_image
+```
+
+Wavelength defaults to observed-frame vacuum Å. Use `--wave-unit nm`, `--frame rest`
+or `--air` when appropriate. Flux must be **fλ per observed Å** in units of
+10⁻¹⁷ erg s⁻¹ cm⁻² Å⁻¹; `--flux-scale` converts both flux and statistical noise.
+Changing wavelength units alone does not convert the flux-density unit. If the
+flux has already been transformed to fλ per rest-frame Å, set `--flux-frame rest`
+separately; the reader divides it and its errors by (1+z). This is not a conversion
+from luminosity density or fν. Optional `--mask COLUMN` excludes nonzero mask values.
+
+FITS has no universal spectrum layout. Explicit table columns or image-HDU arrays
+are supported; arbitrary WCS-only images, cubes and instrument-specific products
+need an adapter. Ambiguous multi-spectrum arrays are rejected rather than flattened.
+Legacy filename-based selection is available explicitly with `--survey auto`.
+
+## Results and uncertainties
+
+Each successful spectrum writes `*_fit.json` and `*_fit.png`; `--pickle` also saves
+its full fit. JSON includes Hα/Hβ classifications, flags, solver diagnostics,
+redshift/reader provenance and uncertainty status. A public search writes
+`inputs/fetch_manifest.json` and `fit_manifest.json`; individual failures remain
+listed and the command returns a nonzero exit status for incomplete work.
+
+Add `--nmc 30 --seed 0` to request conditional MC errors. These perturb the supplied
+statistical pixel noise and refit under the RC1 assumptions; the 2% fitting floor
+is not added to the default simulated noise. They do not include all component-choice,
+host, calibration, redshift or instrumental systematics. Coverage remains partly
+inconclusive; **do not label them fully calibrated uncertainties**. With `--nmc 0`,
+missing errors are JSON `null`, not zero. The old DESI-repeat formula is no longer
+printed as an error bar, particularly for SDSS. `--legacy-error-diagnostic` can
+retain it for DESI as a separately named, uncalibrated diagnostic.
+
+The model details below describe the RC1 numerical core. Interface changes above
+are a separate development version and do not revise the archived catalogue fits.
 
 ## What is measured
 
@@ -257,26 +324,19 @@ the historical perturbations including the floor. Those errors are labelled
 noise-policy setting keeps that historical policy explicitly. Input-noise MC
 requires the saved `ivar_stat_rest`; it never silently substitutes floored weights.
 
-**Empirical model** (`dv_err_model` in the output): the total error of Δv, including the
-systematics of the continuum and narrow-line decomposition, was measured on the sky from 8377 pairs
-of independent DESI spectra of the same objects (observed in two programmes, or in survey
-validation and the main survey) in which broad Hα is measurable in both. The two values of c(1/2)
-agree to an NMAD of 103 km/s per pair, 73 km/s per measurement, declining from 246 km/s per pair at
-integrated S/N 8–20 to 67 km/s above 150. The adopted per-measurement error is
-
-    σ(Δv) = max(650 km/s / √(S/N), 45 km/s),
-
-inflated by 1.5 for strong offsets (|Δv| ≥ 1000 km/s), whose profiles are broader and more complex
-(256 km/s per pair, about 180 per measurement); the DESI catalogue and its inspection pages, which
-consist of strong-offset objects, apply the factor 1.5 throughout. The Monte Carlo errors of the
-strong-offset objects have a median of 123 km/s, so the decomposition systematics are of the same
-order as the statistical error. The model was calibrated on broad Hα in DESI spectra; for other
-lines and instruments it is an indication, not a measurement, and it is reported only for
-measurable lines (classes A, B, C, F). When the Monte Carlo error is much larger than the model
-error, as for the worked example (±287 against ±68 km/s in Hα), the realisations are switching
-between decompositions of the same profile and the larger number is the one to quote.
+**Historical empirical diagnostic.** Earlier versions reported a DESI-repeat error
+formula in `dv_err_model`, including for other instruments. This interface leaves
+that field null. `--legacy-error-diagnostic` retains the original formula only for
+DESI, under `legacy_desi_repeat_error_diagnostic`; it is not an RC1 or SDSS error
+calibration. See the validation status for the outstanding uncertainty work.
 
 ## Validation
+
+The historical checks below do not establish general uncertainty calibration. The
+[current RC1 status](docs/VALIDATION_STATUS.md) takes precedence over earlier
+validation descriptions. Input-interface checks are documented in
+[the interface change note](docs/INPUT_INTERFACE.md).
+
 
 **Identity with the catalogue code.** The package was checked once against the production
 fitter on the numerical stack of the catalogue run (numpy 1.26.4, scipy 1.13.1): on 824 SDSS
@@ -483,8 +543,9 @@ c(1/2) − v_n, `dv_err_mc`, `dv_err_model`, the measures of the profile and of 
 `summary_row`, the flat dictionary of the catalogue (`HA_*`, `HB_*`, `conti_*`). `<stem>_fit.png`
 is the diagnostic figure; `--pickle` writes the full result. `<stem>_rv.json` holds a summary of
 each epoch's fit of the line (`epochs`, each with the line record described above), the
-cross-correlation quantities listed above, `err_method` and `reliable_reason`. The exit status is 0
-whenever the spectrum could be read.
+cross-correlation quantities listed above, `err_method` and `reliable_reason`. A fit
+returns zero when it completes, including explicitly uncovered lines. Input/fit failures
+return nonzero; a public batch also returns nonzero when a download or individual fit fails.
 
 `conti_pl_norm` (the power law at 3000 Å rest) and `conti_feop_norm` are flux densities of the
 (1+z)-scaled rest-frame spectrum the fit works on, f_rest(λ_rest) = (1+z) f_obs(λ_obs) at

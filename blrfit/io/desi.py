@@ -114,6 +114,8 @@ def _fibermap_row(fm, targetid):
     idx = np.flatnonzero(np.asarray(fm["TARGETID"]).astype(np.int64) == int(targetid))
     if idx.size == 0:
         raise ValueError(f"TARGETID {int(targetid)} not in FIBERMAP")
+    if idx.size != 1:
+        raise ValueError("TARGETID has multiple spectral rows; select one observation before fitting")
     return int(idx[0])
 
 

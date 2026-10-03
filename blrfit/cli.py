@@ -73,13 +73,24 @@ def _add_table_args(p):
     g.add_argument("--flux-scale", type=float, default=1.0,
                    help="factor bringing the flux to 1e-17 erg/s/cm^2/A (needed for luminosities only)")
     g.add_argument("--hdu", type=int, default=1, help="extension of a FITS table (default 1)")
+    g.add_argument("--row", type=int, help="zero-based spectrum row for a vector table or 2-D image")
+    g.add_argument("--z-column", help="redshift column for a generic table")
+    g.add_argument("--z-key", help="FITS header redshift keyword (primary or --hdu)")
+    g.add_argument("--mask", help="generic table mask column; nonzero pixels excluded")
+    g.add_argument("--flux-frame", choices=("obs", "rest"), default="obs",
+                   help="flux-density frame, separately from the wavelength frame (default obs)")
+    for name in ("wave", "flux", "err", "ivar"):
+        g.add_argument(f"--{name}-hdu", type=lambda s: int(s) if s.isdigit() else s,
+                       help=f"image HDU name or number containing {name}")
 
 
 def _table_kwargs(a):
-    if a.err is None and a.ivar is None:
+    if a.err is None and a.ivar is None and a.err_hdu is None and a.ivar_hdu is None:
         sys.exit("a table needs its error column: give --err <column> (1-sigma) or --ivar <column> (inverse variance)")
     return dict(wave=a.wave, flux=a.flux, err=a.err, ivar=a.ivar, wave_unit=a.wave_unit, frame=a.frame,
-                air=a.air, z=a.z, flux_scale=a.flux_scale, hdu=a.hdu)
+                air=a.air, z=a.z, flux_scale=a.flux_scale, hdu=a.hdu, row=a.row,
+                z_column=a.z_column, z_key=a.z_key, mask=a.mask, flux_frame=a.flux_frame,
+                wave_hdu=a.wave_hdu, flux_hdu=a.flux_hdu, err_hdu=a.err_hdu, ivar_hdu=a.ivar_hdu)
 
 
 def _load(path, a, targetid=None):
@@ -87,14 +98,11 @@ def _load(path, a, targetid=None):
     if not os.path.exists(path):
         sys.exit(f"file not found: {path}")
     try:
-        if is_desi_coadd(path):
-            if targetid is None:
-                sys.exit("a DESI coadd needs --targetid")
-            sp = read_spectrum(path, targetid=int(targetid))
-        elif is_sdss_spec(path):
-            sp = read_spectrum(path)
-        else:
-            sp = read_spectrum(path, **_table_kwargs(a))
+        survey = getattr(a, "survey", "auto")
+        generic = survey == "generic" or (survey == "auto" and not is_desi_coadd(path) and not is_sdss_spec(path))
+        sp = read_spectrum(path, targetid=targetid, survey=survey,
+            mask_policy=getattr(a, "sdss_mask_policy", "ivar"), redrock=getattr(a, "redrock", None),
+            **(_table_kwargs(a) if generic else {}))
     except (ValueError, KeyError, OSError) as e:
         sys.exit(f"cannot read {path}: {e}")
     if a.z is not None:
@@ -214,6 +222,13 @@ def _print_fit_table(lines, res, out):
 # fit
 # ----------------------------------------------------------------------------
 def cmd_fit(a):
+    if a.nmc < 0:
+        sys.exit("--nmc must be nonnegative")
+    if a.spectrum is None:
+        from .input_workflow import fit_public
+        return fit_public(a, cmd_fit)
+    if a.include_sdss:
+        sys.exit("--include-sdss is for public queries without a local file")
     sp, z, zsrc, ebv, esrc = _load(a.spectrum, a, a.targetid)
     names = {k.lower(): k for k in COMPLEX_WINDOW}
     lines = [names.get(s.strip().lower(), s.strip()) for s in a.lines.split(",") if s.strip()]
@@ -233,14 +248,30 @@ def cmd_fit(a):
     except ValueError as e:
         sys.exit(f"cannot fit {a.spectrum}: {e}")
     recs = {name: _line_record(name, res) for name in lines}
+    for rec in recs.values():
+        # The historical DESI-repeat formula was never an SDSS calibration or
+        # a validation of this release. Keep it only as an explicitly requested diagnostic.
+        legacy = rec.get("dv_err_model")
+        rec["dv_err_model"] = np.nan
+        if a.legacy_error_diagnostic and sp.get("kind") == "desi":
+            rec["legacy_desi_repeat_error_diagnostic"] = legacy
+        rec["uncertainty_calibrated"] = False
     _print_fit_table(recs, res, out)
 
     stem = a.stem or _stem(a.spectrum, sp, a.targetid)
     os.makedirs(a.out, exist_ok=True)
     base = os.path.join(a.out, stem)
     hi = res["host_info"]
-    doc = dict(blrfit_version=__version__,
-               input=dict(path=os.path.abspath(a.spectrum), kind=sp.get("kind"), targetid=(int(a.targetid) if a.targetid else None),
+    doc = dict(blrfit_version=__version__, core_release="0.2.0rc1",
+               uncertainty=dict(calibrated=False, mc_requested=a.nmc,
+                   status="conditional_mc" if a.nmc else "not_computed",
+                   scope="pixel-noise perturbations; no survey-wide or between-epoch calibration",
+                   legacy_empirical_error_used=False),
+               input=dict(path=os.path.abspath(a.spectrum), kind=sp.get("kind"), targetid=sp.get("targetid"),
+                          reader_policy=sp.get("mask_policy", "RC1"),
+                          catalogue_zwarn=sp.get("zwarn"),
+                          product=sp.get("product", "DESI coadd" if sp.get("kind") == "desi" else "supplied spectrum"),
+                          public_source=getattr(a, "public_source", None),
                           z=z, z_source=zsrc, ebv=ebv, ebv_source=esrc,
                           ra=sp.get("ra", np.nan), dec=sp.get("dec", np.nan), mjd=sp.get("mjd", np.nan),
                           date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "",
@@ -421,39 +452,16 @@ def cmd_rv(a):
 # fetch
 # ----------------------------------------------------------------------------
 def cmd_fetch(a):
-    from .io import fetch as F
-    os.makedirs(a.out, exist_ok=True)
-    found = dict(ra=a.ra, dec=a.dec, sdss=[], desi=[])
-    searched = 0
-    if not a.no_sdss:
-        try:
-            found["sdss"] = F.fetch_sdss(a.ra, a.dec, a.out, radius_arcsec=a.radius); searched += 1
-        except ImportError as e:
-            print(f"SDSS lookup skipped: {e} (pip install 'blrfit[fetch]')")
-    if not a.no_desi:
-        try:
-            found["desi"] = F.fetch_desi(a.ra, a.dec, a.out, targetid=a.targetid, radius_arcsec=a.desi_radius,
-                                         releases=tuple(r.strip() for r in a.releases.split(",") if r.strip()))
-            searched += 1
-        except ImportError as e:
-            print(f"DESI lookup skipped: {e} (pip install 'blrfit[fetch]')")
-    import tempfile
-    fd, temp_path = tempfile.mkstemp(prefix=".fetch_manifest_", suffix=".json", dir=a.out)
-    try:
-        with os.fdopen(fd, "w") as fh:
-            json.dump(_clean(found), fh, indent=1)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(temp_path, os.path.join(a.out, "fetch_manifest.json"))
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
-    n = len(found["sdss"]) + len(found["desi"])
-    print(f"{n} spectrum(s) in {a.out}; manifest {os.path.join(a.out, 'fetch_manifest.json')}")
-    if searched == 0:
-        print("nothing was searched: install the fetch extras (pip install 'blrfit[fetch]')")
-        return 1
-    return 0
+    from .input_workflow import fetch_public
+    return fetch_public(a)
+
+
+def _public_args(p):
+    p.add_argument("--include-sdss", action="store_true", help="also find SDSS DR17 spectra within 1.5 arcsec")
+    p.add_argument("--radius", type=float, default=1.5, help="SDSS radius in arcsec, at most 1.5 (default 1.5)")
+    p.add_argument("--desi-radius", type=float, default=1.5, help="DESI position-search radius, arcsec (default 1.5)")
+    p.add_argument("--releases", default="dr1", help="DESI public releases: dr1 (default), edr, or both")
+    p.add_argument("--all-matches", action="store_true", help="fit/download all DESI IDs in a cone as separate objects")
 
 
 # ----------------------------------------------------------------------------
@@ -465,15 +473,24 @@ def build_parser():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     f = sub.add_parser("fit", help="fit one spectrum", description="Fit one spectrum; writes <stem>_fit.json and <stem>_fit.png.")
-    f.add_argument("spectrum", help="SDSS spec-*.fits, DESI coadd-*.fits (with --targetid) or a table")
-    f.add_argument("--targetid", type=int, default=None, help="DESI TARGETID (coadd input)")
+    f.add_argument("spectrum", nargs="?", help="SDSS spec-*.fits, DESI coadd-*.fits (with --targetid) or a table")
+    from .io.public import exact_targetid
+    f.add_argument("--targetid", type=exact_targetid, default=None, help="DESI TARGETID (coadd input)")
+    f.add_argument("--survey", choices=("desi", "sdss", "generic", "auto"), default="desi",
+                   help="input format; DESI default, auto restores legacy filename dispatch")
+    f.add_argument("--redrock", help="explicit DESI redrock file")
+    f.add_argument("--sdss-mask-policy", choices=("conservative", "ivar"), default="conservative",
+                   help="exclude nonzero SDSS AND_MASK (default); ivar restores the legacy reader")
+    f.add_argument("--legacy-error-diagnostic", action="store_true",
+                   help="retain the uncalibrated historical DESI-repeat error as a labelled diagnostic")
+    _public_args(f)
     f.add_argument("--z", type=float, default=None, help="redshift (default: from the file when it has one)")
     f.add_argument("--ebv", default=None, help="Galactic E(B-V); a number, or 'sfd' for a dust-map lookup (default: DESI FIBERMAP value, else 0)")
-    f.add_argument("--ra", type=float, default=None, help="right ascension (deg), for --ebv sfd when the file has no coordinates")
+    f.add_argument("--ra", type=float, default=None, help="right ascension (deg); public search if no file, or coordinate for --ebv sfd")
     f.add_argument("--dec", type=float, default=None, help="declination (deg)")
-    f.add_argument("--lines", default="Halpha,Hbeta,MgII",
-                   help="comma-separated complexes among Halpha, Hbeta, MgII (default all three; those outside the data are skipped)")
-    f.add_argument("--nmc", type=int, default=0, help="Monte Carlo realisations for the errors (default 0 = none; the catalogue used 30)")
+    f.add_argument("--lines", default="Halpha,Hbeta",
+                   help="comma-separated complexes among Halpha, Hbeta, MgII (default Halpha,Hbeta; those outside the data are skipped; MgII is experimental)")
+    f.add_argument("--nmc", type=int, default=0, help="Monte Carlo realisations for conditional statistical errors (default 0 = no errors)")
     f.add_argument("--seed", type=int, default=0, help="random seed of the Monte Carlo (default 0)")
     f.add_argument("--no-host", action="store_true", help="no host-galaxy component")
     f.add_argument("--no-fe", action="store_true", help="no Fe II templates")
@@ -508,15 +525,13 @@ def build_parser():
     _add_table_args(r)
     r.set_defaults(func=cmd_rv)
 
-    g = sub.add_parser("fetch", help="download public SDSS and DESI spectra of a position",
-                       description="Look a position up in SDSS (astroquery) and the DESI public releases; writes the spectra and fetch_manifest.json.")
-    g.add_argument("--ra", type=float, required=True); g.add_argument("--dec", type=float, required=True)
+    g = sub.add_parser("fetch", help="download public spectra without fitting")
+    g.add_argument("--ra", type=float); g.add_argument("--dec", type=float)
+    g.add_argument("--targetid", type=exact_targetid)
+    g.add_argument("--survey", choices=("desi", "sdss"), default="desi")
     g.add_argument("--out", default="spectra")
-    g.add_argument("--radius", type=float, default=2.0, help="SDSS search radius, arcsec")
-    g.add_argument("--desi-radius", type=float, default=1.0, help="DESI position match radius, arcsec")
-    g.add_argument("--targetid", type=int, default=None, help="DESI TARGETID (selects the row exactly)")
-    g.add_argument("--releases", default="dr1,edr", help="DESI releases to search")
-    g.add_argument("--no-sdss", action="store_true"); g.add_argument("--no-desi", action="store_true")
+    g.add_argument("--quiet", action="store_true")
+    _public_args(g)
     g.set_defaults(func=cmd_fetch)
     return p
 
@@ -524,7 +539,10 @@ def build_parser():
 def main(argv=None):
     p = build_parser()
     a = p.parse_args(argv)
-    return a.func(a)
+    try:
+        return a.func(a)
+    except (ValueError, KeyError, OSError, RuntimeError, ImportError) as exc:
+        p.exit(1, f"blrfit: {exc}\n")
 
 
 if __name__ == "__main__":

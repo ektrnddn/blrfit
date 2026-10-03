@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0rc2.dev0 — input interface (unreleased)
+
+- DESI by default; local SDSS/generic formats explicit; public TARGETID or ICRS position lookup.
+- Query public DESI DR1/EDR catalogue locations and SDSS SpecObjAll through Data Lab;
+  SDSS radius at most 1.5 arcsec, distinct products retained, ambiguous DESI IDs explicit.
+- Add generic FITS table-row, image-HDU and redshift mapping; reject missing noise or ambiguous shapes.
+- Expose conservative SDSS masks in the CLI, retaining the legacy Python policy explicitly.
+- Label uncomputed/conditional MC errors; no longer apply a historical DESI-repeat error
+  formula to SDSS or present it as an RC1-calibrated uncertainty.
+- Document installation of the frozen RC1 and this development branch separately.
+- Numerical model, optimizer, MC implementation and archived production results unchanged.
+
+
 ## 0.2.0rc1 (2026-09-28)
 
 Corrections of the defects found in the September 2026 audit of the frozen

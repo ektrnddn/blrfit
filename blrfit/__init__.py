@@ -19,7 +19,7 @@ from .io import read_spectrum, read_sdss, read_desi, read_table
 from .physics import lambda_l_lambda, continuum_luminosity
 from . import constants, rv, physics
 
-__version__ = "0.2.0rc1"
+__version__ = "0.2.0rc2.dev0"
 
 __all__ = ["fit_spectrum", "remeasure", "summary_row", "measure_complex", "profile_measures",
            "classify", "is_measurable", "is_strong_offset", "DEFAULT_THRESH", "LABEL_TEXT", "FLAG_TEXT",
