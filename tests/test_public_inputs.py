@@ -1,5 +1,6 @@
 """Identity, radius, input mapping and uncertainty boundaries; no live network."""
 import json
+import sys
 from argparse import Namespace
 
 import numpy as np
@@ -11,6 +12,18 @@ from blrfit.cli import build_parser, _load
 from blrfit.io import read_spectrum, read_table, read_sdss
 from blrfit.io import public, fetch
 from blrfit import input_workflow
+
+
+def test_missing_fetch_extra_is_actionable_and_local_io_still_works(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, 'requests', None)
+    for query in (lambda: public.query_desi(targetid=1),
+                  lambda: fetch.query_sdss(10., 5.)):
+        with pytest.raises(ImportError, match=r'\[fetch\]'):
+            query()
+    path = tmp_path/'local.fits'
+    Table(dict(wave=[5000., 5001.], flux=[1., 2.], ivar=[4., 9.])).write(path)
+    sp = read_table(path, ivar='ivar', z=.2)
+    assert np.array_equal(sp['flux'], [1., 2.])
 
 
 def test_default_and_explicit_surveys():

@@ -72,6 +72,19 @@ DESI_TILE_GROUP = "cumulative"    # the tile coadds that stack every exposure of
 DESI_REMOTE_BLOCK_SIZE = 1 << 16
 
 
+def require_requests():
+    """Keep local-file fitting usable without the optional fetch dependencies."""
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImportError(
+            "Public spectrum lookup/download requires the fetch dependencies. "
+            "Install this same blrfit version with its [fetch] extra; "
+            "from a checkout use: python -m pip install '.[fetch]'"
+        ) from exc
+    return requests
+
+
 # ----------------------------------------------------------------------------
 # SDSS
 # ----------------------------------------------------------------------------
@@ -98,7 +111,7 @@ def query_sdss(ra, dec, radius_arcsec=1.5, data_release=17):
     """
     import csv
     import io
-    import requests
+    requests = require_requests()
     from .public import position, separation, TAP_URL, MAX_PRODUCTS
     ra, dec = position(ra, dec)
     if not np.isfinite(radius_arcsec) or not 0 < radius_arcsec <= 1.5:
@@ -140,7 +153,7 @@ def query_sdss(ra, dec, radius_arcsec=1.5, data_release=17):
 def download(url, dest, clobber=False, timeout=120):
     """Download ``url`` to ``dest`` through a temporary file; a partial file never
     gets the final name. Returns the path, or None on failure."""
-    import requests
+    requests = require_requests()
     dest = Path(dest); dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0 and not clobber:
         return str(dest)
@@ -270,7 +283,7 @@ def read_desi_tiles_table(path):
 
 
 def _url_exists(url, timeout=20):
-    import requests
+    requests = require_requests()
     try:
         r = requests.head(url, timeout=timeout, allow_redirects=True)
         return r.status_code == 200

@@ -28,7 +28,7 @@ dependencies = [
 fetch = ["astroquery>=0.4.6", "fsspec>=2023.1", "aiohttp>=3.8", "requests>=2.28"]
 desi = ["desispec"]
 dust = ["dustmaps"]
-test = ["pytest>=7", "healpy>=1.16"]
+test = ["pytest>=7", "healpy>=1.16", "requests>=2.28"]
 
 [project.scripts]
 blrfit = "blrfit.cli:main"

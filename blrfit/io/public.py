@@ -46,7 +46,7 @@ def query_desi(*, targetid=None, ra=None, dec=None, radius_arcsec=1.5, releases=
     Coordinates, if supplied with an ID, constrain that ID as well. The service
     response is checked locally against the requested ID and angular radius.
     """
-    import requests
+    requests = F.require_requests()
     if targetid is None and ra is None:
         raise ValueError("give --targetid or both --ra and --dec")
     if (ra is None) != (dec is None):
