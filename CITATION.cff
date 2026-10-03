@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below, together with the paper that describes and validates the method."
+message: "If you use this software, please cite it as below, together with the relevant methodological references listed in the documentation."
 type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
 version: 0.2.0rc1
@@ -22,8 +22,7 @@ abstract: >-
   Fits the broad Halpha, Hbeta and Mg II emission lines of an active galactic nucleus against
   the systemic velocity defined by the narrow lines of the same spectrum, measures the
   displacement and shape of the broad profile, classifies it, flags the conditions under which
-  the measurement should not be trusted, and measures velocity changes between epochs by
-  chi-square cross-correlation. The 0.2.0rc1 milestone is limited to single-spectrum
+  the measurement should not be trusted, and retains experimental between-epoch routines for development. The 0.2.0rc1 milestone is limited to single-spectrum
   Halpha/Hbeta point fits and quality diagnostics; calibrated uncertainty and
   velocity-change claims are not established. Works on DESI coadds, SDSS spec files
   or any wavelength, flux and error table.

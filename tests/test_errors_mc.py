@@ -2,13 +2,11 @@
 Monte Carlo errors of the single-epoch fitter: pulls of the primary offset.
 
 One configuration is injected into DESI-like spectra with independent noise
-realisations, each spectrum is fitted with ``nmc`` Monte Carlo refits, and the
-pull (c50_sys - truth) / err is formed per realisation. For a correctly
-calibrated error the pulls have unit width; the paper states that they are
-consistent with unity. The per-pixel errors used by the fitter include its 2
-per cent flux-calibration floor in quadrature, which at the peak of the broad
-line (2.6 times the continuum) adds 5 per cent to the 8 per cent noise of a
-continuum S/N of 12, so a width somewhat below one is the expected outcome.
+realisations and fitted with Monte Carlo refits. This is a historical, small
+single-configuration software/scatter check, not a survey calibration. The
+current input-noise policy perturbs the supplied statistical errors; the 2%
+floor remains in fitting weights only. The quantitative conditional coverage
+study and its unresolved tails are reported in docs/VALIDATION_STATUS.md.
 
 Configuration: broad Halpha at +800 km/s, FWHM 4000, equivalent width 150 A
 (broad peak S/N 19), broad Hbeta at the same velocity with a third of the

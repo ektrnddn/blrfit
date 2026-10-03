@@ -4,7 +4,10 @@
 > input handling and output labels while retaining the RC1 numerical core.
 > The scientific outcomes below are unchanged. Input software tests and live
 > retrieval examples do not complete uncertainty calibration. See
-> [the input-interface note](INPUT_INTERFACE.md).
+> [the input-interface note](INPUT_INTERFACE.md) and
+> [the uncertainty guide](UNCERTAINTIES.md). A fixed 2,640-spectrum, 200-draw
+> synthetic study is being prepared to evaluate center, width and flux errors
+> on two sampling grids. It has no confirmation result yet.
 
 
 Updated September 28, 2026. Version: **0.2.0rc1, scoped release candidate**.
@@ -216,7 +219,8 @@ remain separate and have not replaced the production algorithm. Repairing ten
 numerical interval failures did not produce a scientific pass.
 
 A final single-spectrum release still needs its supported-range and uncertainty
-decision, settings approval, and exact-artifact deployment verification. The
+decision and exact-artifact verification. The author authorized release completion
+on October 3; that authorization does not change any scientific outcome. The
 numerical candidate has completed the NERSC engineering preflight above.
 No published validated catalogue or full-data rerun is implied by this document.
 The historical 0.1.0 examples/results remain historical evidence. Public release,
