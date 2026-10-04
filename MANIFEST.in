@@ -1,5 +1,5 @@
 include CHANGELOG.md CITATION.cff
-recursive-include docs *.md *.csv
+recursive-include docs *.md *.csv *.png
 recursive-include examples *.md *.fits *.csv
 recursive-include tests/data *.md *.fits *.json
 recursive-include validation *.md *.py *.json
