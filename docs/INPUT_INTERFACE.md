@@ -1,9 +1,9 @@
-# Public and local spectrum inputs — development interface
+# Public and local spectrum inputs — version 0.2.0
 
 This change builds on commit `3cd37d06c8e5959efa8b0bb41458629fc95a689b`
 (`v0.2.0rc1`). The numerical model, optimizer, classification and Monte Carlo
-implementation are unchanged. This is a development interface, not a new
-scientific calibration or approval of between-epoch measurements.
+implementation are unchanged. The final release adds this interface without claiming universal uncertainty
+calibration or validated between-epoch measurements.
 
 ## Compatibility and scope
 
@@ -49,8 +49,8 @@ The historical DESI-repeat formula is no longer exposed as a calibrated
 `dv_err_model`, especially for SDSS. The legacy key remains null for schema
 compatibility. An explicit DESI-only option places it in
 `legacy_desi_repeat_error_diagnostic`. It changes neither the core fit nor
-classification. Original uncertainty validation outcomes are unchanged:
-[RC1 validation status](VALIDATION_STATUS.md).
+classification. Original uncertainty validation outcomes are preserved separately from the
+new fixed study: [current validation status](VALIDATION_STATUS.md).
 
 Missing continuum support is still a fit failure. In public batches it is
 recorded against that product while the remaining spectra can finish. The

@@ -5,12 +5,11 @@ to the fitted narrow-line reference, and save profile measurements, classes, qua
 flags and a diagnostic figure. DESI is the default input survey; SDSS and general
 spectral tables/images are explicit alternatives.
 
-**Version status.** This branch is `0.2.0rc2.dev0`, an input-interface development
-version built on the unchanged numerical core of
+**Version 0.2.0** provides the public/local input interface with the numerical
+fitting and Monte Carlo core used in
 [v0.2.0rc1](https://github.com/ektrnddn/blrfit/releases/tag/v0.2.0rc1).
-RC1 is the scoped prerelease used for the project’s primary and subsequent observing-date
-point fits. GitHub’s `main` branch is older: an unpinned Git install does not select RC1.
-The commands below describe this development branch, not the immutable RC1 tag.
+The existing primary and observing-date catalogue fits remain tied to RC1; this
+release does not refit or relabel them. Use the versioned installation below.
 
 **Scientific scope.** Successful execution is not proof that every decomposition or
 error bar is reliable. The default `--nmc 0` produces point estimates and **no Monte
@@ -26,13 +25,14 @@ Use an isolated environment (Python 3.9 or later):
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install 'blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@feature/public-spectrum-inputs'
+python -m pip install 'blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@v0.2.0'
 python -m blrfit --version
 ```
 
-For reproducibility, replace the branch name with its full commit hash. The frozen
-**RC1** installation is `python -m pip install git+https://github.com/ektrnddn/blrfit.git@v0.2.0rc1`;
-it has the older interface. From a checkout of this branch use `python -m pip install '.[fetch]'`.
+The tag pins the software version; preserve the numerical-library versions and
+input files as well when reproducing a fit. From a checkout use
+`python -m pip install '.[fetch]'`. The immutable `v0.2.0rc1` tag remains available
+for reproducing the earlier interface and deployments.
 Local files need only the base dependencies; public retrieval needs the `fetch` extra.
 `dust` adds dust-map access; `test` adds the software test dependencies.
 
@@ -143,7 +143,9 @@ redshift/reader provenance and uncertainty status. A public search writes
 `inputs/fetch_manifest.json` and `fit_manifest.json`; individual failures remain
 listed and the command returns a nonzero exit status for incomplete work.
 
-Add `--nmc 30 --seed 0` to request conditional MC errors. These perturb the supplied
+Add `--nmc 200 --seed 0` to use the draw count evaluated in the latest conditional
+uncertainty study (slower than a point fit). Other counts remain supported, but
+do not inherit that study’s coverage results. These perturb the supplied
 statistical pixel noise and refit under the RC1 assumptions; the 2% fitting floor
 is not added to the default simulated noise. They do not include all component-choice,
 host, calibration, redshift or instrumental systematics. Coverage remains partly
@@ -152,8 +154,8 @@ missing errors are JSON `null`, not zero. The old DESI-repeat formula is no long
 printed as an error bar, particularly for SDSS. `--legacy-error-diagnostic` can
 retain it for DESI as a separately named, uncalibrated diagnostic.
 
-The model details below describe the RC1 numerical core. Interface changes above
-are a separate development version and do not revise the archived catalogue fits.
+The model details below describe the unchanged RC1 numerical core. The input
+interface does not revise archived catalogue fits.
 
 ## What is measured
 
@@ -312,11 +314,15 @@ noise from its supplied pixel-error array, before the 2% fitting floor, and refi
 components fixed to the selected one; the error is half the 16th–84th percentile range (as in
 Shen et al. 2013 and Liu et al. 2014). This is the conditional statistical error only.
 The fitting weights still include the floor; this change adds no model component.
-Fresh-noise confirmation passes the stated pooled synthetic-grid point-accuracy
-and one-error checks at S/N 15/30. Three two-error checks remain inconclusive;
-general error calibration and the overall release gate are not established.
-See [uncertainty scope](docs/UNCERTAINTIES.md) and [current validation status](docs/VALIDATION_STATUS.md) for the exact scope. It can change MC errors and error-dependent
-classes, while leaving ordinary fitted profiles, offsets and widths unchanged.
+The fixed 2,640-spectrum study with 200 draws passed all 24 pooled point-accuracy
+checks and all 16 center-coverage checks. Four width-coverage checks and one
+flux-coverage check remained inconclusive: 67 pass, five inconclusive overall.
+This supports only the declared synthetic conditions and measurable-line selection;
+it is not universal survey calibration. The older 30-draw evidence is retained
+separately. See [uncertainty scope](docs/UNCERTAINTIES.md) and
+[current validation status](docs/VALIDATION_STATUS.md).
+MC can change error-dependent classes while leaving ordinary fitted profiles,
+offsets and widths unchanged.
 Use `--mc-noise-policy effective` (or `mc_noise_policy="effective"`) to reproduce
 the historical perturbations including the floor. Those errors are labelled
 `conditional_effective_noise`. Recomputing MC on an old saved result without a
@@ -327,7 +333,7 @@ requires the saved `ivar_stat_rest`; it never silently substitutes floored weigh
 formula in `dv_err_model`, including for other instruments. This interface leaves
 that field null. `--legacy-error-diagnostic` retains the original formula only for
 DESI, under `legacy_desi_repeat_error_diagnostic`; it is not an RC1 or SDSS error
-calibration. See the validation status for the outstanding uncertainty work.
+calibration. See the validation status for the supported scope and remaining limitations.
 
 ## Validation and release scope
 
@@ -335,15 +341,20 @@ The RC1 numerical core has completed the project's scoped DESI and SDSS point-fi
 runs. Software checks, real-data execution and statistical coverage are separate
 forms of evidence. No test guarantees that every astrophysical decomposition is unique.
 
-The existing 1,980-spectrum known-truth study passed 13 formal checks; three
-checks of two-error coverage remained inconclusive. These are conditional pooled
-results, not a certification of every profile, host population or instrument.
-See [current validation status](docs/VALIDATION_STATUS.md) and the
-[quantity-by-quantity uncertainty scope](docs/UNCERTAINTIES.md).
+The latest known-truth study retained all 2,640 spectra with no execution errors.
+Its 72 criteria yielded 67 passes and five inconclusive results; no criterion
+failed under the fixed rules. Halpha was measurable in 579/660 low-S/N DESI-like
+cases and 603/660 low-S/N SDSS-like cases; the other six line/grid/SNR groups each
+had 660/660 measurable cases. Coverage is conditional on those selections.
+The [validation status](docs/VALIDATION_STATUS.md),
+[uncertainty guide](docs/UNCERTAINTIES.md), and
+[reproduction materials](validation/uncertainty_20261003/README.md) retain the
+full denominators, thresholds and limitations. The earlier 1,980-spectrum study
+remains separate; it is not relabelled as a pass by the newer result.
 
-A finite confirmation of the existing error procedure with 200 MC draws is being
-prepared. It has not passed and does not change the default or the old results.
-The release candidate remains under review until that decision is recorded.
+This is a single-spectrum software release with explicit scientific limits.
+The CLI still defaults to point fits (`--nmc 0`). Existing catalogue/viewer
+products have not acquired new error bars through publication of this release.
 
 Between-epoch velocity routines and Mg II remain experimental. The velocity
 routines are retained for reproducibility and development; their reported

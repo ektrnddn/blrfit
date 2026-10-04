@@ -1,57 +1,59 @@
 # What the reported uncertainties mean
 
-The CLI defaults to `--nmc 0`: a point fit with no Monte Carlo error bars.
-Missing errors are not zero. `--nmc 30` requests the existing conditional
-Monte Carlo procedure; requesting more draws alone does not establish calibration.
+The CLI defaults to `--nmc 0`: a point fit with no Monte Carlo errors. Missing
+errors are not zero. Use `--nmc 200 --seed 0` to request the draw count evaluated
+in the October 2026 study. This is slower and remains conditional; the default
+has not been changed to compute errors for every spectrum automatically.
 
-For each draw, blrfit perturbs the input spectrum using its supplied statistical
-pixel errors and repeats continuum and line fitting. The host model, redshift,
+## Definition
+
+Each draw perturbs the input spectrum using its supplied statistical pixel
+errors and repeats continuum and line fitting. The host model, redshift,
 extinction, broad-component counts and pixel masks remain fixed. The 2% fitting
 floor stays in the fitting weights but is not added to the default simulated
-noise. The reported `err` is half the 16th–84th percentile range of contributing
-draws. It is not automatically a Gaussian standard deviation, and twice that
-number is not automatically a 95% confidence interval.
+noise. `err` is half the 16th–84th percentile range of contributing draws. It is
+not automatically a Gaussian standard deviation, and twice that number is not
+a universal 95% confidence interval. The published coverage study tests these
+symmetric errors around the ordinary measurement explicitly.
 
-| Quantity | Existing evidence | Limitation |
+## Evidence by quantity
+
+| Quantity | Fixed 2,640-spectrum / MC200 evidence | Limitation |
 |---|---|---|
-| Broad center relative to the fitted narrow reference (`c50_sys`) | Four pooled one-error coverage checks passed at injected peak S/N 15 and 30 in the fixed synthetic experiment. One two-error check passed; three were inconclusive. | Conditional on the declared measurement availability and synthetic grid; not a host-systemic or real-survey calibration. |
-| Broad FWHM | Pooled point-accuracy checks passed on the same grid. MC errors are computed if requested. | Point accuracy does not establish width-error coverage. |
-| Broad integrated flux | A point estimate and optional MC error are returned. | The prior center-coverage results do not validate flux-error coverage. Flux calibration and decomposition systematics remain. |
-| Virial mass | Derived quantities can be calculated from the fitted line properties. | Statistical propagation is separate from intrinsic scatter, virial-factor uncertainty and calibration assumptions. Night-to-night estimates are not measurements of changing true mass. |
-| Difference between epochs | Experimental code exists separately. | Single-spectrum errors do not validate the response or uncertainty of a relative-shift estimator. |
+| Broad center relative to the narrow reference (`c50_sys`) | All 8 pooled accuracy and 16 coverage checks pass. | Conditional on measurable lines and the declared synthetic grid; not a host-systemic or between-epoch calibration. |
+| Observed broad FWHM | All 8 accuracy checks pass; 12 coverage checks pass and 4 remain inconclusive. | Width errors cannot be described as generally calibrated. |
+| Broad integrated flux | All 8 accuracy checks pass; 15 coverage checks pass and 1 remains inconclusive. | Flux calibration and decomposition systematics are additional uncertainties. |
+| Virial mass | Not calibrated by this study. | Statistical line-error propagation does not include intrinsic scatter, virial factors or all luminosity/width correlations. |
+| Change between epochs | Not validated by this study. | Single-spectrum center errors do not establish the response or uncertainty of a relative-shift estimator. |
 
-The prior confirmation comprised 1,980 synthetic spectra and had 13 formal
-passing checks, three inconclusive checks and no formal failure. It is preserved
-unchanged. It did not require matching old astrophysical fits.
+The overall result is **67 pass, five inconclusive, zero fail** under fixed
+criteria. All five inconclusive checks are width/flux coverage on the DESI-like
+grid and cross a lower acceptance boundary. The [validation report](VALIDATION_STATUS.md)
+lists their exact values, denominators, selection and thresholds. This is not
+proof that they fail or a reason to choose another error multiplier.
 
-## Finite confirmation being prepared
+The study uses 33 controlled physical configurations, two injected S/N levels,
+20 fresh noise realizations and two sampling grids, with independent Gaussian
+noise and illustrative masks. Halpha/SNR15 is unavailable in 81/660 DESI-like
+and 57/660 SDSS-like cases; coverage is conditional on measurable outcomes.
+Other pools each have 660 measurable cases. Success on this experiment does not
+establish real-survey covariance, intrinsic-width deconvolution, host/redshift
+systematics or validity for arbitrary component families. The earlier MC30
+study remains separate: 13 passing and three inconclusive criteria. Other MC
+draw counts and the historical `effective` noise policy do not inherit MC200
+input-noise coverage results.
 
-The next candidate uses the same numerical fitter and error formula with an
-explicit 200-draw budget. The purpose is to reduce sampling noise in the estimated
-percentile widths. It is not an error multiplier or a change to the line model.
-Its fixed design comprises 33 physical configurations, two signal-to-noise levels,
-20 fresh noise realizations per configuration and two wavelength grids: 2,640
-synthetic spectra. Center, FWHM and broad-flux accuracy and coverage are reported
-separately. Pass, fail and inconclusive outcomes are fixed in advance.
+## Reading one fit
 
-The grids resemble DESI linear and SDSS logarithmic sampling. Independent Gaussian
-noise, illustrative fixed masks and observed Gaussian profile widths define the
-scope; these are not complete models of survey covariance, the line-spread
-function or stellar populations. Success would support the stated conditional
-synthetic claims, not universal errors for arbitrary spectra. The experiment is
-pending; 200 draws are not yet advertised as a validated default.
+Keep class, flags, measurement availability, optimizer status and MC diagnostics
+with each value. Finite errors and an A/B label do not override unconverged draws,
+insufficient samples, basin switching, multimodality or a weak narrow reference.
+A line with no usable systemic reference is not a reliable velocity measurement.
+Night-to-night virial-mass estimates are not measurements of changing true mass;
+line variability, decomposition and the mass prescription also matter.
 
-## Using results responsibly
-
-Keep classifications, measurement availability, solver status and MC diagnostics
-with each value. Unconverged draws, failed draws, too few usable samples, changing
-narrow references, basin switches and multimodality are recorded. A finite error
-or an A/B class does not override these diagnostics.
-
-The historical DESI repeat-spectrum formula is available only as a separately
-labelled legacy diagnostic. It is not a current SDSS error prescription or an
-empirical correction to make an inconclusive coverage test pass.
-
-The existing production catalogues were point-fit runs. New uncertainty products
-must identify their own method, draw count, seed and validation scope, while
-preserving the original point-fit records.
+The historical DESI-repeat formula is available only as a separately labelled
+legacy diagnostic. It is not an SDSS prescription or an empirical correction to
+make an inconclusive test pass. The large production catalogues were point-fit
+runs and remain so. Any new uncertainty catalogue must identify its own inputs,
+method, draw count, seed and supported scope.

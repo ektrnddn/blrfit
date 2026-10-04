@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0rc2.dev0 — input interface (unreleased)
+## 0.2.0 (2026-10-04)
 
 - DESI by default; local SDSS/generic formats explicit; public TARGETID or ICRS position lookup.
 - Query public DESI DR1/EDR catalogue locations and SDSS SpecObjAll through Data Lab;
@@ -9,14 +9,18 @@
 - Expose conservative SDSS masks in the CLI, retaining the legacy Python policy explicitly.
 - Label uncomputed/conditional MC errors; no longer apply a historical DESI-repeat error
   formula to SDSS or present it as an RC1-calibrated uncertainty.
-- Document installation of the frozen RC1 and this development branch separately.
+- Publish versioned installation instructions; retain the immutable RC1 tag.
 - Numerical model, optimizer, MC implementation and archived production results unchanged.
 - Clean test installations include the dependency used by mocked public lookups;
   missing retrieval dependencies produce an actionable installation message.
 - Current examples declare SDSS/general formats explicitly. Historical numerical
   examples are retained separately; CLI help labels between-epoch work experimental.
-- Document the quantity-specific uncertainty evidence and the pending fixed study;
-  no new coverage result or general uncertainty calibration is claimed.
+- Publish the fixed 2,640-spectrum, 200-draw study: 67 criteria pass, five remain
+  inconclusive, none fail. All center criteria and all point-accuracy criteria pass;
+  four width-coverage checks and one flux-coverage check remain inconclusive.
+  Retain complete denominators, source, protocol, report and reproduction instructions.
+- Keep the CLI default at `--nmc 0`. General survey, virial-mass and between-epoch
+  uncertainty calibration are not established; existing catalogues are unchanged.
 
 
 ## 0.2.0rc1 (2026-09-28)
