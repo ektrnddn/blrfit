@@ -1,0 +1,27 @@
+{
+  "candidate_commit": "323f2a4dd40b9f993c5f429142850ca5a1f3f799",
+  "candidate_wheel_sha256": "a032c7fd20db8596d5e6a4c8601c33c6aaace46915e353dd4edb0054610b5d36",
+  "environment": {
+    "astropy": "8.0.1",
+    "blrfit": "0.2.0rc2.dev0",
+    "numpy": "2.5.3",
+    "platform": "Linux-6.4.0-150600.23.125_15.0.29-cray_shasta_c-x86_64-with-glibc2.38",
+    "python": "3.14.7 | packaged by conda-forge | (main, Sep  2 2026, 21:08:32) [GCC 15.3.0]",
+    "scipy": "1.18.0"
+  },
+  "job_id": "59295726",
+  "manifest_sha256": "c329c5adffe4f80f0e34ad4a13637f20725d5272e7e144de934a8888b55446e0",
+  "numerical_core_unchanged_from": "v0.2.0rc1",
+  "ordinary_fit_bodies_in_release_asset": false,
+  "protocol_sha256": "facbc7e3f929af05f6bb8b880544e37362cf42b55b2da0c6ba2086dcfb08b816",
+  "release_version": "0.2.0",
+  "request_sha256": "7576b21f47c6641ede84b075d6df46edbc50e387600776631d2ccd7acb3ac008",
+  "return_archive_sha256": "20462ae64ab563287c6161ede73c91b1faa75a760719dce6cd039fbffc0f368d",
+  "source_hashes": {
+    "DECISIONS.json": "5e6b066acac3cf284575a9553cc56d1449652ceb995b77a2cd57fc0730845350",
+    "PROTOCOL.json": "facbc7e3f929af05f6bb8b880544e37362cf42b55b2da0c6ba2086dcfb08b816",
+    "REPORT.json": "5a6d00f5df44c66ea6195a1568d14916beb9b6d275356042be56501706ed7635",
+    "generators.py": "072a1dcd2f8c234c4d4d5981356eff4bdd7f545b1c79f8ca2c4c7346728da082",
+    "study.py": "39e8c4e07b63db592bd7623d54ed2da9c206f0587447a3afcbf3a664061ccf77"
+  }
+}

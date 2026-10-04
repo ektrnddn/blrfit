@@ -1,0 +1,866 @@
+[
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.003942471549403362,
+    "interval": [
+      -0.005933342960291995,
+      -0.0021466659989101233
+    ],
+    "metric": "broad_flux",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6442141623488774,
+    "interval": [
+      0.6055187147757903,
+      0.682053264604811
+    ],
+    "metric": "broad_flux",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9447322970639033,
+    "interval": [
+      0.9259811194486766,
+      0.9621056618819777
+    ],
+    "metric": "broad_flux",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.06103893085180422,
+    "interval": [
+      -0.11364204643411958,
+      -0.005014771806547292
+    ],
+    "metric": "c50_sys",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6424870466321243,
+    "interval": [
+      0.6059565905570149,
+      0.6782323129464845
+    ],
+    "metric": "c50_sys",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9620034542314335,
+    "interval": [
+      0.9420758935060555,
+      0.9786874267172825
+    ],
+    "metric": "c50_sys",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": 0.001964509543625093,
+    "interval": [
+      0.00033151784852634704,
+      0.0035157037290384128
+    ],
+    "metric": "fwhm",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6753022452504318,
+    "interval": [
+      0.6387888710849434,
+      0.7145388201220765
+    ],
+    "metric": "fwhm",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "inconclusive",
+    "estimate": 0.9378238341968912,
+    "interval": [
+      0.913791585721224,
+      0.9607541907548002
+    ],
+    "metric": "fwhm",
+    "n": 579,
+    "pool": "desi_linear_Halpha_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0015572193596127026,
+    "interval": [
+      -0.002580423677360691,
+      -0.000586174184887989
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6575757575757576,
+    "interval": [
+      0.6196969696969697,
+      0.695492424242424
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.956060606060606,
+    "interval": [
+      0.9363636363636364,
+      0.9727272727272728
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.03064194942259365,
+    "interval": [
+      -0.06764923864457127,
+      0.0022672095741353396
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.7242424242424242,
+    "interval": [
+      0.6939015151515152,
+      0.7545454545454545
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9636363636363636,
+    "interval": [
+      0.9454545454545454,
+      0.9787878787878788
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": 0.0006533941286072779,
+    "interval": [
+      -0.00024249209617760337,
+      0.0015105405214033596
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6530303030303031,
+    "interval": [
+      0.6090909090909091,
+      0.6984848484848485
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.953030303030303,
+    "interval": [
+      0.9363636363636364,
+      0.9681818181818181
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Halpha_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0028318368434522927,
+    "interval": [
+      -0.004734146680647367,
+      -0.0013198673788305986
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6681818181818182,
+    "interval": [
+      0.6318181818181818,
+      0.706060606060606
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9424242424242424,
+    "interval": [
+      0.9227272727272727,
+      0.9606060606060606
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.1609912990934748,
+    "interval": [
+      -0.22758564903989645,
+      -0.10217180272351199
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.7212121212121212,
+    "interval": [
+      0.6818181818181818,
+      0.759090909090909
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9681818181818181,
+    "interval": [
+      0.9545454545454546,
+      0.9803030303030303
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0016012518706415865,
+    "interval": [
+      -0.003244273268772951,
+      -0.00020356024320915893
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "inconclusive",
+    "estimate": 0.6151515151515151,
+    "interval": [
+      0.5772727272727273,
+      0.6515151515151515
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9348484848484848,
+    "interval": [
+      0.9166666666666666,
+      0.9515151515151515
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0015428888451181086,
+    "interval": [
+      -0.002615074093114708,
+      -0.0006302801584502358
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6454545454545455,
+    "interval": [
+      0.6045454545454545,
+      0.6833333333333333
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "inconclusive",
+    "estimate": 0.9227272727272727,
+    "interval": [
+      0.896969696969697,
+      0.943939393939394
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0958822157020051,
+    "interval": [
+      -0.12846637244902084,
+      -0.06560425774613601
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6651515151515152,
+    "interval": [
+      0.6318181818181818,
+      0.693939393939394
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9545454545454546,
+    "interval": [
+      0.9393939393939394,
+      0.9696969696969697
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0008408379328884655,
+    "interval": [
+      -0.0016120900069869553,
+      -0.0001637921150691496
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "inconclusive",
+    "estimate": 0.6424242424242425,
+    "interval": [
+      0.6015151515151516,
+      0.6803030303030303
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "inconclusive",
+    "estimate": 0.9212121212121213,
+    "interval": [
+      0.8984848484848484,
+      0.9409090909090909
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "desi_linear_Hbeta_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.006457952108504091,
+    "interval": [
+      -0.009494543400921667,
+      -0.0038028464862051954
+    ],
+    "metric": "broad_flux",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6633499170812603,
+    "interval": [
+      0.6291159144351959,
+      0.6968265081980073
+    ],
+    "metric": "broad_flux",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.956882255389718,
+    "interval": [
+      0.9358108108108109,
+      0.9752485442119171
+    ],
+    "metric": "broad_flux",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.06569634693917546,
+    "interval": [
+      -0.15806594180604347,
+      0.024485808882412405
+    ],
+    "metric": "c50_sys",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6849087893864013,
+    "interval": [
+      0.6474367671285978,
+      0.7203989971494671
+    ],
+    "metric": "c50_sys",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9502487562189055,
+    "interval": [
+      0.9320545212381761,
+      0.9670865054485744
+    ],
+    "metric": "c50_sys",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": 0.001403375768945493,
+    "interval": [
+      -0.0012001716621987105,
+      0.004221730664683496
+    ],
+    "metric": "fwhm",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6650082918739635,
+    "interval": [
+      0.6288480388978931,
+      0.706175900712191
+    ],
+    "metric": "fwhm",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9419568822553898,
+    "interval": [
+      0.9196717808603054,
+      0.96184610545489
+    ],
+    "metric": "fwhm",
+    "n": 603,
+    "pool": "sdss_log_Halpha_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.002435643132050614,
+    "interval": [
+      -0.003663465775752232,
+      -0.0014006540111816599
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6696969696969697,
+    "interval": [
+      0.6318181818181818,
+      0.706060606060606
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9590909090909091,
+    "interval": [
+      0.9424242424242424,
+      0.9742424242424242
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.029432103136072342,
+    "interval": [
+      -0.07733356417032412,
+      0.015644675399090976
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.706060606060606,
+    "interval": [
+      0.6681818181818182,
+      0.7439393939393939
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9621212121212122,
+    "interval": [
+      0.95,
+      0.9742424242424242
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": 0.0014045511348814977,
+    "interval": [
+      0.00017009387159689848,
+      0.0025862623725183926
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6848484848484848,
+    "interval": [
+      0.646969696969697,
+      0.7227272727272728
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.95,
+    "interval": [
+      0.9303030303030303,
+      0.9681818181818181
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Halpha_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.003408960476974582,
+    "interval": [
+      -0.005027152125059535,
+      -0.002048505740604287
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6651515151515152,
+    "interval": [
+      0.6348484848484849,
+      0.6954545454545454
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.946969696969697,
+    "interval": [
+      0.9287878787878788,
+      0.9606060606060606
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.17357160866659965,
+    "interval": [
+      -0.2453745998595118,
+      -0.10758338308417444
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.7121212121212122,
+    "interval": [
+      0.6772727272727272,
+      0.7454545454545455
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9621212121212122,
+    "interval": [
+      0.9484848484848485,
+      0.9742803030303028
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0014366890165595433,
+    "interval": [
+      -0.003025780341642744,
+      -8.746414974874502e-06
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6863636363636364,
+    "interval": [
+      0.656060606060606,
+      0.7166666666666667
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9606060606060606,
+    "interval": [
+      0.9454545454545454,
+      0.9742424242424242
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr15"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.001282302123051863,
+    "interval": [
+      -0.0025432209551536755,
+      -0.0002454239292645754
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6787878787878788,
+    "interval": [
+      0.6409090909090909,
+      0.7136363636363636
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9363636363636364,
+    "interval": [
+      0.9166666666666666,
+      0.9545454545454546
+    ],
+    "metric": "broad_flux",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.06086871241336801,
+    "interval": [
+      -0.09964759781982091,
+      -0.02734656576178695
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6787878787878788,
+    "interval": [
+      0.6409090909090909,
+      0.7136363636363636
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.9621212121212122,
+    "interval": [
+      0.943939393939394,
+      0.9772727272727273
+    ],
+    "metric": "c50_sys",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "accuracy",
+    "decision": "pass",
+    "estimate": -0.0005801102774056473,
+    "interval": [
+      -0.001550258151474641,
+      0.00039929943362269633
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "one_error",
+    "decision": "pass",
+    "estimate": 0.6742424242424242,
+    "interval": [
+      0.6378787878787879,
+      0.7075757575757575
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  },
+  {
+    "check": "two_error",
+    "decision": "pass",
+    "estimate": 0.956060606060606,
+    "interval": [
+      0.9378787878787879,
+      0.9727272727272728
+    ],
+    "metric": "fwhm",
+    "n": 660,
+    "pool": "sdss_log_Hbeta_snr30"
+  }
+]

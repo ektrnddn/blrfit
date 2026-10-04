@@ -1,9 +1,9 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below, together with the paper that describes and validates the method."
+message: "If you use this software, please cite it as below, together with the relevant methodological references listed in the documentation."
 type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
-version: 0.2.0rc1
-date-released: 2026-09-28
+version: 0.2.0
+date-released: 2026-10-04
 license: MIT
 repository-code: "https://github.com/ektrnddn/blrfit"
 authors:
@@ -19,11 +19,12 @@ keywords:
   - DESI
   - SDSS
 abstract: >-
-  Fits the broad Halpha, Hbeta and Mg II emission lines of an active galactic nucleus against
-  the systemic velocity defined by the narrow lines of the same spectrum, measures the
-  displacement and shape of the broad profile, classifies it, flags the conditions under which
-  the measurement should not be trusted, and measures velocity changes between epochs by
-  chi-square cross-correlation. The 0.2.0rc1 milestone is limited to single-spectrum
-  Halpha/Hbeta point fits and quality diagnostics; calibrated uncertainty and
-  velocity-change claims are not established. Works on DESI coadds, SDSS spec files
-  or any wavelength, flux and error table.
+  Fits the broad Halpha and Hbeta emission-line profiles of a single AGN spectrum,
+  measures offsets relative to the fitted narrow-line reference, and reports
+  profile classes, quality flags and optional conditional Monte Carlo errors.
+  Accepts public DESI identifiers or coordinates, local DESI and SDSS files, and
+  explicitly mapped spectral tables or images with wavelength, flux, statistical
+  noise and redshift. Version 0.2.0 preserves the RC1 numerical fitter. Its fixed
+  synthetic uncertainty study passed 67 criteria and left five inconclusive;
+  universal survey-error calibration is not established. Mg II and between-epoch
+  velocity routines remain experimental.

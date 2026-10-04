@@ -13,7 +13,7 @@ END_POINT_KMS = 100.0
 
 
 def test_fit_sdss_example(tmp_path):
-    rc = main(["fit", SDSS_EXAMPLE, "--z", str(Z_J001224), "--out", str(tmp_path), "--no-figure", "--quiet"])
+    rc = main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Halpha,Hbeta,MgII", "--out", str(tmp_path), "--no-figure", "--quiet"])
     assert rc == 0
     doc = json.load(open(tmp_path / "spec-0651-52141-0072_fit.json"))
     assert doc["input"]["kind"] == "sdss" and doc["input"]["z"] == Z_J001224 and doc["input"]["z_source"] == "argument"
@@ -25,7 +25,8 @@ def test_fit_sdss_example(tmp_path):
     assert hb["systemic_source"] == "Halpha prior"
     assert not mg["fitted"] and mg["label"] == "" and mg["class_text"] == "not fitted" and "not fitted" in mg["reasons"][0]
     assert mg["dv"] is None
-    assert ha["dv_err_mc"] is None and ha["dv_err_model"] == pytest.approx(1.5 * max(650 / np.sqrt(ha["broad_flux_snr"]), 45), rel=1e-6)
+    assert ha["dv_err_mc"] is None and ha["dv_err_model"] is None
+    assert doc["uncertainty"]["status"] == "not_computed" and not doc["uncertainty"]["calibrated"]
     assert doc["summary_row"]["HA_class"] == "C"
     assert doc["settings"]["complexes"] == ["Halpha", "Hbeta", "MgII"]
     assert doc["blrfit_version"]
@@ -33,7 +34,7 @@ def test_fit_sdss_example(tmp_path):
 
 
 def test_fit_writes_figure_and_pickle(tmp_path):
-    rc = main(["fit", SDSS_EXAMPLE, "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--pickle", "--quiet"])
+    rc = main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--pickle", "--quiet"])
     assert rc == 0
     assert (tmp_path / "spec-0651-52141-0072_fit.png").stat().st_size > 10000
     assert (tmp_path / "spec-0651-52141-0072_fit.pkl").exists()
@@ -55,8 +56,8 @@ def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
 
 
 def test_fit_csv_example_matches_sdss_fit(tmp_path):
-    main(["fit", SDSS_EXAMPLE, "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--no-figure", "--quiet"])
-    rc = main(["fit", CSV_EXAMPLE, "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--wave-unit", "nm",
+    main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--no-figure", "--quiet"])
+    rc = main(["fit", CSV_EXAMPLE, "--survey", "generic", "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--wave-unit", "nm",
                "--frame", "rest", "--air", "--z", str(Z_J001224), "--flux-scale", "10", "--lines", "Hbeta",
                "--out", str(tmp_path), "--no-figure", "--quiet"])
     assert rc == 0
@@ -68,9 +69,9 @@ def test_fit_csv_example_matches_sdss_fit(tmp_path):
 
 def test_fit_missing_redshift_exits():
     with pytest.raises(SystemExit):
-        main(["fit", CSV_EXAMPLE, "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--frame", "rest", "--quiet"])
+        main(["fit", CSV_EXAMPLE, "--survey", "generic", "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--frame", "rest", "--quiet"])
     with pytest.raises(SystemExit):
-        main(["fit", DESI_EXAMPLE, "--quiet"])          # a coadd needs --targetid
+        main(["fit", DESI_EXAMPLE, "--survey", "auto", "--quiet"])          # a coadd needs --targetid
 
 
 def test_rv_two_sdss_epochs(tmp_path):
