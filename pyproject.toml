@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blrfit"
-version = "0.2.0.dev0"
-description = "Broad AGN emission lines fitted against the narrow-line systemic velocity: offsets, profile classes, quality flags and velocity changes between epochs"
+version = "0.2.0"
+description = "Single-spectrum broad AGN line fitting with measured offsets, profile classes and explicit quality diagnostics"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "Ekaterine Dadiani", email = "edadiani@andrew.cmu.edu"}]
@@ -28,7 +28,7 @@ dependencies = [
 fetch = ["astroquery>=0.4.6", "fsspec>=2023.1", "aiohttp>=3.8", "requests>=2.28"]
 desi = ["desispec"]
 dust = ["dustmaps"]
-test = ["pytest>=7", "healpy>=1.16"]
+test = ["pytest>=7", "healpy>=1.16", "requests>=2.28"]
 
 [project.scripts]
 blrfit = "blrfit.cli:main"

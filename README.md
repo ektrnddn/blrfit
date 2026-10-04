@@ -1,78 +1,161 @@
 # blrfit
 
-**Development branch: 0.2.0.dev0.** Scientific corrections are in progress.
-The validation numbers below describe the frozen 0.1.0 release, not a newly
-validated catalogue. CHANGELOG.md lists the corrections of 0.2.0 and separates
-fixes from changes of policy; the on-sky calibration of the cross-correlation
-errors, the Monte Carlo coverage and the production comparison of the Fe II
-change are still to be done, so this branch is not ready for a production refit
-or a paper's final measurements.
+Fit the broad Hα and Hβ profiles of one AGN spectrum, measure their offsets relative
+to the fitted narrow-line reference, and save profile measurements, classes, quality
+flags and a diagnostic figure. DESI is the default input survey; SDSS and general
+spectral tables/images are explicit alternatives.
 
-Fits the broad Hα, Hβ (and Mg II) emission lines of an active galactic nucleus against the
-systemic velocity defined by the narrow lines of the same spectrum, measures the displacement
-and shape of the broad profile, classifies it, flags the conditions under which the measurement
-should not be trusted, and measures the change of the broad-line velocity between two epochs by
-cross-correlation. It is the fitter behind the DESI search for sub-parsec supermassive black hole
-binaries, released so that the measurements can be reproduced on the same or on other data.
+**Version 0.2.0** provides the public/local input interface with the numerical
+fitting and Monte Carlo core used in
+[v0.2.0rc1](https://github.com/ektrnddn/blrfit/releases/tag/v0.2.0rc1).
+The existing primary and observing-date catalogue fits remain tied to RC1; this
+release does not refit or relabel them. Use the versioned installation below.
 
-Input: a DESI coadd, an SDSS spec file, or any table with a wavelength, a flux and an error
-column. Output: a table on the terminal, a JSON file with every quantity, and a diagnostic
-figure. The physics is fixed: every number that defines the model, a class, a flag or a selection
-is set to the value used for the DESI catalogue and is listed, with its reason, in
-`blrfit/constants.py`; tolerances of the fitting machinery stay next to the code they serve.
-
-![Diagnostic figure of SDSS J001224.01−102226.5](docs/spec-0651-52141-0072_fit.png)
-
-*SDSS J001224.01−102226.5 (SDSS spectrum of 2001, z = 0.2288), one of the binary candidates of
-Eracleous et al. (2012): the continuum decomposition on top, the Hβ and Hα complexes below with
-the narrow model (green), the broad components (dashed), the total (red), the c(1/4), c(1/2),
-c(3/4) bisector points and the residuals. Both lines are displaced by more than 1000 km/s from
-the narrow lines and classified C (asymmetric).*
+**Scientific scope.** Successful execution is not proof that every decomposition or
+error bar is reliable. The default `--nmc 0` produces point estimates and **no Monte
+Carlo uncertainties**. Optional MC errors are conditional statistical estimates;
+real-data and survey-wide calibration remains incomplete. Mg II and between-epoch
+velocity analysis are experimental. See [validation status](docs/VALIDATION_STATUS.md).
 
 ## Install
 
-```bash
-pip install git+https://github.com/ektrnddn/blrfit.git
-```
-
-Python ≥ 3.9 with numpy, scipy, astropy and matplotlib; from a clone, `pip install .`. Optional
-extras: `blrfit[fetch]` (astroquery, fsspec, aiohttp, requests) for downloading public spectra,
-`blrfit[desi]` to read DESI files through desispec instead of the built-in reader (the two give
-identical arrays), `blrfit[dust]` for dust-map look-ups of E(B−V), `blrfit[test]` (pytest, healpy)
-for the test suite. Tests: `python -m pytest -m "not slow and not network"` from the clone runs
-the fast suite (about 5 minutes); `-m slow` adds the full synthetic grids, the Monte Carlo pulls
-and, with `BLRFIT_ANCHOR_DIR` set, the Liu et al. (2014) anchor (`tests/test_anchor_liu.py`).
-
-## Quick start
+Use an isolated environment (Python 3.9 or later):
 
 ```bash
-blrfit fit spec-0651-52141-0072.fits --z 0.2288
-blrfit fit coadd-main-dark-17260-39627574082538900.fits --targetid 39627574082538900   # z from the redrock file next to it
-blrfit fit J001224_rest_air_nm.csv --wave lambda_nm --flux f_lambda --err sigma --wave-unit nm --frame rest --air --z 0.2288 --flux-scale 10
-blrfit rv spec-0651-52141-0072.fits spec-7169-56628-0344.fits --z 0.2288 --line Hbeta
-blrfit fetch --ra 3.1997083 --dec -8.7834722 --out spectra/                # public SDSS and DESI spectra of a position
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install 'blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@v0.2.0'
+python -m blrfit --version
 ```
 
-The `examples/data` directory holds the files used above (two SDSS epochs of J001224, a DESI DR1
-coadd reduced to one target with its redrock file, a CSV with rest-frame air wavelengths in nm)
-and `examples/README.md` the commands that run them with the expected results. From Python:
+The tag pins the software version; preserve the numerical-library versions and
+input files as well when reproducing a fit. From a checkout use
+`python -m pip install '.[fetch]'`. The immutable `v0.2.0rc1` tag remains available
+for reproducing the earlier interface and deployments.
+Local files need only the base dependencies; public retrieval needs the `fetch` extra.
+`dust` adds dust-map access; `test` adds the software test dependencies.
 
-```python
-from blrfit import read_spectrum, fit_spectrum, summary_row, plot_fit
-sp  = read_spectrum("spec-0651-52141-0072.fits")                      # or read_desi(path, targetid), read_table(...)
-res = fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z=0.2288, complexes=("Halpha", "Hbeta"), nmc=30)
-res["meas"]["Hbeta"]["c50_sys"], res["err"]["Hbeta"]["c50_sys"], res["cls"]["Hbeta"]["label"]   # err is empty without nmc
-row = summary_row(res)                                                  # one flat dictionary (HA_*, HB_*, conti_*)
+## Fit a public DESI target
+
+No coordinates are needed when its TARGETID is known. Only public DR1 is searched by
+default. Each returned survey/program coadd is fitted separately and recorded in a
+manifest; none is silently selected as a representative observing night.
+
+```bash
+blrfit fit --targetid 39627574082538900 --out result_desi
 ```
 
-`fit_spectrum` needs the observed-frame vacuum wavelength in Å, the flux in units of
-1e-17 erg s⁻¹ cm⁻² Å⁻¹ (the amplitude bounds and starting values of the model are set for
-continua of order 1–1000 in that unit; a spectrum in another unit is refused with a message,
-and `flux_scale=` brings it into range, after which every flux-bearing output is in the scaled
-unit), the inverse variance, and the redshift.
-The redshift only sets the ±1500 km/s window in which the narrow lines are sought: every velocity
-reported is a difference between two quantities measured in the same fit, so errors in the input
-redshift cancel to first order.
+The lookup uses the public [Data Lab DESI catalogue](https://datalab.noirlab.edu/data/desi)
+and downloads the matching target from the DESI archive. `--releases edr` selects EDR;
+`--releases dr1,edr` searches both, whose observations can overlap. Public retrieval
+is limited by those releases and the availability of the catalogue and file servers.
+It does not search proprietary DESI data or assemble all nights.
+
+## Search by position, optionally including SDSS
+
+Coordinates are ICRS degrees. The default search is DESI within 1.5 arcsec. Add
+`--include-sdss` to retrieve SDSS DR17 spectra within **at most 1.5 arcsec** as well.
+
+```bash
+blrfit fit --ra 3.1997148876 --dec -8.7834904331 --include-sdss --out result_position
+# Download only, without fitting:
+blrfit fetch --targetid 39627574082538900 --include-sdss --out downloaded
+# SDSS alone:
+blrfit fit --survey sdss --ra 3.1001 --dec -10.374 --out result_sdss_position
+```
+
+Multiple DESI TARGETIDs cause a clear stop with the candidate list saved. Choose
+`--targetid` or explicitly request `--all-matches` to keep each object separate.
+SDSS matches are **positional candidates**, not confirmed associations: review their
+coordinates, redshifts and spectra. Repeat products are retained. The search is not
+a complete SDSS-V/DR20 census; a local compatible SDSS FITS file can still be read.
+A failed query is reported as an error, not as “no spectrum exists.” Use a fresh
+output directory for each public search so earlier manifests remain intact.
+
+## Fit a local file
+
+```bash
+# DESI is the default. A multi-row file needs an exact TARGETID.
+blrfit fit coadd-main-dark-17260.fits --targetid 39627574082538900 --out result_local
+# Supply z if there is no matching redrock file beside it:
+blrfit fit my_desi.fits --targetid 39627574082538900 --z 0.2203154 --out result_local_z
+# SDSS: file contents, not its name, identify the spectral columns.
+blrfit fit my_sdss.fits --survey sdss --z 0.2288 --out result_local_sdss
+```
+
+A DESI file containing exactly one spectral row can omit TARGETID. An explicit
+`--redrock path.fits` is also supported. Multiple rows with the same TARGETID must
+be separated into observations before fitting; exposure rows are never flattened
+together. The standard public DESI retrieval returns a full-depth coadd, which may
+contain multiple nights. Local SDSS `spec` files supply their pipeline coadd from
+extension 1; their individual-exposure extensions are not fitted by this command.
+
+SDSS inputs are read on their native vacuum `10**loglam` grid, with flux and IVAR in
+the supplied units. By default nonzero native MASK/AND_MASK and invalid statistical
+pixels are excluded, matching the conservative project input policy. The Python
+reader retains its historical `mask_policy="ivar"` default for compatibility;
+the CLI uses `--sdss-mask-policy conservative`. Select `ivar` explicitly to reproduce
+the older reader. No extra heliocentric/barycentric or air-to-vacuum correction is
+applied to these already reduced SDSS products. No SDSS-wide uncertainty or resolution
+calibration is implied. Insufficient continuum support remains an unusable fit;
+it is not repaired by inventing data or changing the model.
+
+For DESI, E(B−V) defaults to the FIBERMAP value. For SDSS/general files it defaults
+to zero: supply `--ebv VALUE`, or `--ebv sfd` with installed SFD dust maps, when
+Galactic dereddening is needed. Redshifts are not remeasured automatically; `--z`
+overrides the file value. Review catalogue redshift warnings in the saved metadata.
+
+## Fit general FITS tables or images
+
+**Wavelength, flux and redshift alone are insufficient for this weighted fit.**
+Supply a per-pixel 1σ error or inverse variance; the program does not invent errors.
+The fit also needs sufficient wavelength coverage outside the emission-line windows
+to constrain the continuum.
+
+```bash
+# FITS table (also CSV/ECSV): explicit column names, including the noise column.
+blrfit fit spectrum.fits --survey generic --hdu 1 --wave WAVE --flux FLUX --ivar IVAR --z 0.2 --out result_table
+# Read one row of a vector-valued FITS table, including its redshift column:
+blrfit fit spectra.fits --survey generic --row 2 --wave LAMBDA --flux FLUX --err SIGMA --z-column Z --out result_row
+# Separate image extensions, with Z in a FITS header:
+blrfit fit arrays.fits --survey generic --wave-hdu WAVE --flux-hdu FLUX --err-hdu ERROR --z-key Z --out result_image
+```
+
+Wavelength defaults to observed-frame vacuum Å. Use `--wave-unit nm`, `--frame rest`
+or `--air` when appropriate. Flux must be **fλ per observed Å** in units of
+10⁻¹⁷ erg s⁻¹ cm⁻² Å⁻¹; `--flux-scale` converts both flux and statistical noise.
+Changing wavelength units alone does not convert the flux-density unit. If the
+flux has already been transformed to fλ per rest-frame Å, set `--flux-frame rest`
+separately; the reader divides it and its errors by (1+z). This is not a conversion
+from luminosity density or fν. Optional `--mask COLUMN` excludes nonzero mask values.
+
+FITS has no universal spectrum layout. Explicit table columns or image-HDU arrays
+are supported; arbitrary WCS-only images, cubes and instrument-specific products
+need an adapter. Ambiguous multi-spectrum arrays are rejected rather than flattened.
+Legacy filename-based selection is available explicitly with `--survey auto`.
+
+## Results and uncertainties
+
+Each successful spectrum writes `*_fit.json` and `*_fit.png`; `--pickle` also saves
+its full fit. JSON includes Hα/Hβ classifications, flags, solver diagnostics,
+redshift/reader provenance and uncertainty status. A public search writes
+`inputs/fetch_manifest.json` and `fit_manifest.json`; individual failures remain
+listed and the command returns a nonzero exit status for incomplete work.
+
+Add `--nmc 200 --seed 0` to use the draw count evaluated in the latest conditional
+uncertainty study (slower than a point fit). Other counts remain supported, but
+do not inherit that study’s coverage results. These perturb the supplied
+statistical pixel noise and refit under the RC1 assumptions; the 2% fitting floor
+is not added to the default simulated noise. They do not include all component-choice,
+host, calibration, redshift or instrumental systematics. Coverage remains partly
+inconclusive; **do not label them fully calibrated uncertainties**. With `--nmc 0`,
+missing errors are JSON `null`, not zero. The old DESI-repeat formula is no longer
+printed as an error bar, particularly for SDSS. `--legacy-error-diagnostic` can
+retain it for DESI as a separately named, uncalibrated diagnostic.
+
+The model details below describe the unchanged RC1 numerical core. The input
+interface does not revise archived catalogue fits.
 
 ## What is measured
 
@@ -90,7 +173,7 @@ the systemic velocity v_n of the same fit.
 The primary offset is **Δv ≡ c(1/2) − v_n**, the displacement of the half-maximum bisector. The
 peak of a multi-component model is unstable for flat-topped or two-humped profiles, and the
 centroid weighs precisely the faint wings on which different decompositions of the same profile
-legitimately disagree; c(1/2) is the most robust of the three. The peak- and centroid-based
+legitimately disagree; we use c(1/2) as the primary reported center, while retaining the other definitions for comparison. The peak- and centroid-based
 offsets are reported alongside, together with the peak of the continuum- and narrow-line-
 subtracted data measured as in Eracleous et al. (2012) (a parabola through the smoothed profile
 above 80 per cent of its maximum), which is compared with the model peak (flag `peak_disagree`).
@@ -182,27 +265,24 @@ end of DESI; unconstrained fits placed components outside the data and manufactu
 ## Classes and flags
 
 The rules are applied in the order listed: a profile takes the first class whose condition
-holds. The significance test of class A uses the Monte Carlo error when one was computed
-(`--nmc`) and the 300 km/s threshold alone otherwise, so a class can differ between runs with and
-without the Monte Carlo. The classes of the DESI catalogue were assigned in the production run
-without Monte Carlo errors (nmc = 0), that is, with the 300 km/s threshold alone; the Monte Carlo
-subset (30 realisations) was run separately and its errors were merged into the catalogue as the
-error columns only, without reassigning the classes.
+holds. Class A uses the Monte Carlo center error when that error is finite, and the
+300 km/s threshold alone otherwise. A class can therefore differ between point-only
+and MC runs. The RC1 primary, DESI-night and staged SDSS campaigns used `nmc=0`;
+they do not contain a newly calibrated uncertainty catalogue. The labels describe
+the fitted profiles and do not establish orbital motion.
 
 | Class | Rule |
 |---|---|
 | **E** no broad line | FWHM < 1200 km/s, or integrated S/N < 5, or peak S/N < 1.5 |
 | **X** no systemic | narrow-line reference not detected (S/N < 3) |
 | **W** not classifiable | FWHM < 2000 km/s or integrated S/N < 8: something broad is there, but narrow-line residuals dominate such profiles |
-| **B** double-peaked / disk-like | two resolved peaks separated by > max(0.4 FWHM, 1500 km/s) with a dip > 8 per cent and FWHM ≥ 3000; or FWHM ≥ 7000 with A.I. ≥ 0.20 or K.I. ≥ 0.50 |
+| **B** double-peaked / disk-like | two resolved peaks separated by > max(0.4 FWHM, 1500 km/s) with a dip > 8 per cent and FWHM ≥ 3000; or FWHM ≥ 7000 with \|A.I.\| ≥ 0.20 or K.I. ≥ 0.50 |
 | **A** bulk shift | \|Δv\| > 300 km/s at > 3σ (when an error is available) and a symmetric profile: \|c(1/4) − c(3/4)\| < 0.10 FWHM, \|A.I.\| < 0.12, \|v_peak − centroid\| < 0.20 FWHM |
 | **C** asymmetric | single-peaked and not symmetric |
 | **F** normal | symmetric, no significant offset |
 
-B and C are not cleanly separable from single-epoch shape statistics: in the double-peaked
-emitters of Strateva et al. (2003) that DESI has observed, the K.I. distribution is
-indistinguishable from that of class C, and a physical separation would require disk-model fits
-(Eracleous & Halpern 1994). The operative distinction is A against the rest.
+B and C are descriptive shape classes. This code does not fit a disk model or
+identify a unique physical explanation for either class.
 
 | Flag | Condition |
 |---|---|
@@ -211,223 +291,75 @@ indistinguishable from that of class C, and a physical separation would require 
 | `low_snr` | integrated broad S/N < 10 |
 | `low_peak_snr` | broad peak < 5σ per pixel: a component significant only by integration over thousands of km/s is degenerate with continuum-subtraction residuals |
 | `host_dominated` | host ≥ 80 per cent of the 4200–5000 Å light: template mismatch at the few-per-cent level mimics a very broad line |
-| `pl_at_bound` | power-law slope at a bound |
+| `pl_at_bound` | power-law slope ≤ −4.9 or ≥ 2.9, within 0.1 of the bounds −5 and 3 |
 | `peak_disagree` | model peak and data peak differ by > 0.25 FWHM |
 | `sii_disagree` | [S II] velocity > 150 km/s from v_n |
 | `sys_disagree` | v_n and the [O III] core > 400 km/s apart ([O III] S/N ≥ 5) |
-| `narrow_at_bound` | narrow group at the edge of its ±1500 km/s window |
+| `narrow_at_bound` | \|v_n\| ≥ 1425 km/s, within 5% of the ±1500 km/s search boundary |
 | `edge` | data cover less than ±6000 km/s around the line |
-| `extreme_offset` | \|Δv\| > 4000 km/s (classes A, C and F; a class-B profile is not flagged): beyond the Roche ceiling of almost any bound binary; a disk-emitter component, an artefact or a misidentified line |
+| `extreme_offset` | \|Δv\| > 4000 km/s for classes A, C and F; a project quality threshold, not a universal physical ceiling |
 
-A measurement with no flag is *clean*. The DESI catalogue definitions are provided as functions:
+The absence of a flag does not guarantee a valid measurement: E, W and X return
+before these quality checks, and solver/MC diagnostics must also be inspected.
+The project's selection definitions are provided as functions:
 *measurable* = class A/B/C/F, integrated S/N ≥ 8, FWHM ≥ 2000 km/s, no `edge`; *strong offset* =
 measurable and 1000 ≤ |Δv| ≤ 4000 km/s. Both lines are always fitted when the data cover them;
-in the DESI catalogue the selection, classes and Δv are Hα quantities and Hβ is the independent
-cross-check.
+the Halpha and Hbeta measurements are returned separately. Hbeta can inherit its
+narrow-line reference from Halpha, so the two offsets are not necessarily independent.
 
 ## Errors
 
 **Monte Carlo** (`--nmc 30`, `fit_spectrum(nmc=30)`): the spectrum is perturbed with Gaussian
-noise from its error array and refitted with the host model held fixed and the number of broad
+noise from its supplied pixel-error array, before the 2% fitting floor, and refitted with the host model held fixed and the number of broad
 components fixed to the selected one; the error is half the 16th–84th percentile range (as in
-Shen et al. 2013 and Liu et al. 2014). This is the statistical error only.
+Shen et al. 2013 and Liu et al. 2014). This is the conditional statistical error only.
+The fitting weights still include the floor; this change adds no model component.
+The fixed 2,640-spectrum study with 200 draws passed all 24 pooled point-accuracy
+checks and all 16 center-coverage checks. Four width-coverage checks and one
+flux-coverage check remained inconclusive: 67 pass, five inconclusive overall.
+This supports only the declared synthetic conditions and measurable-line selection;
+it is not universal survey calibration. The older 30-draw evidence is retained
+separately. See [uncertainty scope](docs/UNCERTAINTIES.md) and
+[current validation status](docs/VALIDATION_STATUS.md).
+MC can change error-dependent classes while leaving ordinary fitted profiles,
+offsets and widths unchanged.
+Use `--mc-noise-policy effective` (or `mc_noise_policy="effective"`) to reproduce
+the historical perturbations including the floor. Those errors are labelled
+`conditional_effective_noise`. Recomputing MC on an old saved result without a
+noise-policy setting keeps that historical policy explicitly. Input-noise MC
+requires the saved `ivar_stat_rest`; it never silently substitutes floored weights.
 
-**Empirical model** (`dv_err_model` in the output): the total error of Δv, including the
-systematics of the continuum and narrow-line decomposition, was measured on the sky from 8377 pairs
-of independent DESI spectra of the same objects (observed in two programmes, or in survey
-validation and the main survey) in which broad Hα is measurable in both. The two values of c(1/2)
-agree to an NMAD of 103 km/s per pair, 73 km/s per measurement, declining from 246 km/s per pair at
-integrated S/N 8–20 to 67 km/s above 150. The adopted per-measurement error is
+**Historical empirical diagnostic.** Earlier versions reported a DESI-repeat error
+formula in `dv_err_model`, including for other instruments. This interface leaves
+that field null. `--legacy-error-diagnostic` retains the original formula only for
+DESI, under `legacy_desi_repeat_error_diagnostic`; it is not an RC1 or SDSS error
+calibration. See the validation status for the supported scope and remaining limitations.
 
-    σ(Δv) = max(650 km/s / √(S/N), 45 km/s),
+## Validation and release scope
 
-inflated by 1.5 for strong offsets (|Δv| ≥ 1000 km/s), whose profiles are broader and more complex
-(256 km/s per pair, about 180 per measurement); the DESI catalogue and its inspection pages, which
-consist of strong-offset objects, apply the factor 1.5 throughout. The Monte Carlo errors of the
-strong-offset objects have a median of 123 km/s, so the decomposition systematics are of the same
-order as the statistical error. The model was calibrated on broad Hα in DESI spectra; for other
-lines and instruments it is an indication, not a measurement, and it is reported only for
-measurable lines (classes A, B, C, F). When the Monte Carlo error is much larger than the model
-error, as for the worked example (±287 against ±68 km/s in Hα), the realisations are switching
-between decompositions of the same profile and the larger number is the one to quote.
+The RC1 numerical core has completed the project's scoped DESI and SDSS point-fit
+runs. Software checks, real-data execution and statistical coverage are separate
+forms of evidence. No test guarantees that every astrophysical decomposition is unique.
 
-## Validation
+The latest known-truth study retained all 2,640 spectra with no execution errors.
+Its 72 criteria yielded 67 passes and five inconclusive results; no criterion
+failed under the fixed rules. Halpha was measurable in 579/660 low-S/N DESI-like
+cases and 603/660 low-S/N SDSS-like cases; the other six line/grid/SNR groups each
+had 660/660 measurable cases. Coverage is conditional on those selections.
+The [validation status](docs/VALIDATION_STATUS.md),
+[uncertainty guide](docs/UNCERTAINTIES.md), and
+[reproduction materials](validation/uncertainty_20261003/README.md) retain the
+full denominators, thresholds and limitations. The earlier 1,980-spectrum study
+remains separate; it is not relabelled as a pass by the newer result.
 
-**Identity with the catalogue code.** The package was checked once against the production
-fitter on the numerical stack of the catalogue run (numpy 1.26.4, scipy 1.13.1): on 824 SDSS
-spectra of the Liu et al. (2014) and Eracleous et al. (2012) objects, 823 fits are identical in
-every fitted parameter, measure, class and flag, and the one spectrum that the production code
-cannot fit fails identically. The repository pins four of these spectra (`tests/test_pins.py`;
-the pins hold the summary row, the fitted parameters, chi-square and BIC of every line, the
-continuum parameters, the host information and the [O III] pre-fit). The pin test has two parts.
-Everything downstream of the optimiser is a pure function of the data and the parameters and is
-checked on every platform to tolerances that only a change of the model, a penalty, a measure or a
-class rule can exceed: the continuum and line models, the chi-square with its penalty terms, the
-profile measures and the classes are recomputed from the pinned parameters and must agree to a
-relative 1e-9 in chi-square, 1e-3 km/s in every velocity and width, a relative 1e-12 in the
-parameter entries rebuilt from the free ones and a relative 1e-6 in everything else (bit for bit on
-the reference stack). The optimiser's end point is platform dependent: for the degenerate
-decompositions of a broad profile into two or three Gaussians the bounded least-squares solver ends
-at different points on other versions of scipy and on Linux with another BLAS, and at different
-points between runs on the same platform. Measured on the Linux runners of the test workflow and on
-numpy 2.5 / scipy 1.18 on macOS, the bisector velocities of a fresh fit move by up to about 30 km/s,
-the peak of the two-humped pin and the centroid of one line by up to about 70 km/s, the widths by up
-to about 200 km/s, the second-moment width by up to about 500 km/s, and chi-square drops by up to
-about 20 per cent when another local minimum is found, without changing a class, a flag or a
-component count in any run. The continuum fit is degenerate as well, between the host and the power
-law: the host fraction of one pin is 0.14 on the reference stack and 0.10 on a Linux runner, at the
-threshold below which the host is rejected, with the same classes and offsets. A fresh fit is
-therefore held only to equal classes, flags, component counts and systemic sources, the primary
-offset Δv = c(1/2) − v_n within 100 km/s of the pin and a chi-square at most 10 per cent above it;
-`BLRFIT_STRICT_PINS=1` requires bit-for-bit equality of everything, the host decision included, and
-is the release check on the reference stack. The pins have E(B−V) = 0; the extinction law is pinned
-separately (`tests/test_extinction.py`). Every hinge of the chi-square (the far-broad width hinge,
-the [O III] width hinge and amplitude ordering, the narrow-line-region wing width hinge) is zero at
-the pinned parameters of all four pins; the five penalty functions are pinned at active parameter
-values by `test_penalty_terms_pinned`.
+This is a single-spectrum software release with explicit scientific limits.
+The CLI still defaults to point fits (`--nmc 0`). Existing catalogue/viewer
+products have not acquired new error bars through publication of this release.
 
-**Synthetic spectra** (`tests/test_synthetic.py`, `tests/test_rv_synthetic.py`,
-`tests/test_errors_mc.py`; the generator is `tests/synth.py`): bulk shifts of ±1200 km/s at
-continuum S/N 6–25 recovered to better than 60 km/s in Hα and 80 km/s in Hβ (measured 1–29 and
-2–17 km/s); double-peaked and asymmetric profiles classified B and C; pure narrow-line galaxies
-classified E; 85 per cent host light with broad Hα at +800 km/s recovered within 120 km/s
-(+817 to +888 km/s over broad equivalent widths of 60–200 Å and S/N 8–15 in the shipped suite;
-+721 to +790 km/s in the suite of the paper, whose realisations differ); discrepant [S II]
-kinematics; non-Gaussian narrow lines with 25–40 per cent of their flux in a pedestal (a weak
-broad Hα at +800 km/s recovered at +734 and +736 km/s; the +379 km/s of a model without the
-narrow-line-region wing is a development-suite number, the shipped package cannot switch the wing
-off); an [O III] blue wing recovered without moving the systemic velocity; a pedestal wider than
-the wing's 510 km/s bound absorbed by the broad components (a documented limit); narrow-line systems displaced by 880 km/s from the input redshift;
-lines at the edge of the spectrum; Monte Carlo pulls consistent with unity (NMAD 0.95 in Hα and
-1.08 in Hβ over 20 realisations of a broad Hα at +800 km/s, FWHM 4000 km/s, continuum S/N 12).
-
-**The same spectra measured independently.** Runnoe et al. (2015) fitted the SDSS DR7 spectra of
-the Eracleous et al. (2012) sample with an independent pipeline. For the 46 spectra (of 69)
-without the `poor_fit` or `very_broad` flag, the broad-Hβ peak velocities agree with r = 0.89, a
-median difference of −8 km/s and an NMAD of 194 km/s (numbers of the catalogue development run;
-not reproduced by a test in this repository); the first moments agree less well (r = 0.71, NMAD
-517 km/s), one reason for choosing c(1/2). Liu et al. (2014) published the plate, fibre and date
-of the SDSS spectrum of each of their 399 offset quasars with the peak and centroid offsets of
-broad Hβ. On the 388 of these spectra that we retrieved from DR16, 370 with a measurable broad Hβ, our
-peak offsets agree with theirs with r = 0.91, a median difference of +6 km/s, an NMAD of 104 km/s
-and 96 per cent sign agreement; our c(1/2) against their peak gives r = 0.90 and NMAD 127 km/s;
-the centroids r = 0.72 and NMAD 313 km/s (the two pipelines define the centroid over different
-velocity ranges). For the Eracleous et al. (2012) objects, whose profiles are mostly disk-like or
-asymmetric, the peaks agree with r = 0.87 and NMAD 401 km/s over 148 SDSS visits while c(1/2)
-agrees much less (r = 0.65, NMAD 893 km/s): for two-humped and skewed profiles the half-maximum
-midpoint and the peak are different quantities. The Liu comparison is `tests/test_anchor_liu.py`
-(slow; needs the SDSS spectra and the table of Liu et al. 2014, see the test's docstring); it
-asserts the peak-offset statistics (n, r, median, NMAD, sign agreement), the other numbers of this
-paragraph are quoted from the catalogue run.
-
-**Systematics on the sky** (catalogue development run). Switching the narrow-line-region wing on
-and off changes Δv by −3 ± 42 km/s (median ± NMAD over 351 measurable control objects); the choice of systemic
-reference changes it by less than 30 km/s; the host treatment matters at the ≲ 150 km/s level in
-the most host-dominated objects. All are small against the 1000 km/s selection threshold.
-
-**What changed in 0.2.0.** Version 0.2.0 corrects the defects listed in `CHANGELOG.md`, which
-separates bug fixes from changes of policy so that their effects on the catalogue can be told
-apart. The effect on every object is tabulated: `docs/deltas_0.1.0_to_0.2.0.csv` holds the four
-pinned spectra and the DESI example, `docs/deltas_anchor_0.1.0_to_0.2.0.csv` the 824 SDSS
-spectra of the Liu et al. (2014) and Eracleous et al. (2012) anchor (written by
-`tests/test_anchor_liu.py` with `BLRFIT_WRITE_DELTAS=1`), both fitted with 0.1.0 and with 0.2.0
-on the same numerical stack, one row per spectrum and line with the offsets, widths, classes and
-flags of both versions and the BIC margin of every class change; `docs/DELTAS.md` names the
-correction behind each delta. The tag `v0.1.0` reproduces the catalogue run; the numbers of this section were
-measured with it.
-
-## Velocity changes between epochs
-
-The multi-Gaussian decomposition of a broad profile is not unique between two noisy
-realisations, so c(1/2) of a refitted model can jump with no physical change. `blrfit rv` and
-`blrfit.rv.pair_analysis` therefore measure the change by χ² cross-correlation of the continuum-
-and narrow-line-subtracted broad profiles, the method of Eracleous et al. (2012), Shen et al.
-(2013), Liu et al. (2014), Runnoe et al. (2017) and Guo et al. (2019), in which the fit enters
-only through the subtraction. Specifics: whole-pixel shifts on the template's grid. Two spectra on one pixel lattice (two DESI
-spectra, or two SDSS spectra on their logarithmic lattice) are compared by integer placement with no
-interpolation; only spectra on different lattices are interpolated, onto a uniform velocity grid,
-with the interpolation weights carried into the variance (`regridded`). Masked pixels stay masked
-in place, so a pixel dropped from one epoch never moves the others. A flux scale and a linear
-baseline are profiled at each shift with the noise of both spectra in the variance,
-σ²_y + a²σ²_x, so that a brighter or fainter epoch does not change the statistic. The comparison
-window is ±1.5 FWHM (at least ±2000 km/s) about the template's c(1/2); 7 per cent of the narrow-line
-model is added in quadrature to the pixel errors instead of masking (a masked hole migrates with
-the shift and creates false minima at low S/N); the curve statistic is the excess
-G(n) = χ²(n) − N_pix(n); outliers beyond 5σ are identified once at the first-pass minimum and
-excluded at every shift; a polynomial of degree ≤ 6 over ±10 pixels gives the sub-pixel minimum.
-The error is the Δχ² = 6.63 (99 per cent) interval converted to 1σ, its bracketed half when only
-one side is bracketed, or the local curvature when neither is, and `err_method` names which. The
-shift is measured in both directions (Runnoe et al. 2017) with the mismatch recorded, and a
-profile-stability statistic z_prof = (χ²_min − ν)/√(2ν) is reported with both directions' values,
-fitted scales and masked-pixel counts. Because χ² − N_pix favours the shifts that use the fewest
-pixels whenever the profiles differ, the search runs in two stages, each on the window pixels with
-data in both spectra at every one of its shifts: stage 1 locates the minimum over ±vmax (a reduced
-range when fewer than half the window's pixels would remain), stage 2 measures the shift, its error
-and z_prof within 600 km/s of it. Single-pixel artefacts are masked in both spectra first, and two
-checks guard against false minima: the fitted flux factors of the two directions must lie within
-1/4 to 4 with a product within 1/2 to 2 (`scale_ok`), and a second minimum within Δχ² = 6.63 of the
-first and at least 500 km/s away marks the shift `ambiguous`.
-
-**Narrow-line frame.** Each pair gets one zero point, the shift of the narrow lines of one epoch
-against the other, from [O III] λ5007, or from [S II] where [O III] is not measurable (Shen et al.
-2013; Runnoe et al. 2015), measured in both directions so that swapping the spectra only changes
-its sign; a zero point whose two directions disagree beyond twice their combined error vetoes the
-frame. A zero point within ±200 km/s (`FRAME_VETO_KMS`) means the
-two spectra share a frame: Hβ is then corrected by it (in the 0.1.0 calibration this reduced the
-scatter between consecutive DESI epochs by 21 per cent) and Hα is not (no improvement there). A
-larger zero point, or one at the edge of its ±800 km/s search, vetoes the pair for both lines
-(`frame_ok` False, with `frame_reason`): a frame offset enters the two Balmer lines identically and
-would pass for the coincident two-line change the search looks for.
-
-**Validation and calibration.** The shipped synthetic suite (`tests/test_rv_synthetic.py`) uses
-Gaussian broad lines of FWHM 2500, 4000 and 5000 km/s shifted by −600 to +900 km/s. With 0.1.0 the
-cross-correlation alone was unbiased at peak S/N 25 and 50 (pooled medians within ±5 km/s over 160
-pairs per width), with Δχ² pull NMADs of 0.97, 1.33 and 1.64 at peak S/N 25; the full pipeline was
-biased by −25 to −43 km/s at peak S/N 10. Re-measured with 0.2.0 at low S/N, the errors still
-undercover: pull NMADs 1.7–2.7, 2.0–4.0 and 4.0–6.9 for the three widths at peak S/N 8, and
-1.3–2.0, 1.7–2.7 and 2.5–3.5 at peak S/N 12, with 30 of 160 errors unavailable at FWHM 5000 km/s and
-peak S/N 8 (all reported). FWHM ≈ 8000 km/s at peak S/N 8 is a hard regime in which the errors are
-not trusted. `blrfit rv --nmc N` (N ≥ 10) replaces the Δχ² error by a bootstrap over both
-spectra's errors.
-
-The on-sky floors of the 0.1.0 calibration were measured with the 0.1.0 estimator: on 570 pairs of
-consecutive DESI epochs its reliable tier (not at bound, z_prof < 5, direction mismatch below
-466 km/s for Hα and 238 km/s for Hβ) needed σ_sys = 155 km/s (Hα) and 79 km/s (Hβ; 157 km/s at S/N
-proxy < 8) in quadrature to bring the pulls to unity. They are reported as reference values
-(`legacy_error_floor`), not applied: the corrected estimator needs its own calibration. Until then
-`blrfit rv` reports the statistical error, labelled uncalibrated, and marks no pair as reliable
-(`reliable` is False; `diagnostic_quality_pass` gives the tier conditions of 0.1.0 plus the frame
-and plausibility checks). On a first real-data test, 29 objects of the catalogue with two to nine
-DESI epochs from the public DR1 release and their SDSS spectra (161 measurable pair records), the
-0.1.0 estimator with a 5000 km/s search scattered pairs of DESI epochs weeks apart by 398 km/s in Hα
-on its own reliable tier, with shifts of up to 2587 km/s; the corrected estimator gives 58 km/s on
-its reliable pairs (17 pairs, largest 355 km/s) and 32 km/s in Hβ (7 pairs), with no reliable shift
-above 1500 km/s while it can still search to a median of 3000 km/s. Its statistical errors are still
-about three times too small in Hα (pull NMAD 3.4), so an on-sky floor measured with the corrected
-estimator remains necessary (`docs/CCF_VALIDATION.md`). The tool reports the shift and its error, the direction
-mismatch, z_prof, the zero point and frame check, and the absolute offset at the second epoch,
-Δv(t₂) = Δv(t₁) + v_rel.
-
-**Profile grades.** z_prof is a significance, not a size, and it rises with signal-to-noise as
-resolution, aperture and calibration differences between two spectra become significant.
-`pair_analysis` returns a grade, stable (z_prof < 5), mild (5–10) or changed (≥ 10), and an effect
-size, `resid_frac`, the rms of the residual after the best shift, scale and baseline as a fraction
-of the template peak. With 0.1.0, z_prof of a pair also grew with the flux ratio of the two epochs,
-and the error inflation per grade used by the 0.1.0 tool for pairs across surveys (a null scatter
-of 143 km/s for Hα and 147 km/s for Hβ in the stable grade, × 1.15 / × 1.85 for Hα and × 1.4 / × 1.5
-for Hβ in the mild and changed grades) was measured with that estimator on an early table of the
-catalogue; these values are kept in `constants.py` for reference until the corrected estimator is
-calibrated. With `--line Halpha,Hbeta`, `blrfit rv` also evaluates, as an uncalibrated diagnostic,
-the two-line criterion of Liu et al. (2014) and Guo et al. (2019): the shifts of the two lines agree
-within twice their combined error and, where both are significant, in sign.
-
-![Two epochs of broad Hβ of SDSS J001224.01−102226.5](docs/spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.png)
-
-*`blrfit rv` 0.1.0 on the 2001 and 2013 SDSS spectra of J001224: the two continuum- and narrow-line-
-subtracted Hβ profiles relative to their own systemic velocities (left) and the cross-correlation
-excess curve with the 99 per cent interval (right). The 0.1.0 estimator graded this pair 'changed'
-(z_prof ≈ 10) because the 2013 spectrum is 2.1 times brighter; with 0.2.0 the pair gives
-−293 ± 29 km/s with z_prof 0.8 (stable).*
+Between-epoch velocity routines and Mg II remain experimental. The velocity
+routines are retained for reproducibility and development; their reported
+uncertainties do not establish significant motion. Earlier numerical examples
+are preserved in [historical validation notes](docs/HISTORICAL_VALIDATION.md).
 
 ## What the tool does not do
 
@@ -455,8 +387,10 @@ c(1/2) − v_n, `dv_err_mc`, `dv_err_model`, the measures of the profile and of 
 `summary_row`, the flat dictionary of the catalogue (`HA_*`, `HB_*`, `conti_*`). `<stem>_fit.png`
 is the diagnostic figure; `--pickle` writes the full result. `<stem>_rv.json` holds a summary of
 each epoch's fit of the line (`epochs`, each with the line record described above), the
-cross-correlation quantities listed above, `err_method` and `reliable_reason`. The exit status is 0
-whenever the spectrum could be read.
+experimental cross-correlation diagnostics, `err_method` and `reliable_reason`.
+Those legacy names do not establish validated between-epoch uncertainties. A fit
+returns zero when it completes, including explicitly uncovered lines. Input/fit failures
+return nonzero; a public batch also returns nonzero when a download or individual fit fails.
 
 `conti_pl_norm` (the power law at 3000 Å rest) and `conti_feop_norm` are flux densities of the
 (1+z)-scaled rest-frame spectrum the fit works on, f_rest(λ_rest) = (1+z) f_obs(λ_obs) at
@@ -470,9 +404,9 @@ with the Planck 2018 luminosity distance, the same one that `broad_lum` uses.
 
 ## Citing
 
-If you use blrfit, please cite the software (`CITATION.cff`) and the paper that describes and
-validates the method, Dadiani & Palmese, *Cosmic Pairs: A DESI Census of Massive Black Hole
-Binaries* (in preparation). The Fe II templates and the galaxy eigenspectra were obtained from the
+If you use blrfit, please cite the software (`CITATION.cff`) and the methodological
+references relevant to the quantities you use. The project manuscript is in
+preparation; it is not a published validation reference. The Fe II templates and the galaxy eigenspectra were obtained from the
 PyQSOFit repository (Guo, Shen & Wang 2018; GPL-3.0 code licence) and are the published data of
 the authors listed in `blrfit/templates/README.md`; the MIT licence of this package covers its
 code.

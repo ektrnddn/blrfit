@@ -22,7 +22,7 @@ from .narrow import (add_halpha_narrow, add_hbeta_narrow, add_mgii_narrow,
                      oiii_order_penalty, has_oiii_ordering)
 from .broad import (add_broad_block, add_mgii_doublet_block, velocity_bounds, core_covered,
                     covered_velocity_bounds, broad_parameter_pairs, width_offset_penalty,
-                    first_component_starts, select_by_bic)
+                    first_component_starts, select_by_bic, selection_margin, score_gap)
 
 
 def build_complex(name, wave, fsub, n_broad=1, v_sys_prior=None, sig_sys_prior=None,
@@ -207,13 +207,20 @@ def fit_complex_select(name, wave, fsub, ivar, max_broad=MAX_BROAD, dbic=DBIC, *
     """Fit with 1..max_broad broad components and keep the simplest model within
     ``dbic`` of the best BIC. Returns (chosen fit, list of all fits).
 
-    The chosen fit carries ``bic_margin``, the smallest |BIC(chosen) -
-    BIC(other)| over the other fitted component counts (NaN when only one
-    count was fitted). The class split between A (one symmetric shifted
-    Gaussian) and C (asymmetric) can hinge on the one-versus-two-component
-    choice, which the rule decides within a few BIC units of ``dbic``; the
-    margin says how far a spectrum is from that edge. The status passed on in
-    ``diagnostics`` is that of the chosen component count."""
+    The chosen fit carries ``bic_margin``, the smallest change of any single
+    selection score of the fitted counts that changes the choice
+    (``selection_margin``; zero on the selection edge, NaN when only one
+    count was fitted), ``bic_margin_flip`` (the component count whose score
+    attains the margin and the direction of the move), and ``bic_gap``, the
+    raw distance min |score(chosen) - score(other)|. The scores are the
+    penalised selection scores of the fits (``selection_score``), not textbook
+    BICs; ``all_bic`` lists them and ``all_n_broad`` the counts they belong to,
+    so both quantities are recomputable from the persisted result. The class
+    split between A (one symmetric shifted Gaussian) and C (asymmetric) can
+    hinge on the one-versus-two-component choice, which the rule decides within
+    a few score units of ``dbic``; the margin says how far a spectrum is from
+    that edge. The status passed on in ``diagnostics`` is that of the chosen
+    component count."""
     diagnostics = kw.pop("diagnostics", None)
     diag = diagnostics if diagnostics is not None else {}
     diag.update(status="no_valid_fit", components={})
@@ -232,10 +239,14 @@ def fit_complex_select(name, wave, fsub, ivar, max_broad=MAX_BROAD, dbic=DBIC, *
     bics = np.array([f["bic"] for f in fits])
     i = select_by_bic(bics, dbic)
     r = fits[i]
-    others = np.delete(bics, i)
-    r["bic_margin"] = float(np.min(np.abs(bics[i] - others))) if others.size else np.nan
+    margin, at, direction = selection_margin(bics, dbic)
+    r["bic_margin"] = float(margin)
+    r["bic_margin_flip"] = (dict(n_broad=int(fits[at]["n_broad"]), direction=direction)
+                            if at >= 0 else None)
+    r["bic_gap"] = score_gap(bics, i)
     diag.update(status=r["solver"]["status"], selected_n_broad=r["n_broad"],
                 converged=r["converged"])
     r["all_bic"] = [float(b) for b in bics]
+    r["all_n_broad"] = [int(f["n_broad"]) for f in fits]
     r["all_chi2"] = [float(f["chi2"]) for f in fits]
     return r, fits

@@ -115,17 +115,26 @@ def test_unconverged_continuum_does_not_stop_the_lines(synthetic, monkeypatch):
     assert res["mc_info"]["status"] == "not_requested"
 
 
-def test_bic_margin_is_the_distance_to_the_next_component_count(example, synthetic):
+def test_bic_margin_crosses_the_selection_edge_and_keeps_raw_gap(example, synthetic):
+    from blrfit.model.broad import select_by_bic
     _, res = example
     row = blrfit.summary_row(res)
     for name in ("Halpha", "Hbeta"):
         r = res["fits"][name]
-        b = r["all_bic"]; i = r["n_broad"] - 1
+        b = np.asarray(r["all_bic"]); i = r["all_n_broad"].index(r["n_broad"])
         assert len(b) == 3
         expected = min(abs(b[i] - b[j]) for j in range(len(b)) if j != i)
         assert np.isfinite(r["bic_margin"]) and r["bic_margin"] > 0
-        assert r["bic_margin"] == expected
-        assert row[f"{PREFIX[name]}_bic_margin"] == expected
+        assert r["bic_gap"] == expected
+        assert row[f"{PREFIX[name]}_bic_gap"] == expected
+        assert row[f"{PREFIX[name]}_bic_margin"] == r["bic_margin"]
+        flip = r["bic_margin_flip"]
+        j = r["all_n_broad"].index(flip["n_broad"])
+        before, after = b.copy(), b.copy()
+        before[j] += flip["direction"] * (r["bic_margin"] - 1e-6)
+        after[j] += flip["direction"] * (r["bic_margin"] + 1e-6)
+        assert select_by_bic(before, res["settings"]["dbic"]) == i
+        assert select_by_bic(after, res["settings"]["dbic"]) != i
     # one component count only: no margin
     single = fit_synthetic(synthetic, max_broad=1)
     assert np.isnan(single["fits"]["Halpha"]["bic_margin"])

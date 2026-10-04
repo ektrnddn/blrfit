@@ -36,7 +36,11 @@ systemic redshift and luminosity that are derived from it.
 ``sii_mode`` ('soft'), ``o3_mode`` ('order') and ``o3_split`` (False) name the
 fixed choices for the [S II] tie and the [O III] core/wing ordering, whose
 alternatives were rejected during development; they are kept so that results
-written by earlier versions of the fitter can be compared.
+written by earlier versions of the fitter can be compared. ``fe_uv_width_policy``
+and ``fe_uv_fallback_kms`` record the treatment of the ultraviolet Fe II width
+and ``host_guard`` whether the host was skipped where its window carries no
+signal (``host_info['host_undetermined']``); results without these keys were
+fitted with policy "A", the fallback at FE_UV_FWHM_FIXED_KMS and no guard.
 """
 from __future__ import annotations
 
@@ -46,7 +50,7 @@ from ..constants import (ERR_FLOOR, HOST_ZMAX, SIG_BROAD_MIN, MAX_BROAD, DBIC, V
                          HOST_CONTINUUM_ONLY, O3_ORDER_AMPLITUDE, O3_INFORMED_START,
                          O3_START_MIN_SNR, SYS_PRIOR_KMS, SYS_PRIOR_MIN_SNR, V_NARROW_MAX,
                          BROAD_WIDTH_SLOPE, NLR_WING, NARROW_PRIOR_MIN_SNR,
-                         FLUX_SCALE_MIN, FLUX_SCALE_MAX)
+                         FLUX_SCALE_MIN, FLUX_SCALE_MAX, FE_UV_WIDTH_POLICY, FE_UV_FWHM_FIXED_KMS)
 from .extinction import deredden
 from .continuum import fit_continuum, fit_continuum_host
 from .lines import fit_complex, fit_complex_select
@@ -147,7 +151,9 @@ def fit_spectrum(wave_obs, flux, ivar, z, ebv=0.0, host=True, fe=True,
                  use_ha_systemic=True, oiii_wing=True, heii=True,
                  mgii_narrow=True, mgii_doublet=False, nmc=0, seed=0,
                  thresholds=None, sig_broad_min=SIG_BROAD_MIN, err_floor=ERR_FLOOR,
-                 flux_scale=1.0):
+                 flux_scale=1.0, fe_uv_width_policy=FE_UV_WIDTH_POLICY,
+                 fe_uv_fallback_kms=FE_UV_FWHM_FIXED_KMS, host_guard=True,
+                 mc_noise_policy="input"):
     """Fit one spectrum end to end; see the module docstring for the result keys.
 
     wave_obs : observed-frame vacuum wavelength, Angstrom
@@ -165,9 +171,19 @@ def fit_spectrum(wave_obs, flux, ivar, z, ebv=0.0, host=True, fe=True,
     host, fe : include the host galaxy / the Fe II templates in the continuum
     complexes : any of "Halpha", "Hbeta", "MgII"; a complex outside the data is skipped
     nmc, seed : Monte Carlo realisations for the errors (0 = none)
+    mc_noise_policy : "input" uses the supplied pixel variance for perturbations;
+        "effective" includes the fitting variance floor as independent noise for
+        historical reproduction. Both retain the same ordinary fitting weights.
     thresholds : overrides of the classification thresholds (``DEFAULT_THRESH``)
+    fe_uv_width_policy, fe_uv_fallback_kms : treatment of the ultraviolet Fe II width
+        ("A", "B" or "C", see FE_UV_WIDTH_POLICY in constants.py) and the width it is
+        held at under A and C; both recorded in ``settings``
+    host_guard : skip the host when the 4200-5000 A window carries no signal
+        (``host_info['host_undetermined']``; see fit_continuum_host); recorded in ``settings``
     """
     complexes = tuple(complexes)
+    if mc_noise_policy not in ("input", "effective"):
+        raise ValueError("mc_noise_policy must be 'input' or 'effective'")
     flux_scale = float(flux_scale)
     if not (np.isfinite(flux_scale) and flux_scale > 0):
         raise ValueError(f"flux_scale must be a positive finite number, got {flux_scale!r}")
@@ -205,6 +221,9 @@ def fit_spectrum(wave_obs, flux, ivar, z, ebv=0.0, host=True, fe=True,
                 "flux_scale, the factor that brings it to that unit (1e17 for erg/s/cm^2/A); the "
                 "amplitude bounds and starting values of the model are set for that unit")
     flux, ivar = deredden(wave_obs, flux, ivar, ebv)
+    # Preserve measurement noise separately from the modelling floor used to
+    # weight the fit. Both arrays undergo the same frame/unit transformation.
+    ivar_stat = ivar.copy()
     # Error floor: a fractional flux-calibration/model term in quadrature.
     # The narrow-line cores of bright galaxies reach per-pixel S/N of several
     # hundred, where the residuals of any line model are limited by the
@@ -217,15 +236,17 @@ def fit_spectrum(wave_obs, flux, ivar, z, ebv=0.0, host=True, fe=True,
     wr = wave_obs / (1 + z); fr = flux * (1 + z); ir = ivar / (1 + z) ** 2
 
     res = dict(z=z, wave_rest=wr, flux_rest=fr, ivar_rest=ir, fits={}, meas={}, cls={},
+               ivar_stat_rest=ivar_stat / (1 + z) ** 2,
                mc={}, err={}, mc_info=dict(status="not_requested"))
+    conti_kw = dict(fit_fe=fe, fe_uv_width_policy=fe_uv_width_policy, fe_uv_fallback_kms=fe_uv_fallback_kms)
     if host and z < HOST_ZMAX:
-        cd, ctotal, host_model, hinfo = fit_continuum_host(wr, fr, ir, fit_fe=fe)
+        cd, ctotal, host_model, hinfo = fit_continuum_host(wr, fr, ir, host_guard=host_guard, **conti_kw)
         cmodel = ctotal - host_model                 # power law + Fe II only
         cinfo = hinfo
     else:
         host_model = np.zeros_like(fr)
         hinfo = dict(applied=False, reason="host=False" if not host else f"z >= {HOST_ZMAX}: no host decomposition")
-        cd, cmodel, cinfo = fit_continuum(wr, fr, ir, fit_fe=fe)
+        cd, cmodel, cinfo = fit_continuum(wr, fr, ir, **conti_kw)
     res["host_model"] = host_model; res["host_info"] = hinfo
     res["conti"] = cd; res["conti_model"] = cmodel
     res['continuum_info'] = {k: v for k, v in cinfo.items() if k != 'ps'}
@@ -239,7 +260,10 @@ def fit_spectrum(wave_obs, flux, ivar, z, ebv=0.0, host=True, fe=True,
                            nlr_wing=NLR_WING, use_ha_systemic=use_ha_systemic,
                            complexes=list(complexes), ebv=ebv, nmc=nmc, seed=seed,
                            mgii_narrow=mgii_narrow, mgii_doublet=mgii_doublet,
-                           thresholds=dict(thresholds or {}), flux_scale=flux_scale)
+                           thresholds=dict(thresholds or {}), flux_scale=flux_scale,
+                           fe_uv_width_policy=cinfo.get("feuv_policy", fe_uv_width_policy),
+                           fe_uv_fallback_kms=float(cinfo.get("feuv_fallback_kms", fe_uv_fallback_kms)),
+                           host_guard=bool(host_guard), mc_noise_policy=mc_noise_policy)
     fsub = fr - host_model - cmodel
     res["flux_sub"] = fsub
     # A continuum solver that stopped short of convergence still leaves a
@@ -325,12 +349,16 @@ def summary_row(res, prefix_meta=None):
     ``continuum_status``, ``conti_at_bound`` (continuum parameters that ended
     at a bound, comma separated) and ``conti_feuv_fwhm_fixed`` from
     ``continuum_info``; per line ``*_fit_status`` and ``*_converged`` from
-    ``fit_status``, and ``*_bic_margin`` (the distance of the chosen
-    component count from the next in BIC) from the fit."""
+    ``fit_status``, and ``*_bic_margin`` (the smallest single-score change
+    that changes the chosen component count) from the fit. MC counts separate
+    contributing, finite and solver-converged draws; flags and their scalar
+    diagnostics accompany the percentile errors."""
     row = dict(prefix_meta or {})
     row["z_in"] = res["z"]
     row["host_applied"] = bool(res["host_info"].get("applied", False))
     row["host_frac"] = res["host_info"].get("host_frac_4200_5000", np.nan)
+    if "host_undetermined" in res["host_info"]:
+        row["host_undetermined"] = bool(res["host_info"]["host_undetermined"])
     for k in ("pl_alpha", "pl_norm", "feop_norm", "feop_fwhm", "feuv_norm"):
         row[f"conti_{k}"] = res["conti"].get(k, np.nan)
     if "continuum_status" in res:
@@ -348,6 +376,8 @@ def summary_row(res, prefix_meta=None):
             row[f"{p}_{k}"] = m.get(k, np.nan)
         if "bic_margin" in res["fits"].get(name, {}):
             row[f"{p}_bic_margin"] = res["fits"][name]["bic_margin"]
+        if "bic_gap" in res["fits"].get(name, {}):
+            row[f"{p}_bic_gap"] = res["fits"][name]["bic_gap"]
         for k, e in res["err"].get(name, {}).items():
             row[f"{p}_e_{k}"] = e
         c = res["cls"].get(name, {})
@@ -362,6 +392,15 @@ def summary_row(res, prefix_meta=None):
             row[f"{p}_mc_n_success"] = md["n_success"]
             row[f"{p}_mc_n_failed"] = md["n_failed"]
             row[f"{p}_mc_n_finite_c50_sys"] = md["n_finite"]["c50_sys"]
+            for key in ("alias_fraction", "alias_n_assessed", "alias_n_unassessed",
+                        "mc_sigma", "mc_gap_kms", "n_converged_lines",
+                        "n_converged_both", "n_unconverged_lines", "n_unconverged_continuum"):
+                if key in md:
+                    column = key if key.startswith("mc_") else "mc_" + key
+                    row[f"{p}_{column}"] = md[key]
             row[f"{p}_mc_flags"] = ",".join(md["flags"])
             row[f"{p}_mc_uncertainty_model"] = mc_info["uncertainty_model"]
+            if "noise_policy" in mc_info:
+                row[f"{p}_mc_noise_policy"] = mc_info["noise_policy"]
+                row[f"{p}_mc_noise_variance_source"] = mc_info["noise_variance_source"]
     return row

@@ -1,15 +1,16 @@
 """
-Public spectra of a sky position: SDSS through astroquery and the science
+Public spectra of a sky position: SDSS through the Data Lab catalogue mirror and the science
 archive server, DESI public releases through the DESI file server
 (data.desi.lbl.gov/public).
 
 Nothing here runs unless asked for (the ``blrfit fetch`` subcommand or a
 direct call); the fitting code never touches the network.
 
-SDSS: every spectroscopic visit within the search radius is listed with
-``astroquery.sdss.SDSS.query_region`` (data release 16) and the
-``spec-PLATE-MJD-FIBER.fits`` files are downloaded from the DR16 science archive
-server. Repeat visits are kept: they are epochs.
+SDSS: all SpecObjAll products within at most 1.5 arcsec are listed from the
+Data Lab mirror (DR17 by default) and downloaded from the corresponding SDSS
+science archive. Repeat products are retained by plate/MJD/fiber identity.
+The CLI uses io.public for indexed DESI discovery; fetch_desi below retains the
+older coordinate/file-search Python API for compatibility.
 
 DESI: the position gives the nside = 64 nested healpix; for each public release
 (DR1 = ``iron``, EDR = ``fuji``) and each survey/program combination, the
@@ -71,10 +72,23 @@ DESI_TILE_GROUP = "cumulative"    # the tile coadds that stack every exposure of
 DESI_REMOTE_BLOCK_SIZE = 1 << 16
 
 
+def require_requests():
+    """Keep local-file fitting usable without the optional fetch dependencies."""
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImportError(
+            "Public spectrum lookup/download requires the fetch dependencies. "
+            "Install this same blrfit version with its [fetch] extra; "
+            "from a checkout use: python -m pip install '.[fetch]'"
+        ) from exc
+    return requests
+
+
 # ----------------------------------------------------------------------------
 # SDSS
 # ----------------------------------------------------------------------------
-def sdss_spec_url(plate, mjd, fiber, run2d):
+def sdss_spec_url(plate, mjd, fiber, run2d, data_release=16):
     """URL and file name of a spec file on the DR16 science archive server."""
     p4, m5, f4 = f"{int(plate):04d}", f"{int(mjd):05d}", f"{int(fiber):04d}"
     fn = f"spec-{p4}-{m5}-{f4}.fits"
@@ -82,54 +96,64 @@ def sdss_spec_url(plate, mjd, fiber, run2d):
     if r in {"26", "103", "104"}:
         rel = f"sdss/spectro/redux/{r}/spectra/{p4}/{fn}"
     else:
-        rel = f"eboss/spectro/redux/v5_13_0/spectra/lite/{p4}/{fn}"
-    return f"{SDSS_SAS}/{rel}", fn
+        reduction = {16: "v5_13_0", 17: "v5_13_2"}.get(data_release)
+        if reduction is None:
+            raise ValueError("public SDSS lookup supports DR16 or DR17")
+        rel = f"eboss/spectro/redux/{reduction}/spectra/lite/{p4}/{fn}"
+    return f"https://data.sdss.org/sas/dr{int(data_release)}/{rel}", fn
 
 
-def query_sdss(ra, dec, radius_arcsec=2.0, data_release=16):
-    """List of dicts (plate, mjd, fiberid, run2d, ra, dec, z, cls, url, filename)
-    for every SDSS spectrum within the radius."""
-    from astropy.coordinates import SkyCoord
-    import astropy.units as u
-    from astroquery.sdss import SDSS
-    res = SDSS.query_region(SkyCoord(float(ra) * u.deg, float(dec) * u.deg),
-                            radius=radius_arcsec * u.arcsec, spectro=True, data_release=data_release)
-    rows = []
-    if res is None or len(res) == 0:
-        return rows
-    low = {c.lower(): c for c in res.colnames}
+def query_sdss(ra, dec, radius_arcsec=1.5, data_release=17):
+    """Return all DR16/17 SpecObjAll positional candidates, retaining visits.
 
-    def g(sp, name, default=np.nan):
-        c = low.get(name.lower())
-        if c is None:
-            return default
-        v = sp[c]
-        try:
-            return default if np.ma.is_masked(v) else v
-        except TypeError:
-            return v
-
-    seen = set()
-    for sp in res:
-        try:
-            key = (int(g(sp, "plate")), int(g(sp, "mjd")), int(g(sp, "fiberID")))
-        except Exception:
-            continue
+    Query the Data Lab mirror rather than a nearest-neighbour crossmatch view.
+    A local spherical separation check enforces the requested radius as well.
+    """
+    import csv
+    import io
+    requests = require_requests()
+    from .public import position, separation, TAP_URL, MAX_PRODUCTS
+    ra, dec = position(ra, dec)
+    if not np.isfinite(radius_arcsec) or not 0 < radius_arcsec <= 1.5:
+        raise ValueError("SDSS matching radius must be positive and at most 1.5 arcsec")
+    if data_release not in (16, 17):
+        raise ValueError("public SDSS lookup supports DR16 or DR17")
+    query = (f"SELECT TOP {MAX_PRODUCTS+1} plate,mjd,fiberid,run2d,ra,dec,z,class "
+             f"FROM sdss_dr{data_release}.specobjall WHERE "
+             f"'t'=q3c_radial_query(ra,dec,{ra:.15g},{dec:.15g},{radius_arcsec/3600:.15g})")
+    response = requests.get(TAP_URL, params=dict(REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=query), timeout=60)
+    response.raise_for_status()
+    reader = csv.DictReader(io.StringIO(response.text))
+    required = {"plate", "mjd", "fiberid", "run2d", "ra", "dec", "z", "class"}
+    if not required.issubset(reader.fieldnames or []):
+        raise RuntimeError("SDSS catalogue service returned an error or an unexpected schema; retry later")
+    found = list(reader)
+    if len(found) >= MAX_PRODUCTS+1:
+        raise ValueError("too many SDSS products; narrow the query")
+    rows, seen = [], set()
+    for r in found:
+        key = (int(r["plate"]), int(r["mjd"]), int(r["fiberid"]))
+        if any(v <= 0 for v in key):
+            raise ValueError("invalid SDSS product identity")
         if key in seen:
             continue
         seen.add(key)
-        run2d = str(g(sp, "run2d", "v5_13_0"))
-        url, fn = sdss_spec_url(*key, run2d=run2d)
-        rows.append(dict(plate=key[0], mjd=key[1], fiberid=key[2], run2d=run2d,
-                         ra=float(g(sp, "ra", np.nan)), dec=float(g(sp, "dec", np.nan)),
-                         z=float(g(sp, "z", np.nan)), cls=str(g(sp, "class", "")), url=url, filename=fn))
+        rra, rdec = position(r["ra"], r["dec"])
+        sep = float(separation(ra, dec, rra, rdec))
+        if sep > radius_arcsec:
+            continue
+        url, fn = sdss_spec_url(*key, run2d=r["run2d"], data_release=data_release)
+        rows.append(dict(plate=key[0], mjd=key[1], fiberid=key[2], run2d=r["run2d"],
+                         ra=rra, dec=rdec, z=float(r["z"]), cls=r["class"], sep_arcsec=sep,
+                         data_release=data_release, url=url, filename=fn,
+                         catalogue=f"sdss_dr{data_release}.specobjall", product="pipeline_coadd"))
     return rows
 
 
 def download(url, dest, clobber=False, timeout=120):
     """Download ``url`` to ``dest`` through a temporary file; a partial file never
     gets the final name. Returns the path, or None on failure."""
-    import requests
+    requests = require_requests()
     dest = Path(dest); dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0 and not clobber:
         return str(dest)
@@ -162,14 +186,20 @@ def download(url, dest, clobber=False, timeout=120):
                 pass
 
 
-def fetch_sdss(ra, dec, out_dir, radius_arcsec=2.0, data_release=16, verbose=True):
+def fetch_sdss(ra, dec, out_dir, radius_arcsec=1.5, data_release=17, verbose=True):
     """Download every SDSS spectrum within the radius into ``out_dir``.
     Returns the list of ``query_sdss`` rows with a ``path`` entry for each file obtained."""
     rows = query_sdss(ra, dec, radius_arcsec=radius_arcsec, data_release=data_release)
     if verbose:
         print(f"SDSS: {len(rows)} spectrum(s) within {radius_arcsec}\" of ({ra:.5f}, {dec:+.5f})")
     for r in rows:
-        p = download(r["url"], Path(out_dir) / r["filename"])
+        p = download(r["url"], Path(out_dir) / "sdss" / f"dr{data_release}" / r["filename"])
+        if p:
+            from .sdss import read_sdss
+            data = read_sdss(p)
+            if (data["plate"], data["mjd"], data["fiber"]) != (r["plate"], r["mjd"], r["fiberid"]):
+                raise ValueError(f"SDSS downloaded product identity does not match the catalogue: {p}")
+            r["sha256"] = _sha256(p)
         r["path"] = p
         if verbose:
             print(f"  {r['filename']}  MJD {r['mjd']}  z = {r['z']:.4f}  {'ok' if p else 'FAILED'}")
@@ -253,7 +283,7 @@ def read_desi_tiles_table(path):
 
 
 def _url_exists(url, timeout=20):
-    import requests
+    requests = require_requests()
     try:
         r = requests.head(url, timeout=timeout, allow_redirects=True)
         return r.status_code == 200

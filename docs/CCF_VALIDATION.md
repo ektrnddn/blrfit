@@ -2,9 +2,35 @@
 
 This file records what the corrected cross-correlation (`blrfit.rv`) has been measured to do,
 on synthetic pairs and on real DESI and SDSS spectra, and what it has not yet been calibrated
-for. All numbers were measured on 2026-09-14 on macOS arm64 with numpy 1.26.4 and scipy 1.13.1.
-Every number below was measured with the final code of this version (two-stage search, despike
-and plausibility checks).
+for. The historical tables below were measured on 2026-09-14 on macOS arm64 with numpy 1.26.4
+and scipy 1.13.1, using the then-current two-stage search, despike and plausibility checks.
+They have not been remeasured with the September 24 support correction described next.
+
+## September 24: fixed pixel support, estimator `profile-eiv-v3`
+
+The broad two-stage search now requires the same profile pixels to have valid template data
+at every trial shift, including across internal masked gaps. Checking only the template's
+outer extent previously let the compared pixel identities change with velocity; even equal
+pixel counts could hide that problem. A search with insufficient common support now returns
+no measurement instead of silently switching to variable support. This can reduce the velocity
+range supported by a gapped spectrum. Explicit single-stage narrow-line searches are unchanged.
+
+The isolated correction passed nine targeted checks and 82 existing RV checks before integration.
+All 135 retained development pair attempts were compared with the same fitted spectra, seeds,
+criteria and thresholds: 270 line outcomes, including unavailable results, remain recorded.
+All 494 returned two-stage directional searches had constant pixel counts; targeted tracing also
+verified fixed pixel identities. No fit was rerun or fitting component added for this comparison.
+
+This fixes a software invariant, not the scientific uncertainty problem. Some noisy zero-shift
+profiles still show false statistical detections; other cases lose support. The strong boundary
+Halpha +4000 km/s group's median residual remains +148.66 km/s with zero of ten realizations
+inside two reported statistical errors. These selected development groups are not independent
+population validation, and these diagnostic detections are not calibrated accepted movers.
+The historical calibration must not be transferred to `profile-eiv-v3`. No scientific acceptance
+threshold or model-complexity setting was changed to improve these results.
+
+The project audit is `nersc_validation/production_audit/v9_rv_diagnosis_20260924T221200Z/`;
+it retains source snapshots, preregistration, all comparisons, failures and integration checks.
 
 ## Synthetic pairs: the cross-correlation alone
 

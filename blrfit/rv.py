@@ -13,8 +13,9 @@ This DEVELOPMENT estimator is not a calibrated production likelihood:
   noise perturbations do preserve it in the optional conditional bootstrap).
 * Continuum/narrow subtraction covariance and instrumental resolution changes
   are not modeled by the diagonal 7% narrow subtraction term.
-* Q-N compensates a varying overlap count heuristically; it is not a likelihood
-  ratio for one fixed data set. Clipping and polynomial refinement also require
+* The broad two-stage search uses fixed pixel support, including internal
+  gaps. Explicit single-stage searches retain the heuristic Q-N correction
+  for varying overlap. Clipping and polynomial refinement still require
   empirical coverage tests. Delta-Q intervals/profile_z are diagnostics.
 * Native noise perturbations condition on fitted subtraction and the observed
   profiles; they do not establish unconditional uncertainty coverage.
@@ -38,6 +39,8 @@ from .constants import (C_KMS, LAM, CCF_VMAX_KMS, CCF_WIN_FWHM, CCF_WIN_MIN_KMS,
                         CCF_SCALE_RANGE, CCF_SCALE_PRODUCT_RANGE, CCF_ALT_MIN_SEP_KMS,
                         CCF_COMMON_MIN_FRAC, CCF_REFINE_HALF_KMS, CCF_REFINE_HALF_PIX)
 from .model.lines import eval_components
+
+ALGORITHM_VERSION = "profile-eiv-v3"
 
 DCHI2_99 = CCF_DCHI2_99
 SIG_FROM_99 = CCF_SIG_FROM_99
@@ -384,11 +387,16 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
         """Window pixels (profile positions on the template grid) with template
         data at every shift from lo_n to hi_n pixels (template index = position
         minus shift)."""
-        if not validT.any():
-            return np.zeros(nT, bool)
-        t_first = int(np.argmax(validT))
-        t_last = int(nT - 1 - np.argmax(validT[::-1]))
-        return inwin & validP & (idx >= t_first + hi_n) & (idx <= t_last + lo_n)
+        # At fixed profile pixel i, all template indices i-hi_n ... i-lo_n
+        # must exist and be valid. Extents alone miss internal masked gaps.
+        left = idx - hi_n
+        right = idx - lo_n
+        inside = (left >= 0) & (right < nT)
+        bad_prefix = np.r_[0, np.cumsum(~validT, dtype=np.int64)]
+        lo = np.clip(left, 0, nT)
+        hi = np.clip(right + 1, 0, nT)
+        all_valid = (bad_prefix[hi] - bad_prefix[lo]) == 0
+        return inwin & validP & inside & all_valid
 
     def arrays_at(nshift, win, excl, fPv=fP, fTv=fT):
         """(y, x, velocities, var_y, var_x, positions) of the pixels compared at one shift."""
@@ -467,7 +475,7 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
             N1 -= 1
         win1 = common_set(-N1, N1)
         if int(win1.sum()) < min_pix:
-            N1, win1, use_two = N, inwin, False      # no data beyond the window: one stage
+            return None  # Insufficient common support: no variable-pixel fallback.
     ns1 = np.arange(-N1, N1 + 1)
     r1 = search(ns1, win1)
     if r1 is None:
@@ -533,7 +541,7 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
                 search_range=(float(dv_grid1[fin1[0]]), float(dv_grid1[fin1[-1]])),
                 common_frac=common_frac, two_stage=use_two, refine_unstable=unstable,
                 npix_search=(int(finite1.min()), int(finite1.max())),
-                algorithm_version="profile-eiv-v2", covariance_mode="diagonal",
+                algorithm_version=ALGORITHM_VERSION, covariance_mode="diagonal",
                 interpolation_covariance_ignored=bool(regridded), uncertainty_calibrated=False,
                 velocity_convention="optical_translation", err_method="delta_chi2", bracket="none", refined=False,
                 n_mc_requested=int(n_mc), n_mc_success=0, bootstrap_fallback_reason=None)
@@ -808,7 +816,7 @@ def shift_bidirectional(prof_a, prof_b, **kw):
                 npix=int(min(s_ab["npix"], s_ba["npix"])),
                 regridded=bool(s_ab["regridded"] or s_ba["regridded"]),
                 resid_frac=_finite_extreme((s_ab.get("resid_frac", np.nan), s_ba.get("resid_frac", np.nan))),
-                algorithm_version="profile-eiv-v2", covariance_mode="diagonal", uncertainty_calibrated=False,
+                algorithm_version=ALGORITHM_VERSION, covariance_mode="diagonal", uncertainty_calibrated=False,
                 interpolation_covariance_ignored=bool(s_ab["regridded"] or s_ba["regridded"]),
                 velocity_convention="optical_translation",
                 err_method=(methods[0] if methods[0] == methods[1] else "mixed") if valid else "unavailable",
