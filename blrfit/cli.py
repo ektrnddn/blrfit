@@ -5,8 +5,9 @@ Command-line interface.
     blrfit rv    EPOCH1 EPOCH2 --z Z --line Halpha [...]           velocity change between two spectra
     blrfit fetch --ra RA --dec DEC [--out DIR] [...]                 public SDSS and DESI spectra of a position
 
-``fit`` always exits with status 0 when the spectrum could be read: a line
-that cannot be fitted or classified is reported as such in the JSON.
+Successful point fits include explicit unavailable-line outcomes. Input or
+fitting exceptions return a nonzero status; public batches retain failed products
+in their manifests. Between-epoch routines are experimental.
 """
 from __future__ import annotations
 
@@ -71,15 +72,26 @@ def _add_table_args(p):
     g.add_argument("--frame", default="obs", help="obs (default) or rest; rest needs --z")
     g.add_argument("--air", action="store_true", help="wavelengths are in air (converted to vacuum)")
     g.add_argument("--flux-scale", type=float, default=1.0,
-                   help="factor bringing the flux to 1e-17 erg/s/cm^2/A (needed for luminosities only)")
+                   help="multiply flux and statistical error into 1e-17 erg/s/cm^2/observed-A")
     g.add_argument("--hdu", type=int, default=1, help="extension of a FITS table (default 1)")
+    g.add_argument("--row", type=int, help="zero-based spectrum row for a vector table or 2-D image")
+    g.add_argument("--z-column", help="redshift column for a generic table")
+    g.add_argument("--z-key", help="FITS header redshift keyword (primary or --hdu)")
+    g.add_argument("--mask", help="generic table mask column; nonzero pixels excluded")
+    g.add_argument("--flux-frame", choices=("obs", "rest"), default="obs",
+                   help="flux-density frame, separately from the wavelength frame (default obs)")
+    for name in ("wave", "flux", "err", "ivar"):
+        g.add_argument(f"--{name}-hdu", type=lambda s: int(s) if s.isdigit() else s,
+                       help=f"image HDU name or number containing {name}")
 
 
 def _table_kwargs(a):
-    if a.err is None and a.ivar is None:
+    if a.err is None and a.ivar is None and a.err_hdu is None and a.ivar_hdu is None:
         sys.exit("a table needs its error column: give --err <column> (1-sigma) or --ivar <column> (inverse variance)")
     return dict(wave=a.wave, flux=a.flux, err=a.err, ivar=a.ivar, wave_unit=a.wave_unit, frame=a.frame,
-                air=a.air, z=a.z, flux_scale=a.flux_scale, hdu=a.hdu)
+                air=a.air, z=a.z, flux_scale=a.flux_scale, hdu=a.hdu, row=a.row,
+                z_column=a.z_column, z_key=a.z_key, mask=a.mask, flux_frame=a.flux_frame,
+                wave_hdu=a.wave_hdu, flux_hdu=a.flux_hdu, err_hdu=a.err_hdu, ivar_hdu=a.ivar_hdu)
 
 
 def _load(path, a, targetid=None):
@@ -87,14 +99,11 @@ def _load(path, a, targetid=None):
     if not os.path.exists(path):
         sys.exit(f"file not found: {path}")
     try:
-        if is_desi_coadd(path):
-            if targetid is None:
-                sys.exit("a DESI coadd needs --targetid")
-            sp = read_spectrum(path, targetid=int(targetid))
-        elif is_sdss_spec(path):
-            sp = read_spectrum(path)
-        else:
-            sp = read_spectrum(path, **_table_kwargs(a))
+        survey = getattr(a, "survey", "auto")
+        generic = survey == "generic" or (survey == "auto" and not is_desi_coadd(path) and not is_sdss_spec(path))
+        sp = read_spectrum(path, targetid=targetid, survey=survey,
+            mask_policy=getattr(a, "sdss_mask_policy", "ivar"), redrock=getattr(a, "redrock", None),
+            **(_table_kwargs(a) if generic else {}))
     except (ValueError, KeyError, OSError) as e:
         sys.exit(f"cannot read {path}: {e}")
     if a.z is not None:
@@ -143,9 +152,12 @@ def _line_record(name, res):
     """The JSON record of one line."""
     if name not in res["fits"]:
         lo, hi = COMPLEX_WINDOW[name]
+        state = res.get('fit_status', {}).get(name, {})
+        status = state.get('status', 'unknown')
+        reason = (f'complex not fitted: {status}' if status not in ('unknown', 'unusable_window', 'uncovered_core')
+                  else f'complex not fitted: insufficient usable coverage in {lo:.0f}-{hi:.0f} A')
         return dict(fitted=False, label="", class_text="not fitted",
-                    reasons=[f"complex not fitted: the rest-frame window {lo:.0f}-{hi:.0f} A is not covered "
-                             f"(the line core must be covered to +/-3500 km/s with at least 60 pixels)"],
+                    reasons=[reason], fit_status=state,
                     flags=[], flag_text=[], measurable=False, strong_offset=False, dv=None)
     m = res["meas"][name]; c = res["cls"][name]; e = res["err"].get(name, {})
     dv = m.get("c50_sys", np.nan)
@@ -166,6 +178,14 @@ def _line_record(name, res):
     for k in LINE_KEYS:
         rec[k] = m.get(k, np.nan)
     rec["errors_mc"] = dict(e)
+    rec['fit_status'] = res.get('fit_status', {}).get(name, {})
+    rec['converged'] = bool(res['fits'][name].get('converged', True))
+    rec['continuum_status'] = res.get('continuum_status', 'unknown')
+    rec['bic_margin'] = res['fits'][name].get('bic_margin', np.nan)
+    rec['solver'] = res['fits'][name].get('solver', {})
+    rec['fit_statistics'] = {k: res['fits'][name].get(k) for k in
+                            ('data_chi2', 'penalty_chi2', 'selection_score', 'selection_score_kind',
+                             'data_score_at_penalized_fit')}
     rec["bic_all"] = list(m.get("bic_all", []))
     return rec
 
@@ -179,7 +199,7 @@ def _print_fit_table(lines, res, out):
             continue
         L = lines[name]
         if not L["fitted"]:
-            out(f"{name:7} {'-':3} {'not fitted (window not covered)':>12}")
+            out(f"{name:7} {'-':3} {L['reasons'][0]}")
             continue
         out(f"{name:7} {L['label']:3} {_fmt(L['dv'], 12, 0, True)} {_fmt(L['dv_err_mc'], 6)} {_fmt(L['dv_err_model'], 6)} "
             f"{_fmt(L['v_peak_sys'], 7, 0, True)} {_fmt(L['centroid_sys'], 7, 0, True)} {_fmt(L['fwhm'], 6)} {L['n_broad']:>2} "
@@ -203,6 +223,13 @@ def _print_fit_table(lines, res, out):
 # fit
 # ----------------------------------------------------------------------------
 def cmd_fit(a):
+    if a.nmc < 0:
+        sys.exit("--nmc must be nonnegative")
+    if a.spectrum is None:
+        from .input_workflow import fit_public
+        return fit_public(a, cmd_fit)
+    if a.include_sdss:
+        sys.exit("--include-sdss is for public queries without a local file")
     sp, z, zsrc, ebv, esrc = _load(a.spectrum, a, a.targetid)
     names = {k.lower(): k for k in COMPLEX_WINDOW}
     lines = [names.get(s.strip().lower(), s.strip()) for s in a.lines.split(",") if s.strip()]
@@ -215,18 +242,37 @@ def cmd_fit(a):
     out(f"blrfit {__version__}: {a.spectrum}" + (f" TARGETID {int(a.targetid)}" if a.targetid else "")
         + f"  z = {z:.5f} ({zsrc})  E(B-V) = {ebv:.4f} ({esrc})  lines {','.join(lines)}"
         + (f"  Monte Carlo {a.nmc}" if a.nmc else ""))
-    res = fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z, ebv=ebv, host=not a.no_host, fe=not a.no_fe,
-                       complexes=tuple(lines), max_broad=a.max_broad, dbic=a.dbic, nmc=a.nmc, seed=a.seed,
-                       err_floor=a.err_floor)
+    try:
+        res = fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z, ebv=ebv, host=not a.no_host, fe=not a.no_fe,
+                           complexes=tuple(lines), max_broad=a.max_broad, dbic=a.dbic, nmc=a.nmc, seed=a.seed,
+                           err_floor=a.err_floor, mc_noise_policy=a.mc_noise_policy)
+    except ValueError as e:
+        sys.exit(f"cannot fit {a.spectrum}: {e}")
     recs = {name: _line_record(name, res) for name in lines}
+    for rec in recs.values():
+        # The historical DESI-repeat formula was never an SDSS calibration or
+        # a validation of this release. Keep it only as an explicitly requested diagnostic.
+        legacy = rec.get("dv_err_model")
+        rec["dv_err_model"] = np.nan
+        if a.legacy_error_diagnostic and sp.get("kind") == "desi":
+            rec["legacy_desi_repeat_error_diagnostic"] = legacy
+        rec["uncertainty_calibrated"] = False
     _print_fit_table(recs, res, out)
 
     stem = a.stem or _stem(a.spectrum, sp, a.targetid)
     os.makedirs(a.out, exist_ok=True)
     base = os.path.join(a.out, stem)
     hi = res["host_info"]
-    doc = dict(blrfit_version=__version__,
-               input=dict(path=os.path.abspath(a.spectrum), kind=sp.get("kind"), targetid=(int(a.targetid) if a.targetid else None),
+    doc = dict(blrfit_version=__version__, core_release="0.2.0rc1",
+               uncertainty=dict(calibrated=False, mc_requested=a.nmc,
+                   status="conditional_mc" if a.nmc else "not_computed",
+                   scope="pixel-noise perturbations; no survey-wide or between-epoch calibration",
+                   legacy_empirical_error_used=False),
+               input=dict(path=os.path.abspath(a.spectrum), kind=sp.get("kind"), targetid=sp.get("targetid"),
+                          reader_policy=sp.get("mask_policy", "RC1"),
+                          catalogue_zwarn=sp.get("zwarn"),
+                          product=sp.get("product", "DESI coadd" if sp.get("kind") == "desi" else "supplied spectrum"),
+                          public_source=getattr(a, "public_source", None),
                           z=z, z_source=zsrc, ebv=ebv, ebv_source=esrc,
                           ra=sp.get("ra", np.nan), dec=sp.get("dec", np.nan), mjd=sp.get("mjd", np.nan),
                           date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "",
@@ -239,7 +285,8 @@ def cmd_fit(a):
                               feuv_norm=res["conti"].get("feuv_norm", np.nan),
                               host_applied=bool(hi.get("applied", False)), host_frac=hi.get("host_frac_4200_5000", np.nan),
                               host_n_gal=hi.get("n_gal", 0), host_reason=hi.get("reason", "")),
-               o3_prefit=res.get("o3_prefit", {}),
+               o3_prefit=res.get("o3_prefit", {}), mc_info=res.get('mc_info', {}),
+               continuum_solver=res.get('continuum_info', {}),
                lines=recs, summary_row=summary_row(res))
     with open(base + "_fit.json", "w") as fh:
         json.dump(_clean(doc), fh, indent=1)
@@ -282,43 +329,51 @@ def _rv_line(line, res1, res2, sp1, sp2, epochs_meta, a, out):
         doc.update(measured=False, reason="the line is not fitted in both epochs or the cross-correlation failed")
         out(f"  {line}: cross-correlation not possible: " + doc["reason"])
         return doc, None
-    same_desi = sp1.get("kind") == "desi" and sp2.get("kind") == "desi"
+    from .rv_policy import measurement_policy
+    policy = measurement_policy(pair, line, sp1.get("kind"), sp2.get("kind"))
     grade = pair["profile_grade"]
-    # error floor: the DESI-DESI systematic for two DESI spectra, the graded
-    # cross-survey null otherwise (the grade inflates it for changed profiles)
-    if same_desi:
-        floor = RV.systematic_floor(line, pair.get("snr_proxy", np.nan)); floor_kind = "desi_sys"
-    else:
-        floor = RV.cross_survey_floor(line, grade); floor_kind = f"cross_survey_null_{grade}"
-    err_total = float(np.hypot(pair["err"], floor)) if (np.isfinite(pair["err"]) and np.isfinite(floor)) else np.nan
-    zp_ok = bool(pair.get("zp_ok", False))
-    dv_corr = pair["dv"] - pair["zp_dv"] if (line == "Hbeta" and zp_ok) else pair["dv"]
-    reliable = RV.is_reliable(pair)
+    err_total = policy["err_total"]
+    dv_corr = policy["dv_corrected"]
+    reliable = policy["reliable"]
     cut = RV.CCF_DIR_CUT_KMS.get(line, np.nan)
-    why = ("at bound" if pair["at_bound"] else
-           (f"profile_z {pair['profile_z']:.1f} >= {RV.CCF_PROFILE_Z_MAX:.0f}" if not (pair["profile_z"] < RV.CCF_PROFILE_Z_MAX) else
-            (f"direction mismatch {pair['dir_mismatch']:.0f} >= {cut:.0f} km/s" if not (pair["dir_mismatch"] < cut) else "")))
+    checks = [(pair["at_bound"], "at bound"),
+              (not pair.get("frame_ok", False), f"narrow-line frame: {pair.get('frame_reason', '')}"),
+              (not pair.get("scale_ok", True),
+               f"implausible flux factors {pair.get('scale_ab', np.nan):.2f} / {pair.get('scale_ba', np.nan):.2f}"),
+              (bool(pair.get("ambiguous", False)), "a second cross-correlation minimum of similar depth"),
+              (not (pair["profile_z"] < RV.CCF_PROFILE_Z_MAX), f"profile_z {pair['profile_z']:.1f} >= {RV.CCF_PROFILE_Z_MAX:.0f}"),
+              (not (pair["dir_mismatch"] < cut), f"direction mismatch {pair['dir_mismatch']:.0f} >= {cut:.0f} km/s")]
+    why = next((text for failed, text in checks if failed), "")
     s_ab = (pair.get("details") or {}).get("s_ab") or {}
     doc.update(measured=True, dv=pair["dv"], err=pair["err"], err_dchi2=s_ab.get("err_dchi2", np.nan),
-               err_method="bootstrap" if a.nmc >= 10 else "dchi2",
-               profile_grade=grade, resid_frac=pair["resid_frac"], error_floor=floor, error_floor_kind=floor_kind,
+               err_method=pair.get("err_method", s_ab.get("err_method", "unknown")),
+               n_mc_requested=pair.get("n_mc_requested", a.nmc),
+               n_mc_success=pair.get("n_mc_success", 0),
+               bootstrap_fallback_reason=pair.get("bootstrap_fallback_reason", ""),
+               algorithm_version=pair.get("algorithm_version", "unknown"),
+               covariance_mode=pair.get("covariance_mode", "unknown"),
+               profile_grade=grade, resid_frac=pair["resid_frac"],
                err_total=err_total, sigma_sys_desi=RV.systematic_floor(line, pair.get("snr_proxy", np.nan)),
-               reliable_reason=why,
+               reliable_reason=why or policy["calibration_status"],
                consistent=pair["consistent"], dir_mismatch=pair["dir_mismatch"], profile_z=pair["profile_z"],
                chi2_red=pair["chi2_red"], at_bound=pair["at_bound"], regridded=pair["regridded"], npix=pair["npix"],
-               snr_proxy=pair["snr_proxy"], zp_dv=pair["zp_dv"], zp_err=pair["zp_err"], zp_line=pair["zp_line"], zp_ok=zp_ok,
-               zp_applied=bool(line == "Hbeta" and zp_ok), dv_corrected=dv_corr, reliable=bool(reliable),
+               snr_proxy=pair["snr_proxy"], zp_dv=pair["zp_dv"], zp_err=pair["zp_err"], zp_line=pair["zp_line"],
+               zp_source=pair.get("zp_source"), frame_ok=bool(pair.get("frame_ok", False)),
+               frame_reason=pair.get("frame_reason", ""), zp_applied=bool(pair.get("zp_applied", False)),
+               dv_corrected=dv_corr, reliable=bool(reliable),
                significance=float(abs(dv_corr) / err_total) if (np.isfinite(err_total) and err_total > 0) else np.nan,
                c50_difference=epochs[1]["c50_sys"] - epochs[0]["c50_sys"],
                dv_abs_epoch1=epochs[0]["c50_sys"], dv_abs_epoch2=epochs[0]["c50_sys"] + dv_corr)
+    doc.update(policy)
     out(f"  {line}: shift of epoch 2 relative to epoch 1 {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s; "
-        f"with the {'DESI floor' if same_desi else 'cross-survey floor'} {floor:.0f} ({floor_kind}): +/- {err_total:.0f}; "
-        f"directions {'agree' if pair['consistent'] else 'DISAGREE'} (mismatch {pair['dir_mismatch']:.0f}); "
+        f"corrected shift {dv_corr:+.0f} +/- {err_total:.0f} (statistical approximation, error {pair.get('err_method', 'unknown')}); "
+        f"calibration pending; directions {'agree' if pair['consistent'] else 'DISAGREE'} "
+        f"(mismatch {pair['dir_mismatch']:.0f}); "
         f"{'regridded' if pair['regridded'] else 'same grid'}; {'at bound' if pair['at_bound'] else 'inside search range'}")
     out(f"  {line}: profile grade {grade} (z_prof {pair['profile_z']:.1f}, residual {100 * pair['resid_frac']:.1f} per cent of the peak); "
         f"reliable tier {reliable}{(' (' + why + ')') if why else ''}")
     out(f"  {line}: narrow-line zero-point ({pair['zp_line'] or 'none'}) {_fmt(pair['zp_dv'], 5, 0, True)} +/- {_fmt(pair['zp_err'], 4)} km/s "
-        f"({'applied' if doc['zp_applied'] else 'not applied'}) -> dv = {dv_corr:+.0f} km/s ({doc['significance']:.1f} sigma); "
+        f"(frame {'ok' if doc['frame_ok'] else 'VETOED, ' + doc['frame_reason']}; {'applied' if doc['zp_applied'] else 'not applied'}) -> dv = {dv_corr:+.0f} km/s ({doc['significance']:.1f} statistical error units, uncalibrated); "
         f"c(1/2) difference of the two fits {doc['c50_difference']:+.0f}; offset from the narrow lines "
         f"epoch 1 {epochs[0]['c50_sys']:+.0f}, epoch 2 {doc['dv_abs_epoch2']:+.0f} km/s")
     return doc, pair
@@ -344,8 +399,11 @@ def cmd_rv(a):
     complexes = tuple(c for c in ("Halpha", "Hbeta", "MgII") if c in lines or (c in ("Halpha", "Hbeta") and set(lines) & {"Halpha", "Hbeta"}))
     out = (lambda *x: None) if a.quiet else print
     out(f"blrfit {__version__} rv: {','.join(lines)}, z = {z:.5f} ({zsrc1}), E(B-V) {ebv1:.4f} / {ebv2:.4f}")
-    res1 = fit_spectrum(sp1["wave"], sp1["flux"], sp1["ivar"], z, ebv=ebv1, complexes=complexes)
-    res2 = fit_spectrum(sp2["wave"], sp2["flux"], sp2["ivar"], z, ebv=ebv2, complexes=complexes)
+    try:
+        res1 = fit_spectrum(sp1["wave"], sp1["flux"], sp1["ivar"], z, ebv=ebv1, complexes=complexes)
+        res2 = fit_spectrum(sp2["wave"], sp2["flux"], sp2["ivar"], z, ebv=ebv2, complexes=complexes)
+    except ValueError as e:
+        sys.exit(f"cannot fit the epochs: {e}")
     epochs_meta = [dict(path=os.path.abspath(path), kind=sp.get("kind"), targetid=tid, mjd=sp.get("mjd", np.nan),
                         date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "")
                    for path, sp, tid in ((a.epoch1, sp1, tid1), (a.epoch2, sp2, tid2))]
@@ -360,9 +418,10 @@ def cmd_rv(a):
     first = doc["lines"][lines[0]]
     doc.update({k: v for k, v in first.items() if k != "lines"})     # the first line's record at the top level
     if "Halpha" in pairs and "Hbeta" in pairs:
-        tl = RV.two_line_consistent(pairs["Halpha"], pairs["Hbeta"])
+        from .rv_policy import two_line_policy
+        tl = two_line_policy(doc["lines"]["Halpha"], doc["lines"]["Hbeta"])
         doc["two_line"] = tl if tl is not None else dict(consistent=False, reason="one of the lines has no usable shift")
-        if tl is not None:
+        if "difference" in tl:
             out(f"  two-line criterion (Halpha vs Hbeta): {'consistent' if tl['consistent'] else 'NOT consistent'} "
                 f"(difference {tl['difference']:+.0f} km/s, {tl['sigma']:.1f} sigma{'' if tl['same_sign'] else ', opposite signs'})")
     stem = a.stem or f"{_stem(a.epoch1, sp1, tid1)}_vs_{_stem(a.epoch2, sp2, tid2)}"
@@ -394,56 +453,53 @@ def cmd_rv(a):
 # fetch
 # ----------------------------------------------------------------------------
 def cmd_fetch(a):
-    from .io import fetch as F
-    os.makedirs(a.out, exist_ok=True)
-    found = dict(ra=a.ra, dec=a.dec, sdss=[], desi=[])
-    searched = 0
-    if not a.no_sdss:
-        try:
-            found["sdss"] = F.fetch_sdss(a.ra, a.dec, a.out, radius_arcsec=a.radius); searched += 1
-        except ImportError as e:
-            print(f"SDSS lookup skipped: {e} (pip install 'blrfit[fetch]')")
-    if not a.no_desi:
-        try:
-            found["desi"] = F.fetch_desi(a.ra, a.dec, a.out, targetid=a.targetid, radius_arcsec=a.desi_radius,
-                                         releases=tuple(r.strip() for r in a.releases.split(",") if r.strip()))
-            searched += 1
-        except ImportError as e:
-            print(f"DESI lookup skipped: {e} (pip install 'blrfit[fetch]')")
-    with open(os.path.join(a.out, "fetch_manifest.json"), "w") as fh:
-        json.dump(_clean(found), fh, indent=1)
-    n = len(found["sdss"]) + len(found["desi"])
-    print(f"{n} spectrum(s) in {a.out}; manifest {os.path.join(a.out, 'fetch_manifest.json')}")
-    if searched == 0:
-        print("nothing was searched: install the fetch extras (pip install 'blrfit[fetch]')")
-        return 1
-    return 0
+    from .input_workflow import fetch_public
+    return fetch_public(a)
+
+
+def _public_args(p):
+    p.add_argument("--include-sdss", action="store_true", help="also find SDSS DR17 spectra within 1.5 arcsec")
+    p.add_argument("--radius", type=float, default=1.5, help="SDSS radius in arcsec, at most 1.5 (default 1.5)")
+    p.add_argument("--desi-radius", type=float, default=1.5, help="DESI position-search radius, arcsec (default 1.5)")
+    p.add_argument("--releases", default="dr1", help="DESI public releases: dr1 (default), edr, or both")
+    p.add_argument("--all-matches", action="store_true", help="fit/download all DESI IDs in a cone as separate objects")
 
 
 # ----------------------------------------------------------------------------
 def build_parser():
     p = argparse.ArgumentParser(prog="blrfit", formatter_class=argparse.RawDescriptionHelpFormatter,
-                                description="Broad AGN emission lines against the narrow-line systemic velocity: "
-                                            "offsets, profile classes, quality flags and velocity changes between epochs.")
+                                description="Single-spectrum broad AGN line fitting: narrow-reference offsets, "
+                                            "profile classes and quality flags. Between-epoch routines are experimental.")
     p.add_argument("--version", action="version", version=f"blrfit {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     f = sub.add_parser("fit", help="fit one spectrum", description="Fit one spectrum; writes <stem>_fit.json and <stem>_fit.png.")
-    f.add_argument("spectrum", help="SDSS spec-*.fits, DESI coadd-*.fits (with --targetid) or a table")
-    f.add_argument("--targetid", type=int, default=None, help="DESI TARGETID (coadd input)")
+    f.add_argument("spectrum", nargs="?", help="local spectrum; DESI default, --survey sdss or generic for other formats")
+    from .io.public import exact_targetid
+    f.add_argument("--targetid", type=exact_targetid, default=None, help="exact DESI TARGETID for a local file or public lookup")
+    f.add_argument("--survey", choices=("desi", "sdss", "generic", "auto"), default="desi",
+                   help="input format; DESI default, auto restores legacy filename dispatch")
+    f.add_argument("--redrock", help="explicit DESI redrock file")
+    f.add_argument("--sdss-mask-policy", choices=("conservative", "ivar"), default="conservative",
+                   help="exclude nonzero SDSS AND_MASK (default); ivar restores the legacy reader")
+    f.add_argument("--legacy-error-diagnostic", action="store_true",
+                   help="retain the uncalibrated historical DESI-repeat error as a labelled diagnostic")
+    _public_args(f)
     f.add_argument("--z", type=float, default=None, help="redshift (default: from the file when it has one)")
     f.add_argument("--ebv", default=None, help="Galactic E(B-V); a number, or 'sfd' for a dust-map lookup (default: DESI FIBERMAP value, else 0)")
-    f.add_argument("--ra", type=float, default=None, help="right ascension (deg), for --ebv sfd when the file has no coordinates")
+    f.add_argument("--ra", type=float, default=None, help="right ascension (deg); public search if no file, or coordinate for --ebv sfd")
     f.add_argument("--dec", type=float, default=None, help="declination (deg)")
-    f.add_argument("--lines", default="Halpha,Hbeta,MgII",
-                   help="comma-separated complexes among Halpha, Hbeta, MgII (default all three; those outside the data are skipped)")
-    f.add_argument("--nmc", type=int, default=0, help="Monte Carlo realisations for the errors (default 0 = none; the catalogue used 30)")
+    f.add_argument("--lines", default="Halpha,Hbeta",
+                   help="comma-separated complexes among Halpha, Hbeta, MgII (default Halpha,Hbeta; those outside the data are skipped; MgII is experimental)")
+    f.add_argument("--nmc", type=int, default=0, help="Monte Carlo realisations for conditional statistical errors (default 0 = no errors)")
     f.add_argument("--seed", type=int, default=0, help="random seed of the Monte Carlo (default 0)")
     f.add_argument("--no-host", action="store_true", help="no host-galaxy component")
     f.add_argument("--no-fe", action="store_true", help="no Fe II templates")
     f.add_argument("--max-broad", type=int, default=MAX_BROAD, help=f"maximum number of broad Gaussians (default {MAX_BROAD})")
     f.add_argument("--dbic", type=float, default=DBIC, help=f"BIC improvement required for one more component (default {DBIC:.0f})")
     f.add_argument("--err-floor", type=float, default=ERR_FLOOR, help="fractional error floor (default 0.02)")
+    f.add_argument("--mc-noise-policy", choices=("input", "effective"), default="input",
+                   help="MC perturbations: supplied pixel noise (input, default), or historical noise including the fitting floor (effective)")
     f.add_argument("--out", default=".", help="output directory"); f.add_argument("--stem", default=None, help="output file stem")
     f.add_argument("--no-figure", action="store_true", help="do not write the diagnostic figure")
     f.add_argument("--pickle", action="store_true", help="also write the full result as <stem>_fit.pkl")
@@ -451,7 +507,7 @@ def build_parser():
     _add_table_args(f)
     f.set_defaults(func=cmd_fit)
 
-    r = sub.add_parser("rv", help="velocity change between two spectra of one object",
+    r = sub.add_parser("rv", help="experimental between-epoch diagnostics; not validated velocity measurements",
                        description="Cross-correlate the broad line of two epochs; writes <stem>_rv.json and <stem>_rv.png.")
     r.add_argument("epoch1"); r.add_argument("epoch2")
     r.add_argument("--targetid", default=None, help="DESI TARGETID, or two comma-separated (one per epoch)")
@@ -470,15 +526,13 @@ def build_parser():
     _add_table_args(r)
     r.set_defaults(func=cmd_rv)
 
-    g = sub.add_parser("fetch", help="download public SDSS and DESI spectra of a position",
-                       description="Look a position up in SDSS (astroquery) and the DESI public releases; writes the spectra and fetch_manifest.json.")
-    g.add_argument("--ra", type=float, required=True); g.add_argument("--dec", type=float, required=True)
+    g = sub.add_parser("fetch", help="download public spectra without fitting")
+    g.add_argument("--ra", type=float); g.add_argument("--dec", type=float)
+    g.add_argument("--targetid", type=exact_targetid)
+    g.add_argument("--survey", choices=("desi", "sdss"), default="desi")
     g.add_argument("--out", default="spectra")
-    g.add_argument("--radius", type=float, default=2.0, help="SDSS search radius, arcsec")
-    g.add_argument("--desi-radius", type=float, default=1.0, help="DESI position match radius, arcsec")
-    g.add_argument("--targetid", type=int, default=None, help="DESI TARGETID (selects the row exactly)")
-    g.add_argument("--releases", default="dr1,edr", help="DESI releases to search")
-    g.add_argument("--no-sdss", action="store_true"); g.add_argument("--no-desi", action="store_true")
+    g.add_argument("--quiet", action="store_true")
+    _public_args(g)
     g.set_defaults(func=cmd_fetch)
     return p
 
@@ -486,7 +540,10 @@ def build_parser():
 def main(argv=None):
     p = build_parser()
     a = p.parse_args(argv)
-    return a.func(a)
+    try:
+        return a.func(a)
+    except (ValueError, KeyError, OSError, RuntimeError, ImportError) as exc:
+        p.exit(1, f"blrfit: {exc}\n")
 
 
 if __name__ == "__main__":

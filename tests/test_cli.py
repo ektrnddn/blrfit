@@ -13,7 +13,7 @@ END_POINT_KMS = 100.0
 
 
 def test_fit_sdss_example(tmp_path):
-    rc = main(["fit", SDSS_EXAMPLE, "--z", str(Z_J001224), "--out", str(tmp_path), "--no-figure", "--quiet"])
+    rc = main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Halpha,Hbeta,MgII", "--out", str(tmp_path), "--no-figure", "--quiet"])
     assert rc == 0
     doc = json.load(open(tmp_path / "spec-0651-52141-0072_fit.json"))
     assert doc["input"]["kind"] == "sdss" and doc["input"]["z"] == Z_J001224 and doc["input"]["z_source"] == "argument"
@@ -25,7 +25,8 @@ def test_fit_sdss_example(tmp_path):
     assert hb["systemic_source"] == "Halpha prior"
     assert not mg["fitted"] and mg["label"] == "" and mg["class_text"] == "not fitted" and "not fitted" in mg["reasons"][0]
     assert mg["dv"] is None
-    assert ha["dv_err_mc"] is None and ha["dv_err_model"] == pytest.approx(1.5 * max(650 / np.sqrt(ha["broad_flux_snr"]), 45), rel=1e-6)
+    assert ha["dv_err_mc"] is None and ha["dv_err_model"] is None
+    assert doc["uncertainty"]["status"] == "not_computed" and not doc["uncertainty"]["calibrated"]
     assert doc["summary_row"]["HA_class"] == "C"
     assert doc["settings"]["complexes"] == ["Halpha", "Hbeta", "MgII"]
     assert doc["blrfit_version"]
@@ -33,7 +34,7 @@ def test_fit_sdss_example(tmp_path):
 
 
 def test_fit_writes_figure_and_pickle(tmp_path):
-    rc = main(["fit", SDSS_EXAMPLE, "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--pickle", "--quiet"])
+    rc = main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--pickle", "--quiet"])
     assert rc == 0
     assert (tmp_path / "spec-0651-52141-0072_fit.png").stat().st_size > 10000
     assert (tmp_path / "spec-0651-52141-0072_fit.pkl").exists()
@@ -55,8 +56,8 @@ def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
 
 
 def test_fit_csv_example_matches_sdss_fit(tmp_path):
-    main(["fit", SDSS_EXAMPLE, "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--no-figure", "--quiet"])
-    rc = main(["fit", CSV_EXAMPLE, "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--wave-unit", "nm",
+    main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--no-figure", "--quiet"])
+    rc = main(["fit", CSV_EXAMPLE, "--survey", "generic", "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--wave-unit", "nm",
                "--frame", "rest", "--air", "--z", str(Z_J001224), "--flux-scale", "10", "--lines", "Hbeta",
                "--out", str(tmp_path), "--no-figure", "--quiet"])
     assert rc == 0
@@ -68,9 +69,9 @@ def test_fit_csv_example_matches_sdss_fit(tmp_path):
 
 def test_fit_missing_redshift_exits():
     with pytest.raises(SystemExit):
-        main(["fit", CSV_EXAMPLE, "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--frame", "rest", "--quiet"])
+        main(["fit", CSV_EXAMPLE, "--survey", "generic", "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--frame", "rest", "--quiet"])
     with pytest.raises(SystemExit):
-        main(["fit", DESI_EXAMPLE, "--quiet"])          # a coadd needs --targetid
+        main(["fit", DESI_EXAMPLE, "--survey", "auto", "--quiet"])          # a coadd needs --targetid
 
 
 def test_rv_two_sdss_epochs(tmp_path):
@@ -80,15 +81,23 @@ def test_rv_two_sdss_epochs(tmp_path):
     assert doc["measured"] and doc["line"] == "Hbeta"
     assert doc["baseline_days"] == pytest.approx(56628 - 52141) and doc["baseline_rest_yr"] == pytest.approx(4487 / 365.25 / 1.2288, rel=1e-6)
     assert abs(doc["dv"] - (-294)) < 40 and 10 < doc["err"] < 100
+    # two SDSS spectra on one logarithmic lattice are compared by integer placement, without resampling
     assert doc["consistent"] and not doc["at_bound"] and not doc["regridded"]
     assert doc["zp_line"] == "OIII" and abs(doc["zp_dv"]) < 40 and doc["zp_applied"]
+    assert doc["frame_ok"] and doc["frame_reason"] == "" and doc["zp_source"] == "OIII"
     assert doc["dv_corrected"] == pytest.approx(doc["dv"] - doc["zp_dv"])
     assert doc["dv_abs_epoch2"] == pytest.approx(doc["epochs"][0]["c50_sys"] + doc["dv_corrected"])
     assert doc["sigma_sys_desi"] == 79.0
-    assert doc["profile_z"] > 5 and doc["reliable"] is False     # the profile changed shape between 2001 and 2013
-    assert doc["profile_grade"] == "changed" and 0.0 < doc["resid_frac"] < 0.2
-    assert doc["error_floor_kind"] == "cross_survey_null_changed" and doc["error_floor"] == pytest.approx(147.0 * 1.5)
-    assert doc["err_total"] == pytest.approx(np.hypot(doc["err"], doc["error_floor"]))
+    # Hbeta keeps its shape (z_prof 0.8 with the flux scale in the variance; the 0.1.0 estimator graded this
+    # pair 'changed' because the 2013 epoch is 2.1 times brighter); no pair is 'reliable' before a calibration
+    assert doc["profile_z"] < 5 and doc["profile_grade"] == "stable" and 0.0 < doc["resid_frac"] < 0.2
+    assert doc["reliable"] is False and doc["diagnostic_quality_pass"] is True
+    assert doc["scale_ab"] > 1.5 and doc["scale_ba"] < 0.7
+    # An SDSS--SDSS pair cannot inherit the old SDSS--DESI calibration.
+    assert doc["error_floor_kind"] == "not_calibrated" and doc["error_floor"] is None
+    assert doc["legacy_error_floor_kind"] == "unsupported_instrument_pair"
+    assert not doc["calibration_supported"]
+    assert doc["err_total"] == pytest.approx(np.hypot(doc["err"], doc["zp_err"]))
     assert doc["lines"]["Hbeta"]["dv"] == doc["dv"]
     assert (tmp_path / "spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.png").stat().st_size > 10000
 
@@ -102,8 +111,15 @@ def test_rv_two_lines_and_the_two_line_criterion(tmp_path):
     ha, hb = doc["lines"]["Halpha"], doc["lines"]["Hbeta"]
     assert ha["measured"] and hb["measured"]
     assert abs(ha["dv"] - (-219)) < 40 and abs(hb["dv"] - (-294)) < 40
-    assert ha["profile_grade"] == "changed" and hb["profile_grade"] == "changed"
-    assert doc["two_line"]["consistent"] and doc["two_line"]["same_sign"]
+    assert ha["profile_grade"] == "changed" and hb["profile_grade"] == "stable"
+    assert ha["frame_ok"] and hb["frame_ok"] and hb["zp_applied"] and not ha["zp_applied"]
+    # The diagnostic now uses the same corrected shifts/errors as the display.
+    delta = ha['dv_corrected'] - hb['dv_corrected']
+    sigma = abs(delta) / np.hypot(ha['err_total'], hb['err_total'])
+    assert doc['two_line']['difference'] == pytest.approx(delta)
+    assert doc['two_line']['sigma'] == pytest.approx(sigma)
+    assert doc['two_line']['consistent'] == (sigma <= 2)
+    assert doc["two_line"]["same_sign"] and not doc['two_line']['calibration_supported']
     assert doc["line"] == "Halpha" and doc["dv"] == ha["dv"]        # the first line at the top level
 
 

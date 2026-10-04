@@ -28,6 +28,16 @@ spectra that make up most of a DESI broad-line sample:
   subtracting the full host removed narrow-line flux of arbitrary strength and
   displaced the systemic velocity by up to 450 km/s in strongly star-forming
   hosts.
+
+Two guards of the continuum fit are recorded with every result. The host
+fraction is undetermined, and the host is not fitted, when the 4200-5000 A
+window that defines it carries no signal (``host_window_statistics``;
+``host_info['host_undetermined']``). The ultraviolet Fe II width follows one
+of three policies (``fe_uv_width_policy``: held where the window is short,
+always free, or free and refitted at a fallback width when it ends on a
+bound), and the bound state of each Fe II width is kept apart from a zero
+Fe II norm (``fe_width_states``; ``continuum_info['fe_width_state']``,
+``fe_norm_zero``, ``at_bound_widths``).
 """
 from __future__ import annotations
 
@@ -39,19 +49,189 @@ from ..constants import (C_KMS, S2F, TEMPLATE_DIR, LAM, COMPLEX_WINDOW, CONTI_WI
                          PL_PIVOT, PL_ALPHA_MIN, PL_ALPHA_MAX, FE_FWHM_MIN, FE_FWHM_MAX,
                          FE_SHIFT_MAX, FE_INTRINSIC_FWHM, N_GAL_MAX, MIN_HOST_FRAC,
                          HOST_CONTINUUM_ONLY, HOST_LINE_HALFWIDTH_KMS, CLIP_LO, CLIP_HI,
-                         MAX_NFEV_CONTI, MAX_NFEV_CONTI_HOST)
+                         MAX_NFEV_CONTI, MAX_NFEV_CONTI_HOST, FE_UV_FWHM_FIXED_KMS,
+                         FE_UV_FREE_MIN_PIXELS, FE_UV_WIDTH_POLICY, HOST_GUARD_MIN_SNR,
+                         HOST_GUARD_MAX_MASKED_FRAC)
 from .params import ParamSet
+
+# An Fe II width counts as at a bound when it lies within this fraction of the
+# bound's span, or this many km/s, of either end (whichever is larger: 88 km/s
+# for the 1200-10000 km/s range), or when the solver's active set holds it.
+# The solver's own criterion (``_at_bound``, 1e-6 relative) misses widths that
+# stopped a few tens of km/s short of a bound on a flat chi-square.
+FE_WIDTH_BOUND_TOL_FRAC = 0.01
+FE_WIDTH_BOUND_TOL_KMS = 10.0
+# An Fe II norm at or below this (template units) multiplies nothing: the
+# width then carries no information and is not counted as at a bound.
+FE_NORM_ZERO = 1e-6
+FE_UV_WIDTH_POLICIES = ("A", "B", "C")
+FE_WIDTH_STATES = ("not_covered", "fixed", "unconstrained", "solver_active", "near_bound", "interior")
+FE_WIDTH_NORM = {"feop_fwhm": "feop_norm", "feuv_fwhm": "feuv_norm"}
+HOST_WINDOW = (4200.0, 5000.0)      # the window that defines the host fraction (Shen et al. 2011)
 
 
 # ----------------------------------------------------------------------------
 # Fe II templates (PyQSOFit convention: columns log10 wavelength, flux)
 # ----------------------------------------------------------------------------
+def _solver_record(sol):
+    return dict(success=bool(sol.success and np.all(np.isfinite(sol.x))
+                             and np.all(np.isfinite(sol.fun))),
+                status=int(sol.status), message=str(sol.message), nfev=int(sol.nfev),
+                optimality=float(sol.optimality), objective=float(np.sum(sol.fun**2)))
+
+
+def _at_bound(sol, ps, rtol=1e-6):
+    """Names of the free parameters that ended on a bound: those the solver
+    reports as active plus those within ``rtol`` of a bound (relative to the
+    bound, absolute for bounds below unity, as the solver measures it). A
+    width or a shift on a bound is not a measurement; the list is stored so
+    that downstream code can flag it. The Fe II widths get the wider
+    tolerance of ``fe_width_states`` in addition."""
+    lb, ub = ps.bounds()
+    x = np.asarray(sol.x, float)
+    hit = np.asarray(sol.active_mask) != 0
+    hit |= (x - lb) <= rtol * np.maximum(1.0, np.abs(lb))
+    hit |= (ub - x) <= rtol * np.maximum(1.0, np.abs(ub))
+    return [n for n, h in zip(ps.free_names, hit) if h]
+
+
+def _fe_widths(d):
+    return {k: float(d[k]) for k in ("feop_fwhm", "feuv_fwhm") if k in d}
+
+
+def fe_width_states(ps, d, active_mask=None):
+    """The state of each Fe II width after a fit, one record per template.
+
+    ``state`` is one of FE_WIDTH_STATES, decided in this order:
+      not_covered    the template is not in the fit (no coverage, or Fe II off);
+      unconstrained  the template's norm is zero (at or below FE_NORM_ZERO):
+                     the width multiplies nothing and is unidentified;
+      fixed          the width was held (the ultraviolet width where the window
+                     is short, or at the fallback width);
+      solver_active  the solver's active set holds the width on a bound;
+      near_bound     the width lies within max(FE_WIDTH_BOUND_TOL_FRAC of the
+                     span, FE_WIDTH_BOUND_TOL_KMS) of a bound without being
+                     active;
+      interior       none of the above.
+    The record also carries ``value`` (km/s), ``fixed``, ``norm_zero``,
+    ``active`` and ``near`` (the two bound criteria separately), ``bound``
+    ('lower', 'upper' or ''), ``tol_kms`` and ``at_bound``, which is
+    ``active or near`` for a free width with a non-zero norm and False
+    otherwise: a zero norm is never counted as a width at a bound.
+    ``active_mask`` is the solver's mask over the free parameters (None when
+    no solver ran, as in a fallback with every Fe II parameter fixed)."""
+    free = ps.free_names
+    mask = np.zeros(len(free), int) if active_mask is None else np.asarray(active_mask)
+    out = {}
+    for w, n in FE_WIDTH_NORM.items():
+        rec = dict(state="not_covered", value=np.nan, fixed=False, norm_zero=False, active=False,
+                   near=False, bound="", tol_kms=np.nan, at_bound=False)
+        if w in d:
+            i = ps.names.index(w)
+            lo, hi, val = ps.lb[i], ps.ub[i], float(d[w])
+            tol = max(FE_WIDTH_BOUND_TOL_FRAC * (hi - lo), FE_WIDTH_BOUND_TOL_KMS)
+            fixed = w in ps.fixed
+            norm_zero = bool(float(d.get(n, 0.0)) <= FE_NORM_ZERO)
+            active = bool(w in free and mask[free.index(w)] != 0)
+            dlo, dhi = val - lo, hi - val
+            near = bool(not fixed and (dlo <= tol or dhi <= tol))
+            bound = ("lower" if dlo <= dhi else "upper") if (active or near) else ""
+            state = ("unconstrained" if norm_zero else "fixed" if fixed else "solver_active" if active
+                     else "near_bound" if near else "interior")
+            rec.update(state=state, value=val, fixed=fixed, norm_zero=norm_zero, active=active, near=near,
+                       bound=bound, tol_kms=float(tol), at_bound=bool((active or near) and not norm_zero and not fixed))
+        out[w] = rec
+    return out
+
+
+def _width_bookkeeping(info, ps, d, sol=None):
+    """Fill the Fe II width diagnostics of a continuum fit into ``info``:
+    ``fe_widths``, ``fe_width_state``, ``fe_norm_zero`` (per template, False
+    where the template is absent) and ``at_bound_widths`` (the widths at a
+    bound by the wider criterion, zero norms excluded)."""
+    states = fe_width_states(ps, d, None if sol is None else sol.active_mask)
+    info["fe_widths"] = _fe_widths(d)
+    info["fe_width_state"] = states
+    info["fe_norm_zero"] = {w[:4]: bool(s["norm_zero"]) for w, s in states.items()}
+    info["at_bound_widths"] = [w for w, s in states.items() if s["at_bound"]]
+
+
+def _uv_window_pixels(wave, good, inwin):
+    """Good pixels of the fitting windows that cover the ultraviolet Fe II template."""
+    return int(np.sum(good & inwin & (wave > 2200) & (wave < 3090)))
+
+
+def _check_uv_policy(policy, fallback_kms):
+    if policy not in FE_UV_WIDTH_POLICIES:
+        raise ValueError(f"fe_uv_width_policy must be one of {FE_UV_WIDTH_POLICIES}, got {policy!r}")
+    f = float(fallback_kms)
+    if not (np.isfinite(f) and FE_FWHM_MIN <= f <= FE_FWHM_MAX):
+        raise ValueError(f"fe_uv_fallback_kms must lie in [{FE_FWHM_MIN:g}, {FE_FWHM_MAX:g}] km/s, got {fallback_kms!r}")
+    return policy, f
+
+
+def _uv_policy_record(info, policy, fallback_kms, n_uv, feuv_fixed):
+    info["feuv_policy"] = policy; info["feuv_fallback_kms"] = float(fallback_kms)
+    info["feuv_fwhm_fixed"] = bool(feuv_fixed); info["feuv_refit"] = False; info["feuv_free_fit"] = None
+    info["n_pix_uv"] = int(n_uv)
+
+
+def _uv_at_bound(info):
+    """Whether the fitted ultraviolet width is at a bound by the width criterion."""
+    return bool(info["fe_width_state"]["feuv_fwhm"]["at_bound"])
+
+
+FALLBACK_KEYS = ("solver", "at_bound", "fe_widths", "fe_width_state", "fe_norm_zero", "at_bound_widths",
+                 "feuv_fwhm_fixed", "feuv_policy", "feuv_fallback_kms", "feuv_refit", "feuv_free_fit", "n_pix_uv")
+
+
+def _take_fallback(info, cinfo):
+    """Carry the diagnostics of a PL+Fe fallback fit into the host-fit info."""
+    for k in FALLBACK_KEYS:
+        info[k] = cinfo[k]
+
+
+def host_window_statistics(wave, flux, ivar, good, inhost):
+    """The signal of the window that defines the host fraction (HOST_WINDOW,
+    rest frame, inside the galaxy-template range).
+
+    Returns dict(n_pix, n_good, n_masked, masked_frac, flux_sum, weighted_sum,
+    weighted_sigma, snr, undetermined, reasons). ``flux_sum`` is the plain sum
+    over the good pixels, the denominator of the host fraction;
+    ``weighted_sum`` is sum(ivar f) with variance sum(ivar) (the pixels taken
+    as independent), so ``snr`` = sum(ivar f) / sqrt(sum ivar). The fraction
+    is ``undetermined`` when the weighted sum is not positive, when ``snr``
+    is below HOST_GUARD_MIN_SNR, or when more than HOST_GUARD_MAX_MASKED_FRAC
+    of the window's pixels are masked (no pixel at all counts as both)."""
+    win = inhost & (wave > HOST_WINDOW[0]) & (wave < HOST_WINDOW[1])
+    sel = win & good
+    n_pix, n_good = int(win.sum()), int(sel.sum())
+    n_masked = n_pix - n_good
+    masked_frac = float(n_masked / n_pix) if n_pix else 1.0
+    fsum = float(np.sum(flux[sel]))
+    wsum = float(np.sum(ivar[sel] * flux[sel]))
+    wsig = float(np.sqrt(np.sum(ivar[sel]))) if n_good else 0.0
+    snr = wsum / wsig if wsig > 0 else np.nan
+    reasons = []
+    if not wsum > 0:
+        reasons.append(f"flux sum over {HOST_WINDOW[0]:.0f}-{HOST_WINDOW[1]:.0f} A not positive")
+    elif not snr >= HOST_GUARD_MIN_SNR:
+        reasons.append(f"flux sum over {HOST_WINDOW[0]:.0f}-{HOST_WINDOW[1]:.0f} A at {snr:.2f} sigma "
+                       f"(< {HOST_GUARD_MIN_SNR:g})")
+    if masked_frac > HOST_GUARD_MAX_MASKED_FRAC:
+        reasons.append(f"{n_masked} of {n_pix} pixels in {HOST_WINDOW[0]:.0f}-{HOST_WINDOW[1]:.0f} A masked")
+    return dict(n_pix=n_pix, n_good=n_good, n_masked=n_masked, masked_frac=masked_frac, flux_sum=fsum,
+                weighted_sum=wsum, weighted_sigma=wsig, snr=float(snr), min_snr=HOST_GUARD_MIN_SNR,
+                max_masked_frac=HOST_GUARD_MAX_MASKED_FRAC, undetermined=bool(reasons), reasons=reasons)
+
+
 class FeTemplate:
     """One Fe II template with Gaussian broadening in log wavelength.
 
     The I Zw 1 templates have an intrinsic width of 900 km/s (FWHM); a requested
-    FWHM is reached by convolving with sqrt(FWHM^2 - 900^2). Broadened versions
-    are cached on a 50 km/s grid, which is far below the sensitivity of the fit.
+    FWHM is reached by convolving with sqrt(FWHM^2 - 900^2). Evaluate at the
+    requested width: quantizing widths makes finite-difference optimizer
+    derivatives vanish and can freeze the width at its initial value.
     """
 
     def __init__(self, path, wmin, wmax, intrinsic_fwhm=FE_INTRINSIC_FWHM):
@@ -64,16 +244,11 @@ class FeTemplate:
         self.intrinsic = intrinsic_fwhm
         # template pixel in km/s (the grid is uniform in log wavelength)
         self.pix_kms = np.median(np.diff(self.logw)) * np.log(10.0) * C_KMS
-        self._cache = {}
 
     def broadened(self, fwhm_kms):
-        key = int(round(max(fwhm_kms, self.intrinsic + 10.0) / 50.0))
-        if key in self._cache:
-            return self._cache[key]
-        f = key * 50.0
+        f = max(float(fwhm_kms), self.intrinsic + 10.0)
         sig_conv = np.sqrt(max(f**2 - self.intrinsic**2, 10.0**2)) / S2F
         out = gaussian_filter1d(self.flux, sig_conv / self.pix_kms, mode="nearest")
-        self._cache[key] = out
         return out
 
     def __call__(self, wave_rest, norm, fwhm_kms, shift):
@@ -181,8 +356,15 @@ def conti_model(wave, d, fe_op, fe_uv):
     return y
 
 
-def _add_pl_fe(ps, fref, fit_fe, cov_op, cov_uv, pl_start):
-    """Power-law and Fe II parameters in the frozen order."""
+def _add_pl_fe(ps, fref, fit_fe, cov_op, cov_uv, pl_start, feuv_fixed=False, feuv_fixed_kms=FE_UV_FWHM_FIXED_KMS):
+    """Power-law and Fe II parameters in the frozen order.
+
+    With ``feuv_fixed`` the ultraviolet width is held at ``feuv_fixed_kms``
+    (FE_UV_FWHM_FIXED_KMS unless a fallback width is given) instead of being
+    fitted: where the spectrum covers fewer than FE_UV_FREE_MIN_PIXELS pixels
+    of the ultraviolet windows the width has no leverage and a free one runs
+    to a bound.
+    """
     ps.add("pl_norm", pl_start, 0.0, 1e4 * fref)
     ps.add("pl_alpha", -1.5, PL_ALPHA_MIN, PL_ALPHA_MAX)
     if fit_fe and cov_op:
@@ -191,72 +373,127 @@ def _add_pl_fe(ps, fref, fit_fe, cov_op, cov_uv, pl_start):
         ps.add("feop_shift", 0.0, -FE_SHIFT_MAX, FE_SHIFT_MAX)
     if fit_fe and cov_uv:
         ps.add("feuv_norm", 0.1 * fref, 0.0, 1e3 * fref)
-        ps.add("feuv_fwhm", 3000.0, FE_FWHM_MIN, FE_FWHM_MAX)
+        if feuv_fixed:
+            ps.add("feuv_fwhm", float(feuv_fixed_kms), FE_FWHM_MIN, FE_FWHM_MAX, fixed=True)
+        else:
+            ps.add("feuv_fwhm", 3000.0, FE_FWHM_MIN, FE_FWHM_MAX)
         ps.add("feuv_shift", 0.0, -FE_SHIFT_MAX, FE_SHIFT_MAX)
 
 
-def fit_continuum(wave, flux, ivar, windows=CONTI_WINDOWS, fit_fe=True, clip=True):
+def _uv_fixed_first(policy, fit_fe, cov_uv, n_uv):
+    """Whether the first pass of a fit holds the ultraviolet width: policy A
+    where the window is short, never under B and C."""
+    return bool(policy == "A" and fit_fe and cov_uv and n_uv < FE_UV_FREE_MIN_PIXELS)
+
+
+def fit_continuum(wave, flux, ivar, windows=CONTI_WINDOWS, fit_fe=True, clip=True,
+                  fe_uv_width_policy=FE_UV_WIDTH_POLICY, fe_uv_fallback_kms=FE_UV_FWHM_FIXED_KMS):
     """Power law + Fe II in the line-free windows, no host.
 
     Used directly when no host is wanted, as the fallback of the joint fit, and
     for every Monte Carlo realisation (where the host is held fixed).
     Returns (parameter dict, model on ``wave``, info).
+
+    ``fe_uv_width_policy`` ("A", "B" or "C", see FE_UV_WIDTH_POLICY) decides
+    the treatment of the ultraviolet Fe II width; ``fe_uv_fallback_kms`` is
+    the width it is held at under A (short window) and C (free width at a
+    bound, then refitted). ``info`` records the policy (``feuv_policy``), the
+    fallback (``feuv_fallback_kms``), whether the width was held
+    (``feuv_fwhm_fixed``), whether a refit happened (``feuv_refit``), the
+    covered ultraviolet pixels (``n_pix_uv``), the parameters at a bound by the
+    solver's criterion (``at_bound``) and the state of each Fe II width
+    (``fe_width_state``, ``fe_norm_zero``, ``at_bound_widths``; see
+    ``fe_width_states``).
     """
+    policy, fallback = _check_uv_policy(fe_uv_width_policy, fe_uv_fallback_kms)
     fe_op, fe_uv = fe_templates()
     good = np.isfinite(flux) & (ivar > 0)
+    if not good.any():
+        # the reference flux below would be the median of an empty set (NaN)
+        raise ValueError("fit_continuum: no usable pixel (no finite flux with a positive inverse variance)")
     inwin = np.zeros_like(good)
     for lo, hi in windows:
         inwin |= (wave >= lo) & (wave <= hi)
-    m = good & inwin
-    info = dict(n_pix=int(m.sum()), fe_op=False, fe_uv=False, fallback=False)
-    ps = ParamSet()
-    fref = np.nanmedian(flux[m]) if m.sum() else np.nanmedian(flux[good])
+    m0 = good & inwin
+    fref = np.nanmedian(flux[m0]) if m0.sum() else np.nanmedian(flux[good])
     fref = max(fref, 1e-3)
     # the Fe II templates enter only where the spectrum covers them
     cov_op = np.sum(good & (wave > 4435) & (wave < 5535)) > 40
     cov_uv = np.sum(good & (wave > 2200) & (wave < 3090)) > 40
-    _add_pl_fe(ps, fref, fit_fe, cov_op, cov_uv, pl_start=fref)
-    info["fe_op"] = bool(fit_fe and cov_op); info["fe_uv"] = bool(fit_fe and cov_uv)
-    if m.sum() < 40:
-        # too few window pixels: a power law to everything outside the complexes
-        info["fallback"] = True
-        m = good.copy()
-        for lo, hi in COMPLEX_WINDOW.values():
-            m &= ~((wave > lo) & (wave < hi))
-        for k in list(ps.names):
-            if k.startswith("fe"):
-                ps.fixed[k] = 0.0 if k.endswith("norm") else ps.val[ps.names.index(k)]
+    n_uv = _uv_window_pixels(wave, good, inwin)
 
-    w = np.sqrt(ivar[m]); x = wave[m]; y = flux[m]
+    def solve(feuv_fixed):
+        m = m0
+        info = dict(n_pix=int(m.sum()), fe_op=False, fe_uv=False, fallback=False)
+        ps = ParamSet()
+        _add_pl_fe(ps, fref, fit_fe, cov_op, cov_uv, pl_start=fref, feuv_fixed=feuv_fixed, feuv_fixed_kms=fallback)
+        info["fe_op"] = bool(fit_fe and cov_op); info["fe_uv"] = bool(fit_fe and cov_uv)
+        _uv_policy_record(info, policy, fallback, n_uv, feuv_fixed)
+        if m.sum() < 40:
+            # too few window pixels: a power law to everything outside the complexes
+            info["fallback"] = True
+            m = good.copy()
+            for lo, hi in COMPLEX_WINDOW.values():
+                m &= ~((wave > lo) & (wave < hi))
+            for k in list(ps.names):
+                if k.startswith("fe"):
+                    ps.fixed[k] = 0.0 if k.endswith("norm") else ps.val[ps.names.index(k)]
 
-    def resid(p):
-        return (y - conti_model(x, ps.full(p), fe_op, fe_uv)) * w
+        n_free = len(ps.free_names)
+        if m.sum() <= n_free:
+            # every usable pixel lies inside the line complexes: least squares on
+            # no residual would return the starting values as a solution
+            raise ValueError(f"fit_continuum: {int(m.sum())} usable pixels outside the line complexes "
+                             f"for {n_free} free continuum parameters")
+        w = np.sqrt(ivar[m]); x = wave[m]; y = flux[m]
 
-    sol = least_squares(resid, ps.p0(), bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI)
-    if clip and m.sum() > 60:
-        # one round of outlier clipping (absorption features, residual lines), as Shen et al. 2011
-        r = resid(sol.x)
-        keep = (r > CLIP_LO) & (r < CLIP_HI)
-        if keep.sum() > 40 and keep.sum() < len(r):
-            x, y, w = x[keep], y[keep], w[keep]
+        def resid(p):
+            return (y - conti_model(x, ps.full(p), fe_op, fe_uv)) * w
 
-            def resid2(p):
-                return (y - conti_model(x, ps.full(p), fe_op, fe_uv)) * w
+        sol = least_squares(resid, ps.p0(), bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI)
+        if clip and m.sum() > 60:
+            # one round of outlier clipping (absorption features, residual lines), as Shen et al. 2011
+            r = resid(sol.x)
+            keep = (r > CLIP_LO) & (r < CLIP_HI)
+            if keep.sum() > 40 and keep.sum() < len(r):
+                x, y, w = x[keep], y[keep], w[keep]
 
-            sol = least_squares(resid2, sol.x, bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI)
-            info["n_pix"] = int(keep.sum())
-    d = ps.full(sol.x)
-    ps.set_values(d)
-    model = conti_model(wave, d, fe_op, fe_uv)
-    info["chi2"] = float(np.sum(sol.fun**2)); info["ps"] = ps
+                def resid2(p):
+                    return (y - conti_model(x, ps.full(p), fe_op, fe_uv)) * w
+
+                sol = least_squares(resid2, sol.x, bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI)
+                info["n_pix"] = int(keep.sum())
+        d = ps.full(sol.x)
+        ps.set_values(d)
+        model = conti_model(wave, d, fe_op, fe_uv)
+        info["chi2"] = float(np.sum(sol.fun**2)); info["ps"] = ps
+        info['solver'] = _solver_record(sol)
+        info["at_bound"] = _at_bound(sol, ps)
+        _width_bookkeeping(info, ps, d, sol)
+        return d, model, info
+
+    d, model, info = solve(_uv_fixed_first(policy, fit_fe, cov_uv, n_uv))
+    if policy == "C" and _uv_at_bound(info):
+        # the free width ended on a bound: hold it at the fallback and refit
+        first = info
+        d, model, info = solve(True)
+        info["feuv_refit"] = True; info["feuv_free_fit"] = _free_fit_record(first)
     return d, model, info
+
+
+def _free_fit_record(info):
+    """What the discarded free-width pass of policy C found."""
+    return dict(fe_widths=info["fe_widths"], fe_width_state=info["fe_width_state"], at_bound=info["at_bound"],
+                solver=info["solver"], chi2=info["chi2"])
 
 
 # ----------------------------------------------------------------------------
 # Joint host + power law + Fe II (the default path)
 # ----------------------------------------------------------------------------
 def fit_continuum_host(wave, flux, ivar, fit_fe=True, n_gal_max=N_GAL_MAX,
-                       min_host_frac=MIN_HOST_FRAC, windows=CONTI_WINDOWS):
+                       min_host_frac=MIN_HOST_FRAC, windows=CONTI_WINDOWS,
+                       fe_uv_width_policy=FE_UV_WIDTH_POLICY, fe_uv_fallback_kms=FE_UV_FWHM_FIXED_KMS,
+                       host_guard=True):
     """One coherent pseudo-continuum: sum_i g_i E_i(lambda) + power law + Fe II.
 
     Pixels used: the Shen et al. (2011) windows everywhere, plus every pixel
@@ -266,8 +503,23 @@ def fit_continuum_host(wave, flux, ivar, fit_fe=True, n_gal_max=N_GAL_MAX,
     is non-negative; the host is kept only above ``min_host_frac`` of the
     4200-5000 A flux, otherwise the continuum is refitted without it.
 
+    With ``host_guard`` the 4200-5000 A window is checked first
+    (``host_window_statistics``): when its inverse-variance weighted flux sum
+    is not positive or below HOST_GUARD_MIN_SNR sigma of its noise, or more
+    than HOST_GUARD_MAX_MASKED_FRAC of its pixels are masked, the host
+    fraction is undetermined, the host is not fitted, ``host_frac_4200_5000``
+    is NaN and ``host_undetermined`` is True with the reason in ``reason``.
+    The window statistics are stored as ``host_window`` in every case.
+
+    ``fe_uv_width_policy`` and ``fe_uv_fallback_kms`` are those of
+    ``fit_continuum``; under policy C the joint fit is repeated with the
+    ultraviolet width held at the fallback when the free width ends on a
+    bound (``feuv_refit``).
+
     Returns (parameter dict, total continuum incl. host, host model, info).
     """
+    policy, fallback = _check_uv_policy(fe_uv_width_policy, fe_uv_fallback_kms)
+    conti_kw = dict(fit_fe=fit_fe, fe_uv_width_policy=policy, fe_uv_fallback_kms=fallback)
     fe_op, fe_uv = fe_templates(); P = pca_templates()
     good = np.isfinite(flux) & (ivar > 0)
     inhost = (wave > P["gw"].min() + 2) & (wave < P["gw"].max() - 2)
@@ -275,11 +527,22 @@ def fit_continuum_host(wave, flux, ivar, fit_fe=True, n_gal_max=N_GAL_MAX,
     for lo, hi in windows:
         inwin |= (wave >= lo) & (wave <= hi)
     use0 = good & (inwin | (inhost & ~line_mask(wave)))
+    window = host_window_statistics(wave, flux, ivar, good, inhost)
     info = dict(applied=False, host_frac_4200_5000=np.nan, n_gal=0, n_negative_pix=0,
-                reason="", n_pix=int(use0.sum()), fe_op=False, fe_uv=False)
+                reason="", n_pix=int(use0.sum()), fe_op=False, fe_uv=False, solver_attempts=[],
+                host_guard=bool(host_guard), host_undetermined=False, host_window=window)
     if use0.sum() < 40:
-        d, model, cinfo = fit_continuum(wave, flux, ivar, fit_fe=fit_fe)
+        d, model, cinfo = fit_continuum(wave, flux, ivar, **conti_kw)
         info.update(reason="too few line-free pixels; PL+Fe only", n_pix=cinfo["n_pix"])
+        _take_fallback(info, cinfo)
+        return d, model, np.zeros_like(flux), info
+    if host_guard and window["undetermined"]:
+        # the window that defines the host fraction carries no signal: the
+        # fraction is undetermined and the host is not fitted
+        d, model, cinfo = fit_continuum(wave, flux, ivar, **conti_kw)
+        info.update(reason="host undetermined: " + "; ".join(window["reasons"]) + "; PL+Fe only",
+                    host_undetermined=True)
+        _take_fallback(info, cinfo)
         return d, model, np.zeros_like(flux), info
 
     Gfull = [np.where(inhost, np.interp(wave, P["gw"], P["gp"][i], left=0, right=0), 0.0)
@@ -287,11 +550,15 @@ def fit_continuum_host(wave, flux, ivar, fit_fe=True, n_gal_max=N_GAL_MAX,
     fref = max(float(np.nanmedian(flux[use0])), 1e-3)
     cov_op = np.sum(good & (wave > 4435) & (wave < 5535)) > 40
     cov_uv = np.sum(good & (wave > 2200) & (wave < 3090)) > 40
+    # the galaxy templates start at 3450 A, so inside the ultraviolet windows
+    # the joint fit uses the same pixels as the plain fit
+    n_uv = _uv_window_pixels(wave, good, inwin)
     gscale = fref / max(float(np.nanmedian(Gfull[0][inhost])) if inhost.sum() else 1.0, 1e-6)
 
-    def make_ps(ng):
+    def make_ps(ng, feuv_fixed):
         ps = ParamSet()
-        _add_pl_fe(ps, fref, fit_fe, cov_op, cov_uv, pl_start=0.7 * fref)
+        _add_pl_fe(ps, fref, fit_fe, cov_op, cov_uv, pl_start=0.7 * fref, feuv_fixed=feuv_fixed,
+                   feuv_fixed_kms=fallback)
         for i in range(ng):
             # eigenspectrum 0 is the mean galaxy: its coefficient must be non-negative
             ps.add(f"gal{i}", 0.3 * gscale if i == 0 else 0.0,
@@ -304,59 +571,95 @@ def fit_continuum_host(wave, flux, ivar, fit_fe=True, n_gal_max=N_GAL_MAX,
             h += d[f"gal{i}"] * Gfull[i]
         return h
 
-    best = None
-    for ng in [n for n in (n_gal_max, 3, 2, 1, 0) if n <= n_gal_max]:
-        ps = make_ps(ng)
-        use = use0 if ng > 0 else (good & inwin if (good & inwin).sum() >= 40 else use0)
-        y = flux[use]; w = np.sqrt(ivar[use])
-        idx = np.where(use)[0]
+    def attempt(feuv_fixed):
+        """The first non-negative host over the stepped-down eigenspectrum
+        counts, or None when every attempt failed."""
+        for ng in [n for n in (n_gal_max, 3, 2, 1, 0) if n <= n_gal_max]:
+            ps = make_ps(ng, feuv_fixed)
+            use = use0 if ng > 0 else (good & inwin if (good & inwin).sum() >= 40 else use0)
+            y = flux[use]; w = np.sqrt(ivar[use])
+            idx = np.where(use)[0]
 
-        def resid(p, idx=idx, y=y, w=w, ng=ng):
-            d = ps.full(p)
-            m = conti_model(wave[idx], d, fe_op, fe_uv)
-            for i in range(ng):
-                m = m + d[f"gal{i}"] * Gfull[i][idx]
-            return (y - m) * w
+            def resid(p, idx=idx, y=y, w=w, ng=ng):
+                d = ps.full(p)
+                m = conti_model(wave[idx], d, fe_op, fe_uv)
+                for i in range(ng):
+                    m = m + d[f"gal{i}"] * Gfull[i][idx]
+                return (y - m) * w
 
-        try:
-            sol = least_squares(resid, ps.p0(), bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI_HOST)
-            r = resid(sol.x)
-            keep = (r > CLIP_LO) & (r < CLIP_HI)
-            if keep.sum() > 40 and keep.sum() < len(r):
-                idx2, y2, w2 = idx[keep], y[keep], w[keep]
+            try:
+                sol = least_squares(resid, ps.p0(), bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI_HOST)
+                r = resid(sol.x)
+                keep = (r > CLIP_LO) & (r < CLIP_HI)
+                if keep.sum() > 40 and keep.sum() < len(r):
+                    idx2, y2, w2 = idx[keep], y[keep], w[keep]
 
-                def resid2(p, idx=idx2, y=y2, w=w2, ng=ng):
-                    d = ps.full(p)
-                    m = conti_model(wave[idx], d, fe_op, fe_uv)
-                    for i in range(ng):
-                        m = m + d[f"gal{i}"] * Gfull[i][idx]
-                    return (y - m) * w
+                    def resid2(p, idx=idx2, y=y2, w=w2, ng=ng):
+                        d = ps.full(p)
+                        m = conti_model(wave[idx], d, fe_op, fe_uv)
+                        for i in range(ng):
+                            m = m + d[f"gal{i}"] * Gfull[i][idx]
+                        return (y - m) * w
 
-                sol = least_squares(resid2, sol.x, bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI_HOST)
-        except Exception:
-            continue
-        d = ps.full(sol.x); ps.set_values(d)
-        host = host_of(d, ng)
-        n_neg = int(np.sum(host[inhost] < -1e-3 * max(np.nanmax(np.abs(host)), 1e-9)))
-        sel = inhost & (wave > 4200) & (wave < 5000) & good
-        frac = float(np.sum(host[sel]) / max(np.sum(flux[sel]), 1e-30)) if sel.sum() > 20 else np.nan
-        cand = dict(d=d, ps=ps, ng=ng, host=host, n_neg=n_neg, frac=frac,
-                    chi2=float(np.sum(sol.fun ** 2)))
-        if ng == 0 or n_neg <= max(50, 0.02 * inhost.sum()):
-            best = cand
-            break
+                    sol = least_squares(resid2, sol.x, bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI_HOST)
+            except Exception as exc:
+                info['solver_attempts'].append(dict(n_gal=ng, success=False, status='exception',
+                                                   message=f'{type(exc).__name__}: {exc}', feuv_fixed=feuv_fixed))
+                continue
+            # an attempt that stopped short of convergence is recorded, not
+            # discarded: the solver record and the at-bound list say so
+            solver = _solver_record(sol)
+            info['solver_attempts'].append(dict(n_gal=ng, feuv_fixed=feuv_fixed, **solver))
+            d = ps.full(sol.x); ps.set_values(d)
+            host = host_of(d, ng)
+            n_neg = int(np.sum(host[inhost] < -1e-3 * max(np.nanmax(np.abs(host)), 1e-9)))
+            sel = inhost & (wave > 4200) & (wave < 5000) & good
+            # a flux sum that is not positive leaves the fraction undefined (NaN), and
+            # the host is then not subtracted
+            fsum = float(np.sum(flux[sel]))
+            frac = float(np.sum(host[sel]) / fsum) if sel.sum() > 20 and fsum > 0 else np.nan
+            cand = dict(d=d, ps=ps, ng=ng, host=host, n_neg=n_neg, frac=frac,
+                        chi2=float(np.sum(sol.fun ** 2)), solver=solver, at_bound=_at_bound(sol, ps),
+                        sol=sol, feuv_fixed=feuv_fixed)
+            if ng == 0 or n_neg <= max(50, 0.02 * inhost.sum()):
+                return cand
+        return None
+
+    def take(cand):
+        info.update(n_gal=cand["ng"], n_negative_pix=cand["n_neg"], host_frac_4200_5000=cand["frac"],
+                    fe_op="feop_norm" in cand["d"], fe_uv="feuv_norm" in cand["d"], chi2=cand["chi2"],
+                    solver=cand['solver'], at_bound=cand["at_bound"])
+        _uv_policy_record(info, policy, fallback, n_uv, cand["feuv_fixed"])
+        _width_bookkeeping(info, cand["ps"], cand["d"], cand["sol"])
+
+    best = attempt(_uv_fixed_first(policy, fit_fe, cov_uv, n_uv))
+    free_fit = None
+    if best is not None and policy == "C":
+        take(best)
+        if _uv_at_bound(info):
+            # the free width ended on a bound: hold it at the fallback and
+            # refit; the free result stands if the refit fails
+            first = _free_fit_record(info)
+            refit = attempt(True)
+            if refit is not None:
+                best = refit
+                free_fit = first
     if best is None:
-        d, model, cinfo = fit_continuum(wave, flux, ivar, fit_fe=fit_fe)
+        d, model, cinfo = fit_continuum(wave, flux, ivar, **conti_kw)
         info.update(reason="joint fit failed; PL+Fe only")
+        _take_fallback(info, cinfo)
         return d, model, np.zeros_like(flux), info
 
     d, ng, host, frac = best["d"], best["ng"], best["host"], best["frac"]
-    info.update(n_gal=ng, n_negative_pix=best["n_neg"], host_frac_4200_5000=frac,
-                fe_op="feop_norm" in d, fe_uv="feuv_norm" in d, chi2=best["chi2"])
+    take(best)
+    if free_fit is not None:
+        info["feuv_refit"] = True
+        info["feuv_free_fit"] = free_fit
     if ng > 0 and (not np.isfinite(frac) or frac < min_host_frac):
         # host too weak to trust (Shen et al. 2011): refit without it
         info["reason"] = f"host fraction {frac:.2f} < {min_host_frac}; PL+Fe only"
-        d2, model2, cinfo = fit_continuum(wave, flux, ivar, fit_fe=fit_fe)
+        d2, model2, cinfo = fit_continuum(wave, flux, ivar, **conti_kw)
+        _take_fallback(info, cinfo)
         return d2, model2, np.zeros_like(flux), info
     host = np.clip(host, 0, None)
     if HOST_CONTINUUM_ONLY:
