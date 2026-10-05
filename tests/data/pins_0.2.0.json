@@ -3,7 +3,6 @@
   "code": "blrfit 0.2.0.dev0 (tools/make_pins.py)",
   "blrfit": "0.2.0.dev0",
   "git": "v0.1.0-1-ga76bfc4-dirty",
-  "source": "/Users/ktrnddn/Documents/MBHB_project/software/blrfit",
   "numpy": "1.26.4",
   "scipy": "1.13.1",
   "astropy": "6.1.3",

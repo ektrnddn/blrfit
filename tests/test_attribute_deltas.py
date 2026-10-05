@@ -15,10 +15,11 @@ F/F, host applied; both lines move by -2.5 km/s). On every platform the run
 must produce a row per fitted line with an outcome of the documented set and
 the current fit of the 0.2.0 pin within the end-point tolerance of
 tests/test_pins.py; on the reference stack (BLRFIT_STRICT_PINS=1) the
-baseline must reproduce the 0.1.0 pins and the outcomes are those of
-docs/DELTAS.md: spec-0651 unchanged, the other two attributed to the operator
+baseline must reproduce the 0.1.0 pins and the outcomes are those recorded
+for 0.2.0 (tests/data/deltas_0.1.0_to_0.2.0.csv): spec-0651 unchanged, the other two attributed to the operator
 alone, with the complement path agreeing.
 """
+
 import csv
 import json
 import os
@@ -33,7 +34,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import attribute_deltas as ad  # noqa: E402
 
 STRICT = os.environ.get("BLRFIT_STRICT_PINS", "") not in ("", "0")
-END_POINT_KMS = 100.0     # the fresh-fit tolerance of tests/test_pins.py
+END_POINT_KMS = 100.0  # the fresh-fit tolerance of tests/test_pins.py
 
 
 def rec(cls="A", c50=0.0, n=1, flags=(), margin=20.0):
@@ -83,8 +84,14 @@ def test_unchanged():
 
 def test_attributed_single():
     base, cur = rec("A", 0.0), rec("C", 30.0, 2)
-    table = {("a", None): cur, ("a+b", None): cur, ("a+c", None): cur, ("a+b+c", None): cur,
-             ("b", None): rec("A", 0.5), ("c", None): rec("A", 2.0)}
+    table = {
+        ("a", None): cur,
+        ("a+b", None): cur,
+        ("a+c", None): cur,
+        ("a+b+c", None): cur,
+        ("b", None): rec("A", 0.5),
+        ("c", None): rec("A", 2.0),
+    }
     out, search, _ = run(table, base)
     assert out["outcome"] == "attributed-single" and out["toggles"] == ["a"]
     assert out["effect"] == {"a": 30.0, "b": 0.5, "c": 2.0}
@@ -95,9 +102,15 @@ def test_attributed_single():
 
 def test_attributed_joint():
     base, cur = rec("A", 0.0), rec("A", 40.0)
-    table = {("a", None): rec("A", 10.0), ("b", None): rec("A", 12.0), ("c", None): base,
-             ("a+b", None): cur, ("a+c", None): rec("A", 10.0), ("b+c", None): rec("A", 12.0),
-             ("a+b+c", None): cur}
+    table = {
+        ("a", None): rec("A", 10.0),
+        ("b", None): rec("A", 12.0),
+        ("c", None): base,
+        ("a+b", None): cur,
+        ("a+c", None): rec("A", 10.0),
+        ("b+c", None): rec("A", 12.0),
+        ("a+b+c", None): cur,
+    }
     out, search, _ = run(table, base)
     assert out["outcome"] == "attributed-joint" and out["toggles"] == ["a", "b"]
     assert out["reproducing_pairs"] == [("a", "b")] and out["reproducing_singles"] == []
@@ -111,7 +124,7 @@ def test_numerical_by_the_edge():
     out, search, stub = run(table, base)
     assert out["outcome"] == "numerical" and out["perturbation"] == "edge" and out["edge"] is True
     assert out["toggles"] == [] and out["complement_necessary"] == ["a", "b", "c"]
-    assert not any(p for _, p in stub.calls)       # no perturbation needed
+    assert not any(p for _, p in stub.calls)  # no perturbation needed
 
 
 def test_numerical_by_a_start_perturbation():
@@ -137,7 +150,6 @@ def test_unresolved():
 
 
 def test_line_not_fitted_in_the_current_configuration():
-    stub = Stub({("a+b+c", None): rec()}, rec())
     search = ad.Search(lambda on, p: dict(lines={}), ["a"])
     assert ad.attribute_line(search, "Hbeta") is None
 
@@ -149,6 +161,7 @@ def test_toggles_are_discovered():
     assert set(names) | set(unavailable) == {t.name for t in ad.TOGGLES}
     with ad.configured(toggles, frozenset(), perturb="start") as kw:
         from blrfit.model import broad, continuum
+
         assert broad.BROAD_STARTS_KMS[0] == ad.PERTURB_KMS
         for t in toggles:
             if t.keyword():
@@ -171,10 +184,22 @@ def _pins(name):
 
 
 def test_three_pinned_spectra(tmp_path):
-    current, legacy = _pins("pins_0.2.0.json"), _pins("pins.json")
+    current, legacy = _pins("pins_0.3.0.json"), _pins("pins.json")
     out_csv, out_json = tmp_path / "attribution.csv", tmp_path / "attribution.json"
-    ad.main(["--pins", os.path.join(DATA, "pins_0.2.0.json"), "--legacy", os.path.join(DATA, "pins.json"),
-             "--only", *PINNED, "--out", str(out_csv), "--json", str(out_json)])
+    ad.main(
+        [
+            "--pins",
+            os.path.join(DATA, "pins_0.3.0.json"),
+            "--legacy",
+            os.path.join(DATA, "pins.json"),
+            "--only",
+            *PINNED,
+            "--out",
+            str(out_csv),
+            "--json",
+            str(out_json),
+        ]
+    )
     with open(out_csv, newline="") as fh:
         rows = list(csv.DictReader(fh))
     names = [t.name for t in ad.available_toggles()[0]]
@@ -197,10 +222,13 @@ def test_three_pinned_spectra(tmp_path):
             assert abs(float(r["c50_cur"]) - ref[f"{p}_c50_sys"]) < END_POINT_KMS
             assert r["toggles_available"] == "+".join(names) and int(r["n_fits"]) >= 2
             assert r["baseline_vs_legacy"] != ""
-            assert set(dump["spectra"][PINNED.index(fn)]["configurations"]) >= {"baseline", "+".join(sorted(names))}
+            assert set(dump["spectra"][PINNED.index(fn)]["configurations"]) >= {
+                "baseline",
+                "+".join(sorted(names)),
+            }
     if not STRICT:
         return
-    # the reference stack: the baseline is the 0.1.0 fit and the deltas are the operator's (docs/DELTAS.md);
+    # the reference stack: the baseline is the 0.1.0 fit and the deltas are the operator's (0.2.0);
     # the CSV rounds to 1e-3 km/s, the JSON dump holds the full values
     exact = {(s["file"], r["line"]): r for s in dump["spectra"] for r in s["rows"]}
     for fn, lines in by_file.items():
@@ -209,10 +237,24 @@ def test_three_pinned_spectra(tmp_path):
             assert r["baseline_vs_legacy"] == "reproduced" and float(r["legacy_dc50"]) == 0.0, (fn, line)
             assert exact[fn, line]["c50_base"] == legacy[fn]["summary"][f"{p}_c50_sys"]
             assert exact[fn, line]["c50_cur"] == current[fn]["summary"][f"{p}_c50_sys"]
-    assert {r["outcome"] for r in by_file[PINNED[0]].values()} == {"unchanged"}
+    # J001224: since 0.3.0 its continuum reaches the host solution from the other starts; Halpha moves
+    # by the starts alone, Hbeta needs the starts and the continuous Fe II operator together
+    ha, hb = by_file[PINNED[0]]["Halpha"], by_file[PINNED[0]]["Hbeta"]
+    assert ha["outcome"] == "attributed-single" and ha["toggles"] == "conti_multistart"
+    assert ha["complement_necessary"] == "conti_multistart" and ha["order_independent"] == "True"
+    assert abs(float(ha["dc50_conti_multistart"]) - float(ha["delta_c50"])) < ad.TOL_KMS
+    assert float(ha["delta_c50"]) == pytest.approx(-505.8, abs=0.5)
+    assert hb["outcome"] == "attributed-joint" and hb["toggles"] == "fe_operator+conti_multistart"
+    assert hb["complement_necessary"] == "fe_operator+conti_multistart" and hb["order_independent"] == "True"
+    # spec-1237 and spec-1704: the Fe II operator, as in 0.2.0 (on spec-1704 the starts alone also
+    # reach the current end point within the tolerance from the 0.1.0 configuration)
     for fn in PINNED[1:]:
         for line, r in by_file[fn].items():
-            assert r["outcome"] == "attributed-single" and r["toggles"] == "fe_operator", (fn, line)
-            assert r["complement_necessary"] == "fe_operator" and r["order_independent"] == "True"
+            assert r["outcome"] == "attributed-single" and "fe_operator" in r["toggles"].split("+"), (
+                fn,
+                line,
+            )
+            assert r["complement_necessary"] == "fe_operator", (fn, line)
             assert abs(float(r["dc50_fe_operator"]) - float(r["delta_c50"])) < ad.TOL_KMS
+    assert by_file[PINNED[1]]["Hbeta"]["toggles"] == "fe_operator"
     assert float(by_file[PINNED[1]]["Hbeta"]["delta_c50"]) == pytest.approx(-22.75, abs=0.05)

@@ -1,6 +1,7 @@
 """
 blrfit: broad AGN emission lines fitted against the narrow-line systemic
-velocity, classified, flagged, and cross-correlated between epochs.
+velocity, classified and flagged. ``blrfit.rv`` compares the broad profiles of
+two epochs; it is experimental.
 
     from blrfit import read_spectrum, fit_spectrum, summary_row, plot_fit
     sp  = read_spectrum("spec-0651-52141-0072.fits")
@@ -10,6 +11,7 @@ velocity, classified, flagged, and cross-correlated between epochs.
 The command-line tool ``blrfit fit`` does the same and writes a JSON summary
 and a diagnostic figure. See the README for the model and its validation.
 """
+
 from .model.fit import fit_spectrum, remeasure, summary_row
 from .measure import measure_complex, profile_measures
 from .classify import classify, is_measurable, is_strong_offset, DEFAULT_THRESH, LABEL_TEXT, FLAG_TEXT
@@ -19,10 +21,36 @@ from .io import read_spectrum, read_sdss, read_desi, read_table
 from .physics import lambda_l_lambda, continuum_luminosity
 from . import constants, rv, physics
 
-__version__ = "0.2.0"
+__version__ = "0.3.0rc1"
 
-__all__ = ["fit_spectrum", "remeasure", "summary_row", "measure_complex", "profile_measures",
-           "classify", "is_measurable", "is_strong_offset", "DEFAULT_THRESH", "LABEL_TEXT", "FLAG_TEXT",
-           "monte_carlo", "empirical_error", "plot_fit", "plot_epochs_overlay", "plot_ccf",
-           "broad_residual_profile", "rv_curve", "plot_rv_curve", "read_spectrum", "read_sdss", "read_desi", "read_table",
-           "lambda_l_lambda", "continuum_luminosity", "constants", "rv", "physics", "__version__"]
+__all__ = [
+    "fit_spectrum",
+    "remeasure",
+    "summary_row",
+    "measure_complex",
+    "profile_measures",
+    "classify",
+    "is_measurable",
+    "is_strong_offset",
+    "DEFAULT_THRESH",
+    "LABEL_TEXT",
+    "FLAG_TEXT",
+    "monte_carlo",
+    "empirical_error",
+    "plot_fit",
+    "plot_epochs_overlay",
+    "plot_ccf",
+    "broad_residual_profile",
+    "rv_curve",
+    "plot_rv_curve",
+    "read_spectrum",
+    "read_sdss",
+    "read_desi",
+    "read_table",
+    "lambda_l_lambda",
+    "continuum_luminosity",
+    "constants",
+    "rv",
+    "physics",
+    "__version__",
+]

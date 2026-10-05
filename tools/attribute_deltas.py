@@ -2,7 +2,7 @@
 Attribute the change of a fit between the 0.1.0 configuration and the current
 tree to the corrections, by controlled refits.
 
-    PYTHONPATH=. python tools/attribute_deltas.py --pins tests/data/pins_0.2.0.json \\
+    PYTHONPATH=. python tools/attribute_deltas.py --pins tests/data/pins_0.3.0.json \\
         --legacy tests/data/pins.json --out docs/attribution_pins.csv
 
 Baseline and toggles. The baseline is the 0.1.0 configuration reproduced
@@ -27,6 +27,12 @@ keyword:
   host_guard          the host-fraction guard (on) against the 0.1.0 host
                       decision (off). Keyword only; it changes degenerate
                       spectra only.
+  conti_multistart    the continuum started from several points (on, since
+                      0.3.0) against the single start of 0.1.0 and 0.2.0
+                      (off). Keyword only.
+  mask_grow           the mask grown by two pixels around every unusable
+                      pixel (on, since 0.3.0) against the unusable pixels
+                      alone (off). Keyword only.
 
 A toggle whose keyword the tree does not have and that has no patch is
 reported as unavailable and left out of the search. The corrections without a
@@ -73,6 +79,7 @@ entries with a target identifier, as tools/make_pins.py writes them) or a CSV
 list (``--list``: columns path, z, and optionally ebv, complexes as
 "Halpha+Hbeta", targetid).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -99,10 +106,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "tests", "data")
 EXAMPLES = os.path.join(ROOT, "examples", "data")
 
-TOL_KMS = 1.5            # |delta c50_sys| within which two fits agree (the confidence-interval rule)
-EDGE_BIC = 5.0           # |bic_margin| below which a decomposition is on the edge
-PERTURB_KMS = 1.0        # start perturbation: every broad starting velocity moved by this
-LASTBIT_EPS = 1e-13      # last-bit perturbation: flux rescaled by 1 + this (tests/test_reproducibility.py)
+TOL_KMS = 1.5  # |delta c50_sys| within which two fits agree (the confidence-interval rule)
+EDGE_BIC = 5.0  # |bic_margin| below which a decomposition is on the edge
+PERTURB_KMS = 1.0  # start perturbation: every broad starting velocity moved by this
+LASTBIT_EPS = 1e-13  # last-bit perturbation: flux rescaled by 1 + this (tests/test_reproducibility.py)
 LINES = ("Halpha", "Hbeta", "MgII")
 OUTCOMES = ("unchanged", "attributed-single", "attributed-joint", "numerical", "unresolved")
 
@@ -113,7 +120,7 @@ OUTCOMES = ("unchanged", "attributed-single", "attributed-joint", "numerical", "
 def _historical_broadening(self, width):
     """The Fe II operator of 0.1.0: the width rounded to 50 km/s inside the solver."""
     f = int(round(max(width, self.intrinsic + 10.0) / 50.0)) * 50.0
-    sigma = np.sqrt(max(f ** 2 - self.intrinsic ** 2, 100.0)) / S2F / self.pix_kms
+    sigma = np.sqrt(max(f**2 - self.intrinsic**2, 100.0)) / S2F / self.pix_kms
     return gaussian_filter1d(self.flux, sigma, mode="nearest")
 
 
@@ -146,19 +153,32 @@ class Toggle:
         return self.name in inspect.signature(blrfit.fit_spectrum).parameters
 
     def on(self):
-        return inspect.signature(blrfit.fit_spectrum).parameters[self.name].default if self.keyword() else "default"
+        return (
+            inspect.signature(blrfit.fit_spectrum).parameters[self.name].default
+            if self.keyword()
+            else "default"
+        )
 
     def available(self):
         return self.keyword() or self.patch is not None
 
 
 TOGGLES = [
-    Toggle("fe_operator", off="historical", patch=_patch_historical_operator,
-           doc="continuous Fe II broadening against the historical 50 km/s operator"),
-    Toggle("fe_uv_width_policy", off="B", patch=_patch_uv_width_free,
-           doc="ultraviolet Fe II width policy against policy B (always free)"),
-    Toggle("host_guard", off=False,
-           doc="host-fraction guard against the 0.1.0 host decision"),
+    Toggle(
+        "fe_operator",
+        off="historical",
+        patch=_patch_historical_operator,
+        doc="continuous Fe II broadening against the historical 50 km/s operator",
+    ),
+    Toggle(
+        "fe_uv_width_policy",
+        off="B",
+        patch=_patch_uv_width_free,
+        doc="ultraviolet Fe II width policy against policy B (always free)",
+    ),
+    Toggle("host_guard", off=False, doc="host-fraction guard against the 0.1.0 host decision"),
+    Toggle("conti_multistart", off=False, doc="continuum started from several points against one start"),
+    Toggle("mask_grow", off=0, doc="mask grown around unusable pixels against the unusable pixels alone"),
 ]
 
 
@@ -199,9 +219,13 @@ def line_record(row, name):
     if f"{p}_class" not in row:
         return None
     flags = row.get(f"{p}_flags", "")
-    return dict(cls=row[f"{p}_class"], flags=tuple(f for f in flags.split(",") if f),
-                n_broad=int(row[f"{p}_n_broad"]) if row.get(f"{p}_n_broad") is not None else -1,
-                c50=float(_nan(row.get(f"{p}_c50_sys"))), bic_margin=float(_nan(row.get(f"{p}_bic_margin"))))
+    return dict(
+        cls=row[f"{p}_class"],
+        flags=tuple(f for f in flags.split(",") if f),
+        n_broad=int(row[f"{p}_n_broad"]) if row.get(f"{p}_n_broad") is not None else -1,
+        c50=float(_nan(row.get(f"{p}_c50_sys"))),
+        bic_margin=float(_nan(row.get(f"{p}_bic_margin"))),
+    )
 
 
 def _nan(v):
@@ -212,12 +236,19 @@ def record_of(res):
     """The per-line records and the continuum state of a fit result."""
     row = blrfit.summary_row(res)
     lines = {n: line_record(row, n) for n in LINES}
-    conti = dict(feop_fwhm=float(res["conti"].get("feop_fwhm", np.nan)),
-                 feuv_fwhm=float(res["conti"].get("feuv_fwhm", np.nan)),
-                 at_bound=row.get("conti_at_bound", ""), feuv_fwhm_fixed=row.get("conti_feuv_fwhm_fixed", ""),
-                 host_applied=row.get("host_applied", ""), continuum_status=row.get("continuum_status", ""))
-    settings = {k: v for k, v in res.get("settings", {}).items()
-                if isinstance(v, (str, bool, int, float)) and k not in ("nmc", "seed")}
+    conti = dict(
+        feop_fwhm=float(res["conti"].get("feop_fwhm", np.nan)),
+        feuv_fwhm=float(res["conti"].get("feuv_fwhm", np.nan)),
+        at_bound=row.get("conti_at_bound", ""),
+        feuv_fwhm_fixed=row.get("conti_feuv_fwhm_fixed", ""),
+        host_applied=row.get("host_applied", ""),
+        continuum_status=row.get("continuum_status", ""),
+    )
+    settings = {
+        k: v
+        for k, v in res.get("settings", {}).items()
+        if isinstance(v, (str, bool, int, float)) and k not in ("nmc", "seed")
+    }
     return dict(lines={n: r for n, r in lines.items() if r is not None}, conti=conti, settings=settings)
 
 
@@ -299,9 +330,20 @@ def attribute_line(search, name, tol=TOL_KMS, edge=EDGE_BIC, perturb=True):
     cur, base = search.line(every, name), search.line(frozenset(), name)
     if cur is None:
         return None
-    out = dict(outcome="unresolved", toggles=[], reproducing_singles=[], reproducing_pairs=[],
-               complement_necessary=[], order_independent="", perturbation="", edge=False,
-               effect={}, change={}, base=base, cur=cur)
+    out = dict(
+        outcome="unresolved",
+        toggles=[],
+        reproducing_singles=[],
+        reproducing_pairs=[],
+        complement_necessary=[],
+        order_independent="",
+        perturbation="",
+        edge=False,
+        effect={},
+        change={},
+        base=base,
+        cur=cur,
+    )
     for t in names:
         rec = search.line(frozenset([t]), name)
         out["effect"][t] = (rec["c50"] - base["c50"]) if (rec is not None and base is not None) else np.nan
@@ -311,13 +353,15 @@ def attribute_line(search, name, tol=TOL_KMS, edge=EDGE_BIC, perturb=True):
     if same(base, cur, tol):
         out["outcome"] = "unchanged"
     elif out["reproducing_singles"]:
-        out["outcome"] = "attributed-single"; out["toggles"] = list(out["reproducing_singles"])
+        out["outcome"] = "attributed-single"
+        out["toggles"] = list(out["reproducing_singles"])
     else:
         for a, b in itertools.combinations(names, 2):
             if same(search.line(frozenset([a, b]), name), cur, tol):
                 out["reproducing_pairs"].append((a, b))
         if out["reproducing_pairs"]:
-            out["outcome"] = "attributed-joint"; out["toggles"] = list(out["reproducing_pairs"][0])
+            out["outcome"] = "attributed-joint"
+            out["toggles"] = list(out["reproducing_pairs"][0])
     # the complement path: every toggle on, one off
     for t in names:
         if not same(search.line(every - {t}, name), cur, tol):
@@ -325,18 +369,26 @@ def attribute_line(search, name, tol=TOL_KMS, edge=EDGE_BIC, perturb=True):
     if out["outcome"] in ("attributed-single", "attributed-joint"):
         out["order_independent"] = set(out["complement_necessary"]) == set(out["toggles"])
     # the edge: |bic_margin| below EDGE_BIC under every toggle set fitted so far
-    margins = [r["lines"][name]["bic_margin"] for k, r in search.records.items()
-               if "|" not in k and name in r["lines"]]
+    margins = [
+        r["lines"][name]["bic_margin"]
+        for k, r in search.records.items()
+        if "|" not in k and name in r["lines"]
+    ]
     out["edge"] = bool(margins) and all(np.isfinite(m) and abs(m) < edge for m in margins)
     if out["outcome"] == "unresolved":
         if out["edge"]:
-            out["outcome"] = "numerical"; out["perturbation"] = "edge"
+            out["outcome"] = "numerical"
+            out["perturbation"] = "edge"
         elif perturb:
             for kind in ("start", "lastbit"):
                 if same(search.line(frozenset(), name, kind), cur, tol):
-                    out["outcome"] = "numerical"; out["perturbation"] = f"baseline+{kind}"; break
+                    out["outcome"] = "numerical"
+                    out["perturbation"] = f"baseline+{kind}"
+                    break
                 if same(search.line(every, name, kind), base, tol):
-                    out["outcome"] = "numerical"; out["perturbation"] = f"current+{kind}"; break
+                    out["outcome"] = "numerical"
+                    out["perturbation"] = f"current+{kind}"
+                    break
     return out
 
 
@@ -364,8 +416,17 @@ def read_pinned(entry):
 def jobs_from_pins(path):
     with open(path) as fh:
         pins = json.load(fh)["pins"]
-    return [dict(file=p["file"], kind=p.get("kind", "sdss"), targetid=p.get("targetid"), z=float(p["z"]),
-                 ebv=float(p.get("ebv", 0.0)), complexes=list(p["complexes"])) for p in pins]
+    return [
+        dict(
+            file=p["file"],
+            kind=p.get("kind", "sdss"),
+            targetid=p.get("targetid"),
+            z=float(p["z"]),
+            ebv=float(p.get("ebv", 0.0)),
+            complexes=list(p["complexes"]),
+        )
+        for p in pins
+    ]
 
 
 def jobs_from_list(path):
@@ -376,11 +437,25 @@ def jobs_from_list(path):
             tid = r.get("targetid")
             comp = r.get("complexes") or "Halpha+Hbeta"
             z = r.get("z", "")
-            job = dict(file=r["path"], kind="desi" if tid else "sdss", targetid=int(tid) if tid else None,
-                       z=float(z) if z else np.nan, ebv=float(r.get("ebv") or 0.0),
-                       complexes=[c for c in comp.replace(",", "+").split("+") if c])
+            job = dict(
+                file=r["path"],
+                kind="desi" if tid else "sdss",
+                targetid=int(tid) if tid else None,
+                z=float(z) if z else np.nan,
+                ebv=float(r.get("ebv") or 0.0),
+                complexes=[c for c in comp.replace(",", "+").split("+") if c],
+            )
             out.append(job)
     return out
+
+
+# Diagnostic flags introduced in 0.3.0 without a switch: a legacy pin cannot hold them, so the
+# check of the baseline against a legacy summary leaves them out (the attribution itself keeps them)
+FLAGS_SINCE_0_3 = frozenset({"degenerate", "param_at_bound", "residual_outliers", "pl_unphysical"})
+
+
+def _without_flags(rec, flags):
+    return None if rec is None else dict(rec, flags=tuple(f for f in rec["flags"] if f not in flags))
 
 
 def legacy_summaries(path):
@@ -390,12 +465,12 @@ def legacy_summaries(path):
 
 def legacy_check(base, summary, tol=TOL_KMS):
     """Whether the baseline reproduces a legacy summary row: the same classes,
-    flags and component counts and c50_sys within ``tol``. Returns (verdict,
-    largest |delta c50_sys|)."""
+    flags (those of FLAGS_SINCE_0_3 left out) and component counts and c50_sys
+    within ``tol``. Returns (verdict, largest |delta c50_sys|)."""
     departures, dmax = [], 0.0
     for name in LINES:
         ref = line_record(summary, name)
-        got = base["lines"].get(name)
+        got = _without_flags(base["lines"].get(name), FLAGS_SINCE_0_3)
         if ref is None and got is None:
             continue
         if ref is not None and got is not None and np.isfinite(ref["c50"]) and np.isfinite(got["c50"]):
@@ -434,34 +509,75 @@ def attribute_spectrum(job, toggle_names=None, tol=TOL_KMS, edge=EDGE_BIC, pertu
         if r is None:
             continue
         b, c = r["base"], r["cur"]
-        row = dict(spectrum=os.path.basename(job["file"]), line=name, z=z, outcome=r["outcome"],
-                   toggles="+".join(r["toggles"]),
-                   reproducing_singles="|".join(r["reproducing_singles"]),
-                   reproducing_pairs="|".join("+".join(p) for p in r["reproducing_pairs"]),
-                   complement_necessary="+".join(r["complement_necessary"]),
-                   order_independent=r["order_independent"], edge=r["edge"], perturbation=r["perturbation"],
-                   class_base=b["cls"] if b else "", class_cur=c["cls"],
-                   flags_base=",".join(b["flags"]) if b else "", flags_cur=",".join(c["flags"]),
-                   n_broad_base=b["n_broad"] if b else "", n_broad_cur=c["n_broad"],
-                   c50_base=b["c50"] if b else np.nan, c50_cur=c["c50"],
-                   delta_c50=(c["c50"] - b["c50"]) if b else np.nan,
-                   bic_margin_base=b["bic_margin"] if b else np.nan, bic_margin_cur=c["bic_margin"])
+        row = dict(
+            spectrum=os.path.basename(job["file"]),
+            line=name,
+            z=z,
+            outcome=r["outcome"],
+            toggles="+".join(r["toggles"]),
+            reproducing_singles="|".join(r["reproducing_singles"]),
+            reproducing_pairs="|".join("+".join(p) for p in r["reproducing_pairs"]),
+            complement_necessary="+".join(r["complement_necessary"]),
+            order_independent=r["order_independent"],
+            edge=r["edge"],
+            perturbation=r["perturbation"],
+            class_base=b["cls"] if b else "",
+            class_cur=c["cls"],
+            flags_base=",".join(b["flags"]) if b else "",
+            flags_cur=",".join(c["flags"]),
+            n_broad_base=b["n_broad"] if b else "",
+            n_broad_cur=c["n_broad"],
+            c50_base=b["c50"] if b else np.nan,
+            c50_cur=c["c50"],
+            delta_c50=(c["c50"] - b["c50"]) if b else np.nan,
+            bic_margin_base=b["bic_margin"] if b else np.nan,
+            bic_margin_cur=c["bic_margin"],
+        )
         for t in names:
-            row[f"dc50_{t}"] = r["effect"][t]; row[f"change_{t}"] = r["change"][t]
-        row.update(baseline_vs_legacy=verdict, legacy_dc50=dmax, n_fits=search.n_fits,
-                   toggles_available="+".join(names), toggles_unavailable="+".join(unavailable))
+            row[f"dc50_{t}"] = r["effect"][t]
+            row[f"change_{t}"] = r["change"][t]
+        row.update(
+            baseline_vs_legacy=verdict,
+            legacy_dc50=dmax,
+            n_fits=search.n_fits,
+            toggles_available="+".join(names),
+            toggles_unavailable="+".join(unavailable),
+        )
         rows.append(row)
     return rows, search.records
 
 
 def columns(names):
-    fixed = ["spectrum", "line", "z", "outcome", "toggles", "reproducing_singles", "reproducing_pairs",
-             "complement_necessary", "order_independent", "edge", "perturbation",
-             "class_base", "class_cur", "flags_base", "flags_cur", "n_broad_base", "n_broad_cur",
-             "c50_base", "c50_cur", "delta_c50", "bic_margin_base", "bic_margin_cur"]
+    fixed = [
+        "spectrum",
+        "line",
+        "z",
+        "outcome",
+        "toggles",
+        "reproducing_singles",
+        "reproducing_pairs",
+        "complement_necessary",
+        "order_independent",
+        "edge",
+        "perturbation",
+        "class_base",
+        "class_cur",
+        "flags_base",
+        "flags_cur",
+        "n_broad_base",
+        "n_broad_cur",
+        "c50_base",
+        "c50_cur",
+        "delta_c50",
+        "bic_margin_base",
+        "bic_margin_cur",
+    ]
     per_toggle = [c for t in names for c in (f"dc50_{t}", f"change_{t}")]
-    return fixed + per_toggle + ["baseline_vs_legacy", "legacy_dc50", "n_fits", "toggles_available",
-                                 "toggles_unavailable"]
+    return (
+        fixed
+        + per_toggle
+        + ["baseline_vs_legacy", "legacy_dc50", "n_fits", "toggles_available", "toggles_unavailable"]
+    )
 
 
 def _fmt(v):
@@ -523,7 +639,10 @@ def main(argv=None):
     names_wanted = [s for s in a.toggles.split(",") if s] if a.toggles else None
     toggles, unavailable = available_toggles(names_wanted)
     names = [t.name for t in toggles]
-    print(f"toggles: {', '.join(names) or 'none'}" + (f"; unavailable: {', '.join(unavailable)}" if unavailable else ""))
+    print(
+        f"toggles: {', '.join(names) or 'none'}"
+        + (f"; unavailable: {', '.join(unavailable)}" if unavailable else "")
+    )
     for t in toggles:
         print(f"  {t.name}: off={t.off!r} on={t.on()!r} via {'keyword' if t.keyword() else 'patch'}; {t.doc}")
     legacy = legacy_summaries(a.legacy) if a.legacy else None
@@ -531,6 +650,7 @@ def main(argv=None):
     rows, dump = [], []
     if a.nproc > 1:
         import multiprocessing
+
         with multiprocessing.get_context("spawn").Pool(a.nproc) as pool:
             done = pool.imap(_run_job, [(j, opts) for j in jobs])
             results = list(done)
@@ -538,18 +658,31 @@ def main(argv=None):
         results = [_run_job((j, opts)) for j in jobs]
     for job, (jrows, records) in results:
         rows += jrows
-        dump.append(dict(file=os.path.basename(job["file"]), z=jrows[0]["z"] if jrows else job["z"],
-                         rows=jrows, configurations=records))
+        dump.append(
+            dict(
+                file=os.path.basename(job["file"]),
+                z=jrows[0]["z"] if jrows else job["z"],
+                rows=jrows,
+                configurations=records,
+            )
+        )
         for r in jrows:
-            print(f"{r['spectrum']} {r['line']}: {r['outcome']} {r['toggles']} "
-                  f"dc50={_fmt(r['delta_c50'])} edge={r['edge']} fits={r['n_fits']} {r['baseline_vs_legacy']}")
+            print(
+                f"{r['spectrum']} {r['line']}: {r['outcome']} {r['toggles']} "
+                f"dc50={_fmt(r['delta_c50'])} edge={r['edge']} fits={r['n_fits']} {r['baseline_vs_legacy']}"
+            )
     write_rows(rows, names, a.out)
     counts = {o: sum(r["outcome"] == o for r in rows) for o in OUTCOMES}
     print(f"wrote {a.out}: {len(rows)} rows; " + ", ".join(f"{o} {n}" for o, n in counts.items() if n))
     if a.json:
         with open(a.json, "w") as fh:
-            json.dump(_jsonable(dict(toggles=names, unavailable=unavailable, tol_kms=a.tol, edge_bic=a.edge,
-                                     spectra=dump)), fh, indent=1)
+            json.dump(
+                _jsonable(
+                    dict(toggles=names, unavailable=unavailable, tol_kms=a.tol, edge_bic=a.edge, spectra=dump)
+                ),
+                fh,
+                indent=1,
+            )
             fh.write("\n")
         print(f"wrote {a.json}")
 

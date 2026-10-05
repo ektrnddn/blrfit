@@ -1,4 +1,5 @@
 """Scientific regressions for the corrected, still uncalibrated RV estimator."""
+
 import numpy as np
 import pytest
 from scipy.optimize import least_squares
@@ -8,62 +9,73 @@ from blrfit import rv
 
 def profile(v, f=None, error=0.02):
     v = np.asarray(v, float)
-    return dict(v=v, f=np.exp(-0.5*(v/1500.0)**2) if f is None else np.asarray(f),
-                e=np.full(v.size, error), ok=np.ones(v.size, bool), nmod=np.zeros(v.size),
-                fwhm=3532.0, c50_sys=0.0, v_sys=0.0)
+    return dict(
+        v=v,
+        f=np.exp(-0.5 * (v / 1500.0) ** 2) if f is None else np.asarray(f),
+        e=np.full(v.size, error),
+        ok=np.ones(v.size, bool),
+        nmod=np.zeros(v.size),
+        fwhm=3532.0,
+        c50_sys=0.0,
+        v_sys=0.0,
+    )
 
 
 def test_eiv_matches_explicit_latent_flux_likelihood():
     """Independent optimization of every latent pixel checks the derivation."""
     rng = np.random.default_rng(21)
     v = np.linspace(-2, 2, 51)
-    mu = np.exp(-v*v)
-    ex = 0.04 + 0.04*(v+2)/4
-    ey = 0.03 + 0.05*(2-v)/4
-    x = mu + rng.normal(size=v.size)*ex
-    y = 2.8*mu + 0.2 + 0.03*v + rng.normal(size=v.size)*ey
-    beta, design, variance = rv._profile_eiv(y, x, v*1000, ey**2, ex**2,
-                                            np.ones(v.size, bool), "linear")
+    mu = np.exp(-v * v)
+    ex = 0.04 + 0.04 * (v + 2) / 4
+    ey = 0.03 + 0.05 * (2 - v) / 4
+    x = mu + rng.normal(size=v.size) * ex
+    y = 2.8 * mu + 0.2 + 0.03 * v + rng.normal(size=v.size) * ey
+    beta, design, variance = rv._profile_eiv(y, x, v * 1000, ey**2, ex**2, np.ones(v.size, bool), "linear")
+
     def residual(par):
         a, b, c = par[:3]
         latent = par[3:]
-        return np.r_[(x-latent)/ex, (y-a*latent-b-c*v)/ey]
-    sol = least_squares(residual, np.r_[2.0, 0.0, 0.0, x], max_nfev=2000,
-                        ftol=1e-12, xtol=1e-12, gtol=1e-12)
+        return np.r_[(x - latent) / ex, (y - a * latent - b - c * v) / ey]
+
+    sol = least_squares(residual, np.r_[2.0, 0.0, 0.0, x], max_nfev=2000, ftol=1e-12, xtol=1e-12, gtol=1e-12)
     assert sol.success
     assert beta == pytest.approx(sol.x[:3], rel=2e-6, abs=2e-7)
-    assert np.sum((y-design@beta)**2/variance) == pytest.approx(2*sol.cost, rel=1e-9)
+    assert np.sum((y - design @ beta) ** 2 / variance) == pytest.approx(2 * sol.cost, rel=1e-9)
 
 
 @pytest.mark.parametrize("baseline", ["linear", "const", None])
 def test_flux_and_error_unit_rescaling_leaves_entire_ccf_invariant(baseline):
     v = np.arange(-6000.0, 6001.0, 30.0)
     rng = np.random.default_rng(8)
-    p = profile(v, np.exp(-0.5*((v-240)/1500)**2) + rng.normal(0, .02, len(v)))
-    t = profile(v, np.exp(-0.5*(v/1500)**2) + rng.normal(0, .04, len(v)), error=.04)
-    p["nmod"] = .4*np.exp(-.5*(v/150)**2)
-    t["nmod"] = .2*np.exp(-.5*(v/150)**2)
+    p = profile(v, np.exp(-0.5 * ((v - 240) / 1500) ** 2) + rng.normal(0, 0.02, len(v)))
+    t = profile(v, np.exp(-0.5 * (v / 1500) ** 2) + rng.normal(0, 0.04, len(v)), error=0.04)
+    p["nmod"] = 0.4 * np.exp(-0.5 * (v / 150) ** 2)
+    t["nmod"] = 0.2 * np.exp(-0.5 * (v / 150) ** 2)
     p["f"][200] += 5.0  # exercise scale-consistent clipping too
-    reference = rv.ccf_shift(p, t, baseline=baseline, mismatch=.01)
-    for a, b in ((.1, 1.0), (10.0, 1.0), (1.0, .1), (1e-17, 1e-18)):
-        ps = dict(p, **{k:p[k]*a for k in ("f", "e", "nmod")})
-        ts = dict(t, **{k:t[k]*b for k in ("f", "e", "nmod")})
-        result = rv.ccf_shift(ps, ts, baseline=baseline, mismatch=.01)
+    reference = rv.ccf_shift(p, t, baseline=baseline, mismatch=0.01)
+    for a, b in ((0.1, 1.0), (10.0, 1.0), (1.0, 0.1), (1e-17, 1e-18)):
+        ps = dict(p, **{k: p[k] * a for k in ("f", "e", "nmod")})
+        ts = dict(t, **{k: t[k] * b for k in ("f", "e", "nmod")})
+        result = rv.ccf_shift(ps, ts, baseline=baseline, mismatch=0.01)
         for key in ("dv", "err", "chi2_red", "profile_z", "resid_frac"):
             assert result[key] == pytest.approx(reference[key], rel=1e-7, abs=1e-8)
         assert result["n_clipped"] == reference["n_clipped"] > 0
-        assert result["scale"] / (a/b) == pytest.approx(reference["scale"], rel=1e-7)
+        assert result["scale"] / (a / b) == pytest.approx(reference["scale"], rel=1e-7)
         np.testing.assert_allclose(result["curve"][1], reference["curve"][1], rtol=1e-10, atol=1e-8)
 
 
 def log_lattice(v, n=None):
     """Logarithmic (constant wavelength ratio) velocity lattice spanning ``v``."""
     n = len(v) if n is None else n
-    return 299792.458 * (np.exp(np.linspace(np.log1p(v[0]/299792.458), np.log1p(v[-1]/299792.458), n)) - 1)
+    return 299792.458 * (
+        np.exp(np.linspace(np.log1p(v[0] / 299792.458), np.log1p(v[-1] / 299792.458), n)) - 1
+    )
 
 
-@pytest.mark.parametrize("kind", ["spacing", "origin", "gap", "logarithmic", "template_gap",
-                                  "logarithmic_epoch", "logarithmic_template"])
+@pytest.mark.parametrize(
+    "kind",
+    ["spacing", "origin", "gap", "logarithmic", "template_gap", "logarithmic_epoch", "logarithmic_template"],
+)
 def test_actual_coordinates_prevent_artificial_velocity(kind):
     """A shared lattice (uniform or logarithmic, with or without holes) is
     compared by integer placement and is not regridded; an epoch off the
@@ -72,7 +84,7 @@ def test_actual_coordinates_prevent_artificial_velocity(kind):
     v = np.arange(-6000.0, 6001.0, 30.0)
     t = profile(v)
     if kind == "spacing":
-        p = profile(v[0] + np.arange(len(v))*30.3)
+        p = profile(v[0] + np.arange(len(v)) * 30.3)
     elif kind == "origin":
         p = profile(v + 0.3)
     elif kind == "gap":
@@ -88,8 +100,15 @@ def test_actual_coordinates_prevent_artificial_velocity(kind):
         p, t = profile(v), profile(log_lattice(v))
     result = rv.ccf_shift(p, t)
     assert result is not None and abs(result["dv"]) < 1.0
-    expected = {"spacing": "epoch", "origin": "epoch", "gap": "none", "template_gap": "none",
-                "logarithmic": "none", "logarithmic_epoch": "epoch", "logarithmic_template": "template+epoch"}[kind]
+    expected = {
+        "spacing": "epoch",
+        "origin": "epoch",
+        "gap": "none",
+        "template_gap": "none",
+        "logarithmic": "none",
+        "logarithmic_epoch": "epoch",
+        "logarithmic_template": "template+epoch",
+    }[kind]
     assert result["resampling"] == expected
     assert result["regridded"] == (expected != "none")
     assert result["interpolation_covariance_ignored"] == result["regridded"]
@@ -100,13 +119,13 @@ def test_actual_coordinates_prevent_artificial_velocity(kind):
 def test_interpolation_excludes_both_masked_brackets_and_propagates_variance():
     p = profile(np.arange(4.0), [0.0, 999.0, 0.0, 0.0])
     p["ok"][1] = False
-    p["e"] = np.array([1., 1., 2., 4.])
-    f, e, ok, _, flag = rv._prof_on_template(p, profile(np.array([.5, 1.5, 2.5])))
+    p["e"] = np.array([1.0, 1.0, 2.0, 4.0])
+    f, e, ok, _, flag = rv._prof_on_template(p, profile(np.array([0.5, 1.5, 2.5])))
     assert flag
     assert ok.tolist() == [False, False, True]
     assert np.isnan(f[:2]).all()
     assert f[2] == 0.0
-    assert e[2] == pytest.approx(np.sqrt(.25*2**2 + .25*4**2))
+    assert e[2] == pytest.approx(np.sqrt(0.25 * 2**2 + 0.25 * 4**2))
     # An exact valid native pixel does not inherit its bad neighbour's mask.
     f, e, ok, _, _ = rv._prof_on_template(p, profile(np.array([1.0, 2.0])))
     assert ok.tolist() == [False, True]
@@ -114,24 +133,32 @@ def test_interpolation_excludes_both_masked_brackets_and_propagates_variance():
 
 
 def test_interpolation_does_not_bridge_deleted_pixels():
-    p = profile(np.array([0., 1., 2., 6., 7., 8.]))
-    _, _, ok, _, flag = rv._prof_on_template(p, profile(np.arange(.5, 8.0, 1.0)))
+    p = profile(np.array([0.0, 1.0, 2.0, 6.0, 7.0, 8.0]))
+    _, _, ok, _, flag = rv._prof_on_template(p, profile(np.arange(0.5, 8.0, 1.0)))
     assert flag
     assert ok.tolist() == [True, True, False, False, False, False, True, True]
 
 
-@pytest.mark.parametrize("bad_v", [[0., 0., 1.], [2., 1., 0.], [0., np.nan, 2.]])
+@pytest.mark.parametrize("bad_v", [[0.0, 0.0, 1.0], [2.0, 1.0, 0.0], [0.0, np.nan, 2.0]])
 def test_invalid_velocity_coordinates_raise(bad_v):
     with pytest.raises(ValueError, match="strictly increasing"):
         rv.ccf_shift(profile(np.asarray(bad_v)), profile(np.arange(5.0)))
 
 
 def test_native_profile_arrays_keep_masked_pixel_coordinates():
-    x = np.array([6500., 6501., 6502., 6503.])
-    r = dict(x=x[[0, 1, 3]], y=np.ones(3), w=np.ones(3), d={}, comps=[],
-             native_x=x, native_y=np.array([1., 2., 0., 4.]),
-             native_w=np.array([1., 1., 0., 1.]), native_mask=np.array([True, True, False, True]))
-    p = rv.broad_profile_data(dict(fits={"Halpha":r}, meas={}))
+    x = np.array([6500.0, 6501.0, 6502.0, 6503.0])
+    r = dict(
+        x=x[[0, 1, 3]],
+        y=np.ones(3),
+        w=np.ones(3),
+        d={},
+        comps=[],
+        native_x=x,
+        native_y=np.array([1.0, 2.0, 0.0, 4.0]),
+        native_w=np.array([1.0, 1.0, 0.0, 1.0]),
+        native_mask=np.array([True, True, False, True]),
+    )
+    p = rv.broad_profile_data(dict(fits={"Halpha": r}, meas={}))
     assert len(p["v"]) == 4
     assert p["ok"].tolist() == [True, True, False, True]
     assert np.isinf(p["e"][2])
@@ -154,11 +181,20 @@ def test_bootstrap_reports_the_method_actually_used():
 
 def test_bidirectional_invalid_error_is_symmetric(monkeypatch):
     def fake(prof, template, **kwargs):
-        return dict(dv=prof["shift"] - template["shift"], err=prof["err"], at_bound=False,
-                    dv_pix=30., chi2_red=1., npix=100, regridded=False, resid_frac=.01,
-                    err_method="delta_chi2")
+        return dict(
+            dv=prof["shift"] - template["shift"],
+            err=prof["err"],
+            at_bound=False,
+            dv_pix=30.0,
+            chi2_red=1.0,
+            npix=100,
+            regridded=False,
+            resid_frac=0.01,
+            err_method="delta_chi2",
+        )
+
     monkeypatch.setattr(rv, "ccf_shift", fake)
-    a, b = dict(shift=20., err=np.nan), dict(shift=0., err=10.)
+    a, b = dict(shift=20.0, err=np.nan), dict(shift=0.0, err=10.0)
     ab, ba = rv.shift_bidirectional(a, b), rv.shift_bidirectional(b, a)
     assert np.isnan(ab["err"]) and np.isnan(ba["err"])
     assert ab["dv"] == -ba["dv"]
@@ -166,10 +202,14 @@ def test_bidirectional_invalid_error_is_symmetric(monkeypatch):
     assert ab["statistically_valid"] is ba["statistically_valid"] is False
 
 
-@pytest.mark.parametrize("key,value", [("dv", np.nan), ("dv", np.inf), ("err", np.nan), ("err", 0.), ("err", -1.)])
+@pytest.mark.parametrize(
+    "key,value", [("dv", np.nan), ("dv", np.inf), ("err", np.nan), ("err", 0.0), ("err", -1.0)]
+)
 def test_invalid_measurements_never_reliable_or_two_line_consistent(key, value):
-    valid = dict(name="Halpha", dv=100., err=10., at_bound=False, profile_z=0., dir_mismatch=0., frame_ok=True)
-    invalid = dict(valid, **{key:value})
+    valid = dict(
+        name="Halpha", dv=100.0, err=10.0, at_bound=False, profile_z=0.0, dir_mismatch=0.0, frame_ok=True
+    )
+    invalid = dict(valid, **{key: value})
     assert rv.is_reliable(valid) is True
     assert rv.is_reliable(dict(valid, frame_ok=False)) is False
     assert rv.is_reliable(invalid) is False
@@ -177,11 +217,11 @@ def test_invalid_measurements_never_reliable_or_two_line_consistent(key, value):
 
 
 def test_two_line_difference_can_propagate_shared_covariance():
-    a, b = dict(dv=10., err=4.), dict(dv=4., err=5.)
-    result = rv.two_line_consistent(a, b, covariance=8.)
-    assert result["sigma"] == pytest.approx(6./5.)
+    a, b = dict(dv=10.0, err=4.0), dict(dv=4.0, err=5.0)
+    result = rv.two_line_consistent(a, b, covariance=8.0)
+    assert result["sigma"] == pytest.approx(6.0 / 5.0)
     with pytest.raises(ValueError, match="covariance"):
-        rv.two_line_consistent(a, b, covariance=21.)
+        rv.two_line_consistent(a, b, covariance=21.0)
 
 
 # ---------------------------------------------------------------------------
@@ -195,8 +235,10 @@ def test_shared_log_lattice_equals_integer_placement():
     lv = log_lattice(v)
     dpix = np.median(np.diff(lv))
     rng = np.random.default_rng(3)
-    t = profile(lv, np.exp(-0.5*(lv/1500.0)**2) + rng.normal(0, .03, lv.size), error=.03)
-    p = profile(lv, 1.3*np.exp(-0.5*((lv - 5*dpix)/1500.0)**2) + rng.normal(0, .03, lv.size), error=.03)
+    t = profile(lv, np.exp(-0.5 * (lv / 1500.0) ** 2) + rng.normal(0, 0.03, lv.size), error=0.03)
+    p = profile(
+        lv, 1.3 * np.exp(-0.5 * ((lv - 5 * dpix) / 1500.0) ** 2) + rng.normal(0, 0.03, lv.size), error=0.03
+    )
     iv = np.arange(lv.size) * dpix
     on_log = rv.ccf_shift(p, t, baseline="const", window=(-1e9, 1e9))
     on_index = rv.ccf_shift(dict(p, v=iv), dict(t, v=iv), baseline="const", window=(-1e9, 1e9))
@@ -206,7 +248,11 @@ def test_shared_log_lattice_equals_integer_placement():
     assert on_log["dv"] / on_log["dv_pix"] == pytest.approx(on_index["dv"] / on_index["dv_pix"], abs=1e-9)
     assert on_log["dv"] / on_log["dv_pix"] == pytest.approx(5.0, abs=0.3)
     for key in ("err", "chi2_red", "npix", "scale", "profile_z", "err_method"):
-        assert on_log[key] == pytest.approx(on_index[key], rel=1e-9) if isinstance(on_log[key], float) else on_log[key] == on_index[key]
+        assert (
+            on_log[key] == pytest.approx(on_index[key], rel=1e-9)
+            if isinstance(on_log[key], float)
+            else on_log[key] == on_index[key]
+        )
 
 
 def test_off_lattice_epoch_is_resampled_and_shared_holes_are_not():
@@ -274,7 +320,9 @@ def test_pair_records_both_directions_and_masked_pixels(monkeypatch):
     p = rv.pair_analysis(a, b, name="Halpha", details=True)
     s_ab, s_ba = p["details"]["s_ab"], p["details"]["s_ba"]
     assert p["scale_ab"] == s_ab["scale"] and p["scale_ba"] == s_ba["scale"]
-    assert p["scale_ab"] == pytest.approx(2.0, rel=0.05) and p["scale_ab"] * p["scale_ba"] == pytest.approx(1.0, abs=0.05)
+    assert p["scale_ab"] == pytest.approx(2.0, rel=0.05) and p["scale_ab"] * p["scale_ba"] == pytest.approx(
+        1.0, abs=0.05
+    )
     for key in ("chi2_red", "profile_z", "err", "npix"):
         assert p[key + "_ab"] == s_ab[key] and p[key + "_ba"] == s_ba[key]
     assert p["err_method_ab"] == s_ab["err_method"] == "delta_chi2" and p["err_method_ba"] == "delta_chi2"
@@ -290,9 +338,15 @@ def test_pair_records_both_directions_and_masked_pixels(monkeypatch):
     assert far["n_masked_a"] == 0
 
 
-@pytest.mark.parametrize("zp_dv,ok,reason", [
-    (100.0, True, ""), (-199.0, True, ""), (600.0, False, "zero point +600 km/s exceeds veto"),
-    (-250.0, False, "zero point -250 km/s exceeds veto")])
+@pytest.mark.parametrize(
+    "zp_dv,ok,reason",
+    [
+        (100.0, True, ""),
+        (-199.0, True, ""),
+        (600.0, False, "zero point +600 km/s exceeds veto"),
+        (-250.0, False, "zero point -250 km/s exceeds veto"),
+    ],
+)
 def test_frame_veto_and_one_zero_point_rule(monkeypatch, zp_dv, ok, reason):
     """A narrow-line zero point beyond FRAME_VETO_KMS vetoes the pair for both
     lines; within it the frame is good, Hbeta is corrected by the zero point
@@ -322,14 +376,20 @@ def test_frame_not_ok_without_a_measured_zero_point(monkeypatch):
     assert p["zp_applied"] is False and p["dv_corrected"] == p["dv"] and rv.is_reliable(p) is False
     monkeypatch.setattr(rv, "narrow_zeropoint", lambda x, y: zeropoint(790.0, at_bound=True))
     p = rv.pair_analysis(a, b, name="Hbeta")
-    assert p["frame_ok"] is False and p["frame_reason"] == "zero point at search bound" and p["zp_at_bound"] is True
+    assert (
+        p["frame_ok"] is False
+        and p["frame_reason"] == "zero point at search bound"
+        and p["zp_at_bound"] is True
+    )
     assert p["zp_applied"] is False and rv.is_reliable(p) is False
     monkeypatch.setattr(rv, "narrow_zeropoint", lambda x, y: zeropoint(np.nan))
     p = rv.pair_analysis(a, b, name="Hbeta")
     assert p["frame_ok"] is False and p["frame_reason"] == "no narrow zero point"
     # a zero point that is not requested is not measured
     p = rv.pair_analysis(a, b, name="Hbeta", zp=False)
-    assert p["frame_ok"] is False and p["frame_reason"] == "no narrow zero point" and rv.is_reliable(p) is False
+    assert (
+        p["frame_ok"] is False and p["frame_reason"] == "no narrow zero point" and rv.is_reliable(p) is False
+    )
     # the zero-point rule as a function of its own
     f = rv.frame_check(zeropoint(50.0, err=np.nan, err_method="unavailable"), "Hbeta", -300.0, 20.0)
     assert f["frame_ok"] and f["zp_applied"] and f["dv_corrected"] == -350.0 and np.isnan(f["err_corrected"])
@@ -361,13 +421,19 @@ def test_error_grades_on_constructed_curves():
     on one side gives the bracketed half-width ('delta_chi2_one_sided'); a
     curve capped below 6.63 on both sides gives the curvature error; a flat
     curve has no error, and none of these is reported as 'delta_chi2'."""
-    ns = np.arange(-60, 61); n = ns.astype(float); k0 = 60; dpix = 30.0; a = 0.5
+    ns = np.arange(-60, 61)
+    n = ns.astype(float)
+    k0 = 60
+    dpix = 30.0
+    a = 0.5
     r = rv._shift_error(ns, a * n**2, k0, dpix)
     half = np.sqrt(rv.DCHI2_99 / a)
     assert r["err_method"] == "delta_chi2" and r["bracket"] == "both"
     assert r["dv"] == pytest.approx(0.0, abs=1e-6)
     assert r["err"] == pytest.approx(half * dpix / rv.SIG_FROM_99, rel=1e-3) and r["err"] == r["err_dchi2"]
-    assert r["err_lo"] == pytest.approx(-half * dpix, rel=1e-3) and r["err_hi"] == pytest.approx(half * dpix, rel=1e-3)
+    assert r["err_lo"] == pytest.approx(-half * dpix, rel=1e-3) and r["err_hi"] == pytest.approx(
+        half * dpix, rel=1e-3
+    )
     assert r["err_curve"] == pytest.approx(dpix / np.sqrt(a), rel=1e-6)
     one = np.where(n <= 0, a * n**2, np.minimum(a * n**2, 4.0))
     r = rv._shift_error(ns, one, k0, dpix)
@@ -386,23 +452,39 @@ def test_error_grades_on_constructed_curves():
     assert r["err_method"] == "unavailable" and np.isnan(r["err"]) and np.isnan(r["err_curve"])
     # a plateau that the raw curve reaches only far away is still not a bracket:
     # the polynomial edge is never taken for a crossing
-    assert np.isnan(rv._raw_cross(n, capped, k0, 6.63, +1)) and np.isnan(rv._raw_cross(n, capped, k0, 6.63, -1))
+    assert np.isnan(rv._raw_cross(n, capped, k0, 6.63, +1)) and np.isnan(
+        rv._raw_cross(n, capped, k0, 6.63, -1)
+    )
     assert rv._raw_cross(n, a * n**2, k0, 6.63, +1) == pytest.approx(half, rel=0.05)
 
 
 def test_bidirectional_reports_mixed_error_methods(monkeypatch):
     def fake(prof, template, **kwargs):
-        return dict(dv=prof["shift"] - template["shift"], err=prof["err"], at_bound=False, dv_pix=30.,
-                    chi2_red=prof["chi2"], npix=100, regridded=False, resid_frac=.01, err_method=prof["method"],
-                    scale=prof["scale"], profile_z=0., n_masked_prof=prof.get("masked", 0))
+        return dict(
+            dv=prof["shift"] - template["shift"],
+            err=prof["err"],
+            at_bound=False,
+            dv_pix=30.0,
+            chi2_red=prof["chi2"],
+            npix=100,
+            regridded=False,
+            resid_frac=0.01,
+            err_method=prof["method"],
+            scale=prof["scale"],
+            profile_z=0.0,
+            n_masked_prof=prof.get("masked", 0),
+        )
+
     monkeypatch.setattr(rv, "ccf_shift", fake)
-    a = dict(shift=20., err=10., method="delta_chi2", chi2=1.5, scale=2., masked=2)
-    b = dict(shift=0., err=12., method="curvature", chi2=1.1, scale=.5)
+    a = dict(shift=20.0, err=10.0, method="delta_chi2", chi2=1.5, scale=2.0, masked=2)
+    b = dict(shift=0.0, err=12.0, method="curvature", chi2=1.1, scale=0.5)
     s = rv.shift_bidirectional(a, b)
     assert s["statistically_valid"] and s["err_method"] == "mixed"
     assert s["err_method_ab"] == "delta_chi2" and s["err_method_ba"] == "curvature"
-    assert s["err"] == 12. and s["err_ab"] == 10. and s["err_ba"] == 12.
-    assert s["scale_ab"] == 2. and s["scale_ba"] == .5 and s["chi2_red_ab"] == 1.5 and s["chi2_red_ba"] == 1.1
+    assert s["err"] == 12.0 and s["err_ab"] == 10.0 and s["err_ba"] == 12.0
+    assert (
+        s["scale_ab"] == 2.0 and s["scale_ba"] == 0.5 and s["chi2_red_ab"] == 1.5 and s["chi2_red_ba"] == 1.1
+    )
     assert s["n_masked_a"] == 2 and s["n_masked_b"] == 0 and s["npix_ab"] == s["npix_ba"] == 100
     b["method"] = "delta_chi2"
     assert rv.shift_bidirectional(a, b)["err_method"] == "delta_chi2"
@@ -419,6 +501,7 @@ def j001224():
     """The two SDSS epochs of J001224 (2001, 2013), fitted at the redshift of Liu et al. (2014)."""
     from blrfit import fit_spectrum, read_spectrum
     from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, Z_J001224
+
     out = []
     for path in (SDSS_EXAMPLE, SDSS_EXAMPLE_2):
         sp = read_spectrum(path)
@@ -443,7 +526,9 @@ def test_bundled_sdss_pair_is_placed_not_resampled(j001224):
         assert p["details"]["s_ab"]["resampling"] == p["details"]["s_ba"]["resampling"] == "none"
         assert abs(p["dv"] - expected) < 50.0 and 10.0 < p["err"] < 60.0 and p["err_method"] == "delta_chi2"
         assert p["consistent"] and not p["at_bound"] and p["n_masked_a"] == p["n_masked_b"] == 0
-        assert p["zp_source"] == "OIII" and abs(p["zp_dv"]) < 40.0 and p["frame_ok"] and p["frame_reason"] == ""
+        assert (
+            p["zp_source"] == "OIII" and abs(p["zp_dv"]) < 40.0 and p["frame_ok"] and p["frame_reason"] == ""
+        )
         if name == "Hbeta":
             assert p["zp_applied"] and p["dv_corrected"] == pytest.approx(p["dv"] - p["zp_dv"])
             assert p["err_corrected"] == pytest.approx(np.hypot(p["err"], p["zp_err"]))
@@ -453,16 +538,50 @@ def test_bundled_sdss_pair_is_placed_not_resampled(j001224):
             assert p["profile_z"] > 5.0 and not rv.is_reliable(p)
         # numerically the integer placement of the native arrays on an index lattice
         pa, pb = rv.broad_profile_data(r2013, name), rv.broad_profile_data(r2001, name)
-        assert pa["v"].size == pb["v"].size and np.array_equal(pa["v"], pb["v"]) and rv._on_lattice(pa["v"], pb["v"])
+        assert (
+            pa["v"].size == pb["v"].size
+            and np.array_equal(pa["v"], pb["v"])
+            and rv._on_lattice(pa["v"], pb["v"])
+        )
         s = rv.ccf_shift(pa, pb, baseline="const")
         inwin = (pb["v"] >= s["window"][0]) & (pb["v"] <= s["window"][1])
         iv = np.arange(pb["v"].size) * s["dv_pix"]
-        t = rv.ccf_shift(dict(pa, v=iv), dict(pb, v=iv), baseline="const", window=(iv[inwin].min(), iv[inwin].max()))
+        t = rv.ccf_shift(
+            dict(pa, v=iv), dict(pb, v=iv), baseline="const", window=(iv[inwin].min(), iv[inwin].max())
+        )
         np.testing.assert_allclose(s["curve"][1], t["curve"][1], rtol=1e-10, atol=1e-8)
         assert s["dv"] / s["dv_pix"] == pytest.approx(t["dv"] / t["dv_pix"], abs=1e-9)
         for key in ("err", "chi2_red", "scale", "profile_z"):
             assert s[key] == pytest.approx(t[key], rel=1e-9)
         assert s["npix"] == t["npix"] and s["resampling"] == t["resampling"] == "none"
+
+
+def test_bundled_sdss_pair_through_the_reporting_policy(j001224):
+    """The reporting layer on the same pair. Hbeta is 2.1 times brighter in 2013 and the
+    flux factors absorb it; an SDSS-SDSS pair inherits no error floor, calibrated or
+    legacy; no pair is 'reliable' before a calibration; the two-line criterion compares
+    the corrected shifts and their errors."""
+    from blrfit.rv_policy import measurement_policy, two_line_policy
+
+    r2001, r2013 = j001224
+    shown = {}
+    for name in ("Halpha", "Hbeta"):
+        p = rv.pair_analysis(r2013, r2001, name=name, details=True)
+        policy = measurement_policy(p, name, "sdss", "sdss")
+        assert policy["dv_corrected"] == p["dv_corrected"] and policy["err_total"] == p["err_corrected"]
+        assert policy["error_floor_kind"] == "not_calibrated" and np.isnan(policy["error_floor"])
+        assert policy["legacy_error_floor_kind"] == "unsupported_instrument_pair"
+        assert not policy["calibration_supported"] and policy["reliable"] is False
+        assert policy["diagnostic_quality_pass"] == rv.is_reliable(p)
+        if name == "Hbeta":
+            assert p["scale_ab"] > 1.5 and p["scale_ba"] < 0.7 and 0.0 < p["resid_frac"] < 0.2
+        shown[name] = dict(policy, measured=True)
+    ha, hb = shown["Halpha"], shown["Hbeta"]
+    delta = ha["dv_corrected"] - hb["dv_corrected"]
+    sigma = abs(delta) / np.hypot(ha["err_total"], hb["err_total"])
+    tl = two_line_policy(ha, hb)
+    assert tl["difference"] == pytest.approx(delta) and tl["sigma"] == pytest.approx(sigma)
+    assert tl["consistent"] == (sigma <= 2) and tl["same_sign"] and not tl["calibration_supported"]
 
 
 @pytest.mark.slow
@@ -477,14 +596,25 @@ def test_bundled_sdss_desi_pair_is_regridded():
     import os
     from blrfit import fit_spectrum, read_spectrum
     from conftest import DESI_EXAMPLE, DESI_TARGETID, EXAMPLES
+
     sp_s = read_spectrum(os.path.join(EXAMPLES, "spec-0652-52138-0326.fits"))
     sp_d = read_spectrum(DESI_EXAMPLE, targetid=DESI_TARGETID)
     r_s = fit_spectrum(sp_s["wave"], sp_s["flux"], sp_s["ivar"], 0.2203, complexes=("Halpha", "Hbeta"))
-    r_d = fit_spectrum(sp_d["wave"], sp_d["flux"], sp_d["ivar"], 0.2203, ebv=float(sp_d["ebv"]), complexes=("Halpha", "Hbeta"))
+    r_d = fit_spectrum(
+        sp_d["wave"],
+        sp_d["flux"],
+        sp_d["ivar"],
+        0.2203,
+        ebv=float(sp_d["ebv"]),
+        complexes=("Halpha", "Hbeta"),
+    )
     for name, expected in (("Halpha", 71.9), ("Hbeta", 132.7)):
         p = rv.pair_analysis(r_d, r_s, name=name, details=True)
         assert p["regridded"] is True and p["interpolation_covariance_ignored"] is True
-        assert p["details"]["s_ab"]["resampling"] == "template+epoch" and p["details"]["s_ba"]["resampling"] == "epoch"
+        assert (
+            p["details"]["s_ab"]["resampling"] == "template+epoch"
+            and p["details"]["s_ba"]["resampling"] == "epoch"
+        )
         assert abs(p["dv"] - expected) < 50.0 and p["consistent"] and not p["at_bound"]
         assert p["frame_ok"] and p["zp_source"] == "OIII" and abs(p["zp_dv"]) < 40.0
         assert p["zp_applied"] is (name == "Hbeta")
@@ -501,16 +631,34 @@ def test_second_minimum_of_a_two_well_curve():
     assert np.isnan(alt) and np.isnan(dG)
 
 
-@pytest.mark.parametrize("sab,sba,ok", [(1.0, 1.0, True), (2.0, 0.5, True), (3.9, 0.26, True),
-                                         (4.5, 0.22, False), (0.01, 50.0, False), (2.0, 2.0, False),
-                                         (np.nan, 1.0, False)])
+@pytest.mark.parametrize(
+    "sab,sba,ok",
+    [
+        (1.0, 1.0, True),
+        (2.0, 0.5, True),
+        (3.9, 0.26, True),
+        (4.5, 0.22, False),
+        (0.01, 50.0, False),
+        (2.0, 2.0, False),
+        (np.nan, 1.0, False),
+    ],
+)
 def test_flux_factor_plausibility(sab, sba, ok):
     assert rv._scales_ok(sab, sba) is ok
 
 
 def test_implausible_or_ambiguous_pairs_are_not_reliable():
-    good = dict(name="Halpha", dv=100., err=10., at_bound=False, profile_z=0., dir_mismatch=0., frame_ok=True,
-                scale_ok=True, ambiguous=False)
+    good = dict(
+        name="Halpha",
+        dv=100.0,
+        err=10.0,
+        at_bound=False,
+        profile_z=0.0,
+        dir_mismatch=0.0,
+        frame_ok=True,
+        scale_ok=True,
+        ambiguous=False,
+    )
     assert rv.is_reliable(good)
     assert not rv.is_reliable(dict(good, scale_ok=False))
     assert not rv.is_reliable(dict(good, ambiguous=True))
@@ -522,8 +670,16 @@ def _gauss_profile(v, centre, fwhm, amp=1.0, err=0.01, seed=0, extra=None):
     if extra is not None:
         f = f + extra(v)
     f = f + rng.normal(0.0, err, v.size)
-    return dict(v=v, f=f, e=np.full(v.size, err), ok=np.ones(v.size, bool), nmod=np.zeros(v.size),
-                fwhm=fwhm, c50_sys=centre, v_sys=0.0)
+    return dict(
+        v=v,
+        f=f,
+        e=np.full(v.size, err),
+        ok=np.ones(v.size, bool),
+        nmod=np.zeros(v.size),
+        fwhm=fwhm,
+        c50_sys=centre,
+        v_sys=0.0,
+    )
 
 
 def test_large_true_shift_is_recovered_by_the_two_stage_search():
@@ -547,7 +703,9 @@ def test_common_pixel_set_keeps_the_pixel_count_constant():
     found is small."""
     v = np.arange(-7500.0, 7500.01, 30.0)
     t = _gauss_profile(v, 0.0, 4000.0, seed=3)
-    p = _gauss_profile(v, 0.0, 4000.0, seed=4, extra=lambda x: 0.4 * np.exp(-0.5 * ((x - 2500.0) / 800.0) ** 2))
+    p = _gauss_profile(
+        v, 0.0, 4000.0, seed=4, extra=lambda x: 0.4 * np.exp(-0.5 * ((x - 2500.0) / 800.0) ** 2)
+    )
     r = rv.ccf_shift(p, t, vmax=5000.0)
     lo_n, hi_n = r["npix_search"]
     assert r["two_stage"] and lo_n == hi_n
@@ -561,7 +719,9 @@ def test_single_stage_search_is_kept_for_the_zero_point():
     v = np.arange(-1500.0, 1500.01, 40.0)
     t = _gauss_profile(v, 0.0, 400.0, seed=5)
     p = _gauss_profile(v, 60.0, 400.0, seed=6)
-    r = rv.ccf_shift(p, t, vmax=800.0, window=(-1500.0, 1500.0), baseline="const", min_pix=10, two_stage=False)
+    r = rv.ccf_shift(
+        p, t, vmax=800.0, window=(-1500.0, 1500.0), baseline="const", min_pix=10, two_stage=False
+    )
     assert not r["two_stage"] and abs(r["dv"] - 60.0) < 15.0
 
 
@@ -579,10 +739,13 @@ def test_single_pixel_spike_is_masked_before_the_search():
     t = _gauss_profile(v, 0.0, 3532.0, err=0.04, seed=9)
     r = rv.ccf_shift(dict(p, fwhm=3532.0, c50_sys=0.0, v_sys=0.0), t)
     assert r["n_spikes"] == 1 and not r["at_bound"] and abs(r["dv"] - 240.0) < 40.0
-    quiet = dict(p, f=np.exp(-0.5 * (v / 1500.0) ** 2) + 0.3 * np.exp(-0.5 * (v / 150.0) ** 2)
-                 + rng.normal(0.0, 0.02, v.size))
+    quiet = dict(
+        p,
+        f=np.exp(-0.5 * (v / 1500.0) ** 2)
+        + 0.3 * np.exp(-0.5 * (v / 150.0) ** 2)
+        + rng.normal(0.0, 0.02, v.size),
+    )
     assert rv._spikes(quiet, 5.0).sum() <= 1
-
 
 
 def test_direction_cut_can_be_replaced_per_call():
@@ -590,8 +753,17 @@ def test_direction_cut_can_be_replaced_per_call():
     (a number for the pair's line or a per-line mapping); without it the
     package constant decides, and a line missing from a mapping is never
     reliable."""
-    pair = dict(name="Halpha", dv=100., err=10., at_bound=False, profile_z=0., dir_mismatch=300., frame_ok=True,
-                scale_ok=True, ambiguous=False)
+    pair = dict(
+        name="Halpha",
+        dv=100.0,
+        err=10.0,
+        at_bound=False,
+        profile_z=0.0,
+        dir_mismatch=300.0,
+        frame_ok=True,
+        scale_ok=True,
+        ambiguous=False,
+    )
     assert rv.CCF_DIR_CUT_KMS["Halpha"] > 300.0 and rv.is_reliable(pair)
     assert not rv.is_reliable(pair, dir_cut=250.0)
     assert rv.is_reliable(pair, dir_cut=350.0)
@@ -609,22 +781,30 @@ def test_zero_point_is_antisymmetric_and_checks_its_directions():
     errors vetoes the frame."""
     v = np.arange(-1500.0, 1500.01, 69.0)
     w = np.arange(-1500.0, 1500.01, 40.0)
-    rng = np.random.default_rng(3)
 
     def narrow(grid, centre, err, seed):
         r = np.random.default_rng(seed)
         f = np.exp(-0.5 * ((grid - centre) / 150.0) ** 2) + r.normal(0.0, err, grid.size)
-        return dict(v=grid, f=f, e=np.full(grid.size, err), ok=np.ones(grid.size, bool), nmod=np.zeros(grid.size))
+        return dict(
+            v=grid, f=f, e=np.full(grid.size, err), ok=np.ones(grid.size, bool), nmod=np.zeros(grid.size)
+        )
 
     a, b = narrow(v, 45.0, 0.03, 1), narrow(w, 0.0, 0.05, 2)
     opts = dict(vmax=800.0, window=(-1500.0, 1500.0), baseline="const", min_pix=10, two_stage=False)
-    ab = rv.ccf_shift(a, b, **opts); ba = rv.ccf_shift(b, a, **opts)
-    assert abs(ab["dv"] + ba["dv"]) > 0.0            # one direction alone is not antisymmetric
-    zp = dict(dv=0.5 * (ab["dv"] - ba["dv"]), err=max(ab["err"], ba["err"]), line="OIII", source="OIII",
-              at_bound=False, err_method="delta_chi2", consistent=True)
+    ab = rv.ccf_shift(a, b, **opts)
+    ba = rv.ccf_shift(b, a, **opts)
+    assert abs(ab["dv"] + ba["dv"]) > 0.0  # one direction alone is not antisymmetric
+    zp = dict(
+        dv=0.5 * (ab["dv"] - ba["dv"]),
+        err=max(ab["err"], ba["err"]),
+        line="OIII",
+        source="OIII",
+        at_bound=False,
+        err_method="delta_chi2",
+        consistent=True,
+    )
     assert abs(zp["dv"] - 45.0) < 25.0
     assert rv.frame_check(zp, "Hbeta", 100.0, 20.0)["frame_ok"]
     bad = dict(zp, consistent=False)
     f = rv.frame_check(bad, "Hbeta", 100.0, 20.0)
     assert not f["frame_ok"] and "inconsistent" in f["frame_reason"] and not f["zp_applied"]
-

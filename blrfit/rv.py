@@ -1,5 +1,8 @@
 """Velocity translations of continuum/narrow-subtracted broad profiles.
 
+Experimental, and available from Python only: the shifts and errors computed
+here have no on-sky calibration and are not validated velocity measurements.
+
 The estimator follows the profile-comparison approach of Eracleous et al.
 (2012), Shen et al. (2013), Liu et al. (2014), Runnoe et al. (2017), and Guo
 et al. (2019). The corrected implementation profiles a positive flux factor
@@ -25,6 +28,7 @@ This DEVELOPMENT estimator is not a calibrated production likelihood:
 coordinate v=c*(lambda/lambda0-1). A shift is an additive translation in that
 coordinate; this API does not fit a relativistic wavelength dilation.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -32,12 +36,31 @@ import warnings
 import numpy as np
 from scipy.optimize import minimize_scalar
 
-from .constants import (C_KMS, LAM, CCF_VMAX_KMS, CCF_WIN_FWHM, CCF_WIN_MIN_KMS, CCF_NSUB_FRAC,
-                        CCF_CLIP_SIGMA, CCF_DCHI2_99, CCF_SIG_FROM_99, CCF_SYS_KMS,
-                        CCF_SYS_HBETA_LOWSNR_KMS, CCF_DIR_CUT_KMS, CCF_PROFILE_Z_MAX,
-                        PROFILE_GRADE_Z, PROFILE_GRADE_INFLATION, CCF_NULL_KMS, FRAME_VETO_KMS,
-                        CCF_SCALE_RANGE, CCF_SCALE_PRODUCT_RANGE, CCF_ALT_MIN_SEP_KMS,
-                        CCF_COMMON_MIN_FRAC, CCF_REFINE_HALF_KMS, CCF_REFINE_HALF_PIX)
+from .constants import (
+    C_KMS,
+    LAM,
+    CCF_VMAX_KMS,
+    CCF_WIN_FWHM,
+    CCF_WIN_MIN_KMS,
+    CCF_NSUB_FRAC,
+    CCF_CLIP_SIGMA,
+    CCF_DCHI2_99,
+    CCF_SIG_FROM_99,
+    CCF_SYS_KMS,
+    CCF_SYS_HBETA_LOWSNR_KMS,
+    CCF_DIR_CUT_KMS,
+    CCF_PROFILE_Z_MAX,
+    PROFILE_GRADE_Z,
+    PROFILE_GRADE_INFLATION,
+    CCF_NULL_KMS,
+    FRAME_VETO_KMS,
+    CCF_SCALE_RANGE,
+    CCF_SCALE_PRODUCT_RANGE,
+    CCF_ALT_MIN_SEP_KMS,
+    CCF_COMMON_MIN_FRAC,
+    CCF_REFINE_HALF_KMS,
+    CCF_REFINE_HALF_PIX,
+)
 from .model.lines import eval_components
 
 ALGORITHM_VERSION = "profile-eiv-v3"
@@ -68,14 +91,22 @@ def broad_profile_data(res, name="Halpha", mask_narrow_kms=0.0):
     ok = np.isfinite(f) & np.isfinite(e) & (w > 0)
     if "native_mask" in r:
         ok &= np.asarray(r["native_mask"], bool)
-    for lab, l0, an, vn, sn, kind, rr in comps:
+    for _lab, l0, _an, vn, _sn, kind, _rr in comps:
         if kind == "narrow":
             vline = (l0 * (1.0 + d[vn] / C_KMS) / lam0 - 1.0) * C_KMS
             ok &= np.abs(v - vline) > mask_narrow_kms
     m = res["meas"].get(name, {}) or {}
-    return dict(v=v, f=f, e=e, ok=ok, nmod=np.abs(narrow),
-                v_sys=float(m.get("v_sys", np.nan)), fwhm=float(m.get("fwhm", np.nan)),
-                c50_sys=float(m.get("c50_sys", np.nan)), c50=float(m.get("c50", np.nan)))
+    return dict(
+        v=v,
+        f=f,
+        e=e,
+        ok=ok,
+        nmod=np.abs(narrow),
+        v_sys=float(m.get("v_sys", np.nan)),
+        fwhm=float(m.get("fwhm", np.nan)),
+        c50_sys=float(m.get("c50_sys", np.nan)),
+        c50=float(m.get("c50", np.nan)),
+    )
 
 
 def narrow_profile_data(res, name="Hbeta", which="OIII"):
@@ -100,7 +131,9 @@ def narrow_profile_data(res, name="Hbeta", which="OIII"):
         ok &= np.asarray(r["native_mask"], bool)
     ok &= (x >= lo) & (x <= hi)
     v = (x / lam0 - 1.0) * C_KMS
-    return dict(v=v, f=f, e=e, ok=ok, nmod=np.zeros_like(f), v_sys=np.nan, fwhm=np.nan, c50_sys=np.nan, c50=np.nan)
+    return dict(
+        v=v, f=f, e=e, ok=ok, nmod=np.zeros_like(f), v_sys=np.nan, fwhm=np.nan, c50_sys=np.nan, c50=np.nan
+    )
 
 
 def _pixel_scale(v):
@@ -120,7 +153,9 @@ def _validated_profile(prof):
         if arr.shape != v.shape:
             raise ValueError("Profile arrays must have the same one-dimensional shape")
         out[key] = arr
-    out["ok"] = out["ok"] & np.isfinite(out["f"]) & np.isfinite(out["e"]) & (out["e"] > 0) & np.isfinite(out["nmod"])
+    out["ok"] = (
+        out["ok"] & np.isfinite(out["f"]) & np.isfinite(out["e"]) & (out["e"] > 0) & np.isfinite(out["nmod"])
+    )
     return out
 
 
@@ -141,7 +176,8 @@ def _on_lattice(vP, vT):
         return False
     n = len(vT)
     tr = np.searchsorted(vT, vP[src_inside])
-    ti1 = np.clip(tr, 0, n - 1); ti0 = np.clip(tr - 1, 0, n - 1)
+    ti1 = np.clip(tr, 0, n - 1)
+    ti0 = np.clip(tr - 1, 0, n - 1)
     distances = np.minimum(np.abs(vP[src_inside] - vT[ti0]), np.abs(vP[src_inside] - vT[ti1]))
     return bool(np.all(distances <= atol))
 
@@ -160,8 +196,10 @@ def _prof_on_template(prof, template, tol_frac=None):
     vT, vP = np.asarray(template["v"], float), prof["v"]
     atol = _lattice_tolerance(vP, vT)
     n = len(vT)
-    fP = np.full(n, np.nan); eP = np.full(n, np.inf)
-    okP = np.zeros(n, bool); nmP = np.zeros(n)
+    fP = np.full(n, np.nan)
+    eP = np.full(n, np.inf)
+    okP = np.zeros(n, bool)
+    nmP = np.zeros(n)
     right = np.searchsorted(vP, vT)
     i1 = np.clip(right, 0, len(vP) - 1)
     i0 = np.clip(right - 1, 0, len(vP) - 1)
@@ -180,7 +218,7 @@ def _prof_on_template(prof, template, tol_frac=None):
     a = (vT[jj] - vP[i0[jj]]) / (vP[i1[jj]] - vP[i0[jj]])
     b = 1.0 - a
     fP[jj] = b * prof["f"][i0[jj]] + a * prof["f"][i1[jj]]
-    eP[jj] = np.sqrt(b*b * prof["e"][i0[jj]]**2 + a*a * prof["e"][i1[jj]]**2)
+    eP[jj] = np.sqrt(b * b * prof["e"][i0[jj]] ** 2 + a * a * prof["e"][i1[jj]] ** 2)
     nmP[jj] = b * prof["nmod"][i0[jj]] + a * prof["nmod"][i1[jj]]
     okP[jj] = True
     return fP, eP, okP, nmP, True
@@ -196,7 +234,8 @@ def _regular_template(template):
     This is a translation in optical velocity, not a relativistic Doppler fit.
     """
     template = _validated_profile(template)
-    v = template["v"]; dp = _pixel_scale(v)
+    v = template["v"]
+    dp = _pixel_scale(v)
     if np.allclose(np.diff(v), dp, rtol=0.0, atol=dp * 1e-6):
         return template, False
     grid = v[0] + np.arange(int(np.floor((v[-1] - v[0]) / dp + 1e-6)) + 1) * dp
@@ -227,17 +266,17 @@ def _profile_eiv(y, x, gv, var_y, var_x, keep, baseline):
         raise ValueError("baseline must be 'linear', 'const', or None")
     if not np.any(keep):
         return None, None, None
-    ux = float(np.sqrt(np.mean(x[keep]**2 + var_x[keep])))
-    uy = float(np.sqrt(np.mean(y[keep]**2 + var_y[keep])))
+    ux = float(np.sqrt(np.mean(x[keep] ** 2 + var_x[keep])))
+    uy = float(np.sqrt(np.mean(y[keep] ** 2 + var_y[keep])))
     if not (np.isfinite(ux) and ux > 0 and np.isfinite(uy) and uy > 0):
         return None, None, None
     xn, yn, vx, vy = x / ux, y / uy, var_x / ux**2, var_y / uy**2
 
     def evaluate(log_a, output=False):
         a = np.exp(log_a)
-        variance = vy + a*a * vx
+        variance = vy + a * a * vx
         weights = np.where(keep, 1.0 / variance, 0.0)
-        delta = yn - a*xn
+        delta = yn - a * xn
         try:
             b = np.linalg.solve((B.T * weights) @ B, (B.T * weights) @ delta) if B.shape[1] else np.empty(0)
         except np.linalg.LinAlgError:
@@ -255,9 +294,10 @@ def _profile_eiv(y, x, gv, var_y, var_x, keep, baseline):
     values = np.array([evaluate(z) for z in grid])
     candidates = []
     for j in range(1, len(grid) - 1):
-        if values[j] <= values[j-1] and values[j] <= values[j+1]:
-            sol = minimize_scalar(evaluate, bounds=(grid[j-1], grid[j+1]), method="bounded",
-                                  options={"xatol": 1e-8})
+        if values[j] <= values[j - 1] and values[j] <= values[j + 1]:
+            sol = minimize_scalar(
+                evaluate, bounds=(grid[j - 1], grid[j + 1]), method="bounded", options={"xatol": 1e-8}
+            )
             if sol.success and np.isfinite(sol.fun):
                 candidates.append((sol.fun, sol.x))
     if not candidates:
@@ -268,10 +308,24 @@ def _profile_eiv(y, x, gv, var_y, var_x, keep, baseline):
     return evaluate(log_a, output=True)
 
 
-def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_FWHM,
-              win_min=CCF_WIN_MIN_KMS, baseline="linear", clip=CCF_CLIP_SIGMA, n_clip=2,
-              min_pix=30, mismatch=0.0, nsub_frac=CCF_NSUB_FRAC, n_mc=0, seed=0, two_stage=True,
-              despike=None):
+def ccf_shift(
+    prof,
+    template,
+    vmax=CCF_VMAX_KMS,
+    window=None,
+    win_fwhm=CCF_WIN_FWHM,
+    win_min=CCF_WIN_MIN_KMS,
+    baseline="linear",
+    clip=CCF_CLIP_SIGMA,
+    n_clip=2,
+    min_pix=30,
+    mismatch=0.0,
+    nsub_frac=CCF_NSUB_FRAC,
+    n_mc=0,
+    seed=0,
+    two_stage=True,
+    despike=None,
+):
     """Chi-square cross-correlation shift of ``prof`` relative to ``template`` by
     whole pixels of the template's grid. dv > 0: prof is redshifted relative to
     the template.
@@ -337,14 +391,18 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
         raise ValueError("win_fwhm, win_min and clip must not be NaN")
     prof = _validated_profile(prof)
     native_template = _validated_profile(template)
-    ok_prof0, ok_template0 = np.asarray(prof["ok"], bool).copy(), np.asarray(native_template["ok"], bool).copy()
-    if (two_stage if despike is None else despike):
+    ok_prof0, ok_template0 = (
+        np.asarray(prof["ok"], bool).copy(),
+        np.asarray(native_template["ok"], bool).copy(),
+    )
+    if two_stage if despike is None else despike:
         spikes_p = _spikes(prof, clip, nsub_frac)
         spikes_t = _spikes(native_template, clip, nsub_frac)
         prof = dict(prof, ok=ok_prof0 & ~spikes_p)
         native_template = dict(native_template, ok=ok_template0 & ~spikes_t)
     else:
-        spikes_p = np.zeros(ok_prof0.size, bool); spikes_t = np.zeros(ok_template0.size, bool)
+        spikes_p = np.zeros(ok_prof0.size, bool)
+        spikes_t = np.zeros(ok_template0.size, bool)
     if _on_lattice(prof["v"], native_template["v"]):
         # one lattice: integer placement, never a resampled template
         template, template_regridded = native_template, False
@@ -357,17 +415,18 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
         vs = template.get("v_sys", np.nan)
         c50 = template.get("c50", np.nan)
         if not (np.isfinite(cs) and np.isfinite(vs)) and np.isfinite(c50):
-            c0 = c50        # no systemic velocity: c(1/2) relative to the input redshift, the frame of v
+            c0 = c50  # no systemic velocity: c(1/2) relative to the input redshift, the frame of v
         else:
             c0 = (0.0 if not np.isfinite(cs) else cs) + (vs if np.isfinite(vs) else 0.0)
         fw = template.get("fwhm", np.nan)
         half = max(win_fwhm * fw, win_min) if np.isfinite(fw) else 3000.0
         window = (c0 - half, c0 + half)
     inwin = (vT >= window[0]) & (vT <= window[1])
-    fT = np.asarray(template["f"], float); eT = np.asarray(template["e"], float)
+    fT = np.asarray(template["f"], float)
+    eT = np.asarray(template["e"], float)
     okT = np.asarray(template["ok"], bool)
     fP, eP, okP, nmP, regridded = _prof_on_template(prof, template, tol_frac=0.05)
-    resampling = ("template+epoch" if template_regridded else ("epoch" if regridded else "none"))
+    resampling = "template+epoch" if template_regridded else ("epoch" if regridded else "none")
     regridded = regridded or template_regridded
     # native pixels of each spectrum inside the window that carry no valid flux
     in_p = (prof["v"] >= window[0]) & (prof["v"] <= window[1])
@@ -400,15 +459,20 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
 
     def arrays_at(nshift, win, excl, fPv=fP, fTv=fT):
         """(y, x, velocities, var_y, var_x, positions) of the pixels compared at one shift."""
-        i_lo = max(0, nshift); i_hi = min(nT, nT + nshift)
+        i_lo = max(0, nshift)
+        i_hi = min(nT, nT + nshift)
         if i_hi - i_lo < min_pix:
             return None
-        sl_p = slice(i_lo, i_hi); sl_t = slice(i_lo - nshift, i_hi - nshift)
-        good = (win[sl_p] & okP[sl_p] & okT[sl_t] & ~excl[sl_p]
-                & np.isfinite(fPv[sl_p]) & np.isfinite(fTv[sl_t]))
+        sl_p = slice(i_lo, i_hi)
+        sl_t = slice(i_lo - nshift, i_hi - nshift)
+        good = (
+            win[sl_p] & okP[sl_p] & okT[sl_t] & ~excl[sl_p] & np.isfinite(fPv[sl_p]) & np.isfinite(fTv[sl_t])
+        )
         if int(good.sum()) < min_pix:
             return None
-        y = fPv[sl_p][good]; x = fTv[sl_t][good]; gv = vT[sl_p][good]
+        y = fPv[sl_p][good]
+        x = fTv[sl_t][good]
+        gv = vT[sl_p][good]
         var_y = eP[sl_p][good] ** 2 + (nsub_frac * nmP[sl_p][good]) ** 2
         var_x = eT[sl_t][good] ** 2 + (nsub_frac * nmT[sl_t][good]) ** 2
         if mismatch > 0:
@@ -417,7 +481,8 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
 
     def scan(ns, win, excl, fPv=fP, fTv=fT):
         """chi-square, flux factor and pixel count at each shift of ns."""
-        chi2s = np.full(ns.size, np.nan); scales = np.full(ns.size, np.nan)
+        chi2s = np.full(ns.size, np.nan)
+        scales = np.full(ns.size, np.nan)
         npixs = np.zeros(ns.size, int)
         for k, nshift in enumerate(ns):
             a = arrays_at(int(nshift), win, excl, fPv, fTv)
@@ -514,7 +579,7 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
                 break
             centre = int(ns2[k2])
         else:
-            unstable = True           # three recentrings without an interior minimum
+            unstable = True  # three recentrings without an interior minimum
         fin = np.flatnonzero(np.isfinite(Gs))
         at_bound = bool(unstable or k0 <= fin[0] + 1 or k0 >= fin[-1] - 1)
 
@@ -533,18 +598,38 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
             peak = float(np.nanmax(np.abs(fT[okw])))
             resid_frac = float(np.sqrt(np.mean((y - X @ beta) ** 2)) / (abs(beta[0]) * peak))
     finite1 = npixs1[np.isfinite(G1)]
-    base = dict(npix=int(npixs[k0]), scale=float(scales[k0]), regridded=bool(regridded),
-                resampling=resampling, n_masked_prof=n_masked_prof, n_masked_template=n_masked_template,
-                dv_pix=float(dpix), n_clipped=int(excl.sum()) + n_spikes, n_spikes=n_spikes,
-                snr_proxy=snr_proxy, resid_frac=resid_frac,
-                curve=(dv_grid, Gs), curve_global=(dv_grid1, G1), window=tuple(window),
-                search_range=(float(dv_grid1[fin1[0]]), float(dv_grid1[fin1[-1]])),
-                common_frac=common_frac, two_stage=use_two, refine_unstable=unstable,
-                npix_search=(int(finite1.min()), int(finite1.max())),
-                algorithm_version=ALGORITHM_VERSION, covariance_mode="diagonal",
-                interpolation_covariance_ignored=bool(regridded), uncertainty_calibrated=False,
-                velocity_convention="optical_translation", err_method="delta_chi2", bracket="none", refined=False,
-                n_mc_requested=int(n_mc), n_mc_success=0, bootstrap_fallback_reason=None)
+    base = dict(
+        npix=int(npixs[k0]),
+        scale=float(scales[k0]),
+        regridded=bool(regridded),
+        resampling=resampling,
+        n_masked_prof=n_masked_prof,
+        n_masked_template=n_masked_template,
+        dv_pix=float(dpix),
+        n_clipped=int(excl.sum()) + n_spikes,
+        n_spikes=n_spikes,
+        snr_proxy=snr_proxy,
+        resid_frac=resid_frac,
+        curve=(dv_grid, Gs),
+        curve_global=(dv_grid1, G1),
+        window=tuple(window),
+        search_range=(float(dv_grid1[fin1[0]]), float(dv_grid1[fin1[-1]])),
+        common_frac=common_frac,
+        two_stage=use_two,
+        refine_unstable=unstable,
+        npix_search=(int(finite1.min()), int(finite1.max())),
+        algorithm_version=ALGORITHM_VERSION,
+        covariance_mode="diagonal",
+        interpolation_covariance_ignored=bool(regridded),
+        uncertainty_calibrated=False,
+        velocity_convention="optical_translation",
+        err_method="delta_chi2",
+        bracket="none",
+        refined=False,
+        n_mc_requested=int(n_mc),
+        n_mc_success=0,
+        bootstrap_fallback_reason=None,
+    )
     # a second minimum of the stage-1 curve, where every shift uses one pixel set
     dv_alt, dG_alt = _second_minimum(dv_grid1, G1, k1, max(CCF_ALT_MIN_SEP_KMS, 5.0 * dpix))
     base.update(dv_alt=dv_alt, dG_alt=dG_alt, ambiguous=bool(np.isfinite(dG_alt) and dG_alt < DCHI2_99))
@@ -556,8 +641,19 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
         base["err_method"] = "unavailable"
         if n_mc:
             base["bootstrap_fallback_reason"] = "minimum_at_search_boundary"
-        return dict(dv=float(dv_grid[k0]), err=np.nan, err_dchi2=np.nan, err_curve=np.nan, err_curve_noise=np.nan,
-                    err_lo=np.nan, err_hi=np.nan, chi2_red=chi2_red, profile_z=profile_z, at_bound=True, **base)
+        return dict(
+            dv=float(dv_grid[k0]),
+            err=np.nan,
+            err_dchi2=np.nan,
+            err_curve=np.nan,
+            err_curve_noise=np.nan,
+            err_lo=np.nan,
+            err_hi=np.nan,
+            chi2_red=chi2_red,
+            profile_z=profile_z,
+            at_bound=True,
+            **base,
+        )
 
     ref = _shift_error(ns, Gs, k0, dpix)
     dv_best = ref["dv"]
@@ -565,22 +661,27 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
     base["err_method"], base["bracket"], base["refined"] = ref["err_method"], ref["bracket"], ref["refined"]
     if np.isfinite(ref["err"]) and ref["err"] > 0:
         # a second minimum must lie outside the statistical interval of the first
-        dv_alt, dG_alt = _second_minimum(dv_grid1, G1, k1, max(CCF_ALT_MIN_SEP_KMS, 3.0 * ref["err"], 5.0 * dpix))
+        dv_alt, dG_alt = _second_minimum(
+            dv_grid1, G1, k1, max(CCF_ALT_MIN_SEP_KMS, 3.0 * ref["err"], 5.0 * dpix)
+        )
         base.update(dv_alt=dv_alt, dG_alt=dG_alt, ambiguous=bool(np.isfinite(dG_alt) and dG_alt < DCHI2_99))
     n_lo, n_hi = err_lo / dpix, err_hi / dpix
     if n_mc and n_mc > 0:
         half_ci = (n_hi - n_lo) / 2.0 if (np.isfinite(n_lo) and np.isfinite(n_hi)) else 10.0
         wmc = int(min(max(np.ceil(half_ci) + 4, 12), N))
         c_n = int(ns[k0])
-        lo_n = max(c_n - wmc, -N); hi_n = min(c_n + wmc, N)
+        lo_n = max(c_n - wmc, -N)
+        hi_n = min(c_n + wmc, N)
         ns_sub = np.arange(lo_n, hi_n + 1)
         win_sub = common_set(lo_n, hi_n) if use_two else win_m
         dvs_mc = []
-        for m in range(int(n_mc)):
+        for _m in range(int(n_mc)):
             # Perturb native independent pixels BEFORE interpolation, retaining
             # the interpolation-induced covariance in these conditional draws.
             fp_native = prof["f"] + rng.normal(size=len(prof["v"])) * np.where(prof["ok"], prof["e"], 0.0)
-            ft_native = native_template["f"] + rng.normal(size=len(native_template["v"])) * np.where(native_template["ok"], native_template["e"], 0.0)
+            ft_native = native_template["f"] + rng.normal(size=len(native_template["v"])) * np.where(
+                native_template["ok"], native_template["e"], 0.0
+            )
             fPm = _prof_on_template(dict(prof, f=fp_native), template)[0]
             fTm = _prof_on_template(dict(native_template, f=ft_native), template)[0]
             c_m, s_m, n_m = scan(ns_sub, win_sub, excl, fPm, fTm)
@@ -603,9 +704,20 @@ def ccf_shift(prof, template, vmax=CCF_VMAX_KMS, window=None, win_fwhm=CCF_WIN_F
             base["bootstrap_fallback_reason"] = "insufficient_successful_draws"
     if not (np.isfinite(err) and err > 0):
         base["err_method"] = "unavailable"
-    return dict(dv=dv_best, err=float(err), err_dchi2=ref["err_dchi2"], err_curve=ref["err_curve"],
-                err_curve_noise=ref["err_curve_noise"], err_lo=err_lo, err_hi=err_hi,
-                chi2_red=chi2_red, profile_z=profile_z, at_bound=False, **base)
+    return dict(
+        dv=dv_best,
+        err=float(err),
+        err_dchi2=ref["err_dchi2"],
+        err_curve=ref["err_curve"],
+        err_curve_noise=ref["err_curve_noise"],
+        err_lo=err_lo,
+        err_hi=err_hi,
+        chi2_red=chi2_red,
+        profile_z=profile_z,
+        at_bound=False,
+        **base,
+    )
+
 
 def _raw_cross(dv_grid, chi2s, k_start, thr, direction):
     """First crossing of ``thr`` on the raw curve, walking outward from
@@ -649,7 +761,8 @@ def _refine_minimum(ns, Gv, kmin, half_n=10):
     and the curvature would describe the polynomial's edge, not the data."""
     out = dict(best=float(ns[kmin]), lo=np.nan, hi=np.nan, curvature=np.nan, noise=np.nan, refined=False)
     sl = slice(max(kmin - half_n, 0), min(kmin + half_n + 1, ns.size))
-    xs = (ns[sl] - ns[kmin]).astype(float); ys = np.asarray(Gv[sl], float)
+    xs = (ns[sl] - ns[kmin]).astype(float)
+    ys = np.asarray(Gv[sl], float)
     okp = np.isfinite(ys)
     if okp.sum() < 5:
         return out
@@ -663,7 +776,8 @@ def _refine_minimum(ns, Gv, kmin, half_n=10):
     jm = int(np.argmin(yf))
     if jm == 0 or jm == len(xf) - 1:
         return out
-    cmin = float(yf[jm]); best = float(ns[kmin] + xf[jm])
+    cmin = float(yf[jm])
+    best = float(ns[kmin] + xf[jm])
     thr = cmin + DCHI2_99
     j_lo, j_hi = jm, jm
     while j_lo > 0 and yf[j_lo - 1] <= thr:
@@ -699,13 +813,14 @@ def _second_minimum(dv_grid, G, k0, min_sep_kms):
     chi-square 6.63 of the first makes the shift ambiguous: one peak of a
     double-peaked or flat-topped profile can be matched onto the other with a
     changed flux factor."""
-    G = np.asarray(G, float); dv_grid = np.asarray(dv_grid, float)
+    G = np.asarray(G, float)
+    dv_grid = np.asarray(dv_grid, float)
     n = G.size
     best = (np.nan, np.nan)
     for k in range(1, n - 1):
         if k == k0 or not np.isfinite(G[k]) or abs(dv_grid[k] - dv_grid[k0]) < min_sep_kms:
             continue
-        near = G[max(0, k - 2):min(n, k + 3)]
+        near = G[max(0, k - 2) : min(n, k + 3)]
         if np.all(np.isfinite(near)) and G[k] <= np.min(near):
             d = float(G[k] - G[k0])
             if not np.isfinite(best[1]) or d < best[1]:
@@ -761,15 +876,27 @@ def _shift_error(ns, Gv, kmin, dpix, half_n=10):
         err, method, bracket = err_dchi2, "delta_chi2", "both"
     elif lo_ok or hi_ok:
         half = (best - lo) if lo_ok else (hi - best)
-        err, method, bracket = float(half * dpix / SIG_FROM_99), "delta_chi2_one_sided", ("lo" if lo_ok else "hi")
+        err, method, bracket = (
+            float(half * dpix / SIG_FROM_99),
+            "delta_chi2_one_sided",
+            ("lo" if lo_ok else "hi"),
+        )
     elif np.isfinite(err_curve) and err_curve > 0:
         err, method, bracket = err_curve, "curvature", "none"
     else:
         err, method, bracket = np.nan, "unavailable", "none"
-    return dict(dv=float(best * dpix), err=float(err), err_dchi2=err_dchi2, err_curve=err_curve,
-                err_curve_noise=err_curve_noise, err_lo=float(lo * dpix) if lo_ok else np.nan,
-                err_hi=float(hi * dpix) if hi_ok else np.nan, err_method=method, bracket=bracket,
-                refined=bool(ref["refined"]))
+    return dict(
+        dv=float(best * dpix),
+        err=float(err),
+        err_dchi2=err_dchi2,
+        err_curve=err_curve,
+        err_curve_noise=err_curve_noise,
+        err_lo=float(lo * dpix) if lo_ok else np.nan,
+        err_hi=float(hi * dpix) if hi_ok else np.nan,
+        err_method=method,
+        bracket=bracket,
+        refined=bool(ref["refined"]),
+    )
 
 
 def _finite_extreme(values, which=max):
@@ -802,49 +929,71 @@ def shift_bidirectional(prof_a, prof_b, **kw):
     shifts = (s_ab["dv"], s_ba["dv"])
     errors = (s_ab["err"], s_ba["err"])
     bounded = bool(s_ab.get("at_bound") or s_ba.get("at_bound"))
-    valid = bool(not bounded and all(np.isfinite(v) for v in shifts)
-                 and all(np.isfinite(e) and e > 0 for e in errors))
+    valid = bool(
+        not bounded and all(np.isfinite(v) for v in shifts) and all(np.isfinite(e) and e > 0 for e in errors)
+    )
     dv = float(0.5 * (shifts[0] - shifts[1])) if all(np.isfinite(v) for v in shifts) else np.nan
     mismatch = float(abs(shifts[0] + shifts[1])) if all(np.isfinite(v) for v in shifts) else np.nan
     tolerance = max(2.0 * np.hypot(*errors), s_ab["dv_pix"], s_ba["dv_pix"]) if valid else np.nan
     methods = (s_ab.get("err_method", "unavailable"), s_ba.get("err_method", "unavailable"))
-    reasons = sorted(set(s.get("bootstrap_fallback_reason") for s in (s_ab, s_ba) if s.get("bootstrap_fallback_reason")))
-    return dict(dv=dv, err=float(max(errors)) if valid else np.nan,
-                consistent=bool(valid and mismatch <= tolerance), dir_mismatch=mismatch,
-                at_bound=bounded, statistically_valid=valid,
-                chi2_red=_finite_extreme((s_ab["chi2_red"], s_ba["chi2_red"])),
-                npix=int(min(s_ab["npix"], s_ba["npix"])),
-                regridded=bool(s_ab["regridded"] or s_ba["regridded"]),
-                resid_frac=_finite_extreme((s_ab.get("resid_frac", np.nan), s_ba.get("resid_frac", np.nan))),
-                algorithm_version=ALGORITHM_VERSION, covariance_mode="diagonal", uncertainty_calibrated=False,
-                interpolation_covariance_ignored=bool(s_ab["regridded"] or s_ba["regridded"]),
-                velocity_convention="optical_translation",
-                err_method=(methods[0] if methods[0] == methods[1] else "mixed") if valid else "unavailable",
-                n_mc_requested=sum(s.get("n_mc_requested", 0) for s in (s_ab, s_ba)),
-                n_mc_success=sum(s.get("n_mc_success", 0) for s in (s_ab, s_ba)),
-                bootstrap_fallback_reason=";".join(reasons) if reasons else None,
-                # per direction: a as profile on template b (ab) and the reverse (ba)
-                scale_ab=float(s_ab.get("scale", np.nan)), scale_ba=float(s_ba.get("scale", np.nan)),
-                chi2_red_ab=float(s_ab["chi2_red"]), chi2_red_ba=float(s_ba["chi2_red"]),
-                profile_z_ab=float(s_ab.get("profile_z", np.nan)), profile_z_ba=float(s_ba.get("profile_z", np.nan)),
-                err_ab=float(errors[0]), err_ba=float(errors[1]),
-                err_method_ab=methods[0], err_method_ba=methods[1],
-                npix_ab=int(s_ab["npix"]), npix_ba=int(s_ba["npix"]),
-                # masked native pixels of each spectrum inside the window of the
-                # direction in which it is the profile
-                n_masked_a=int(s_ab.get("n_masked_prof", 0)), n_masked_b=int(s_ba.get("n_masked_prof", 0)),
-                # the search of the two directions: fraction of the window kept in
-                # stage 1 and the smaller reach of the searched range (km/s)
-                common_frac=_finite_extreme((float(s_ab.get("common_frac", np.nan)),
-                                             float(s_ba.get("common_frac", np.nan))), min),
-                search_reach=_finite_extreme(tuple(min(abs(x) for x in s.get("search_range", (np.nan, np.nan)))
-                                                   for s in (s_ab, s_ba)), min),
-                # plausibility of the match: flux factors and a second minimum
-                scale_ok=_scales_ok(float(s_ab.get("scale", np.nan)), float(s_ba.get("scale", np.nan))),
-                ambiguous=bool(s_ab.get("ambiguous", False) or s_ba.get("ambiguous", False)),
-                dv_alt_ab=float(s_ab.get("dv_alt", np.nan)), dv_alt_ba=float(s_ba.get("dv_alt", np.nan)),
-                dG_alt_ab=float(s_ab.get("dG_alt", np.nan)), dG_alt_ba=float(s_ba.get("dG_alt", np.nan)),
-                s_ab=s_ab, s_ba=s_ba)
+    reasons = sorted(
+        set(s.get("bootstrap_fallback_reason") for s in (s_ab, s_ba) if s.get("bootstrap_fallback_reason"))
+    )
+    return dict(
+        dv=dv,
+        err=float(max(errors)) if valid else np.nan,
+        consistent=bool(valid and mismatch <= tolerance),
+        dir_mismatch=mismatch,
+        at_bound=bounded,
+        statistically_valid=valid,
+        chi2_red=_finite_extreme((s_ab["chi2_red"], s_ba["chi2_red"])),
+        npix=int(min(s_ab["npix"], s_ba["npix"])),
+        regridded=bool(s_ab["regridded"] or s_ba["regridded"]),
+        resid_frac=_finite_extreme((s_ab.get("resid_frac", np.nan), s_ba.get("resid_frac", np.nan))),
+        algorithm_version=ALGORITHM_VERSION,
+        covariance_mode="diagonal",
+        uncertainty_calibrated=False,
+        interpolation_covariance_ignored=bool(s_ab["regridded"] or s_ba["regridded"]),
+        velocity_convention="optical_translation",
+        err_method=(methods[0] if methods[0] == methods[1] else "mixed") if valid else "unavailable",
+        n_mc_requested=sum(s.get("n_mc_requested", 0) for s in (s_ab, s_ba)),
+        n_mc_success=sum(s.get("n_mc_success", 0) for s in (s_ab, s_ba)),
+        bootstrap_fallback_reason=";".join(reasons) if reasons else None,
+        # per direction: a as profile on template b (ab) and the reverse (ba)
+        scale_ab=float(s_ab.get("scale", np.nan)),
+        scale_ba=float(s_ba.get("scale", np.nan)),
+        chi2_red_ab=float(s_ab["chi2_red"]),
+        chi2_red_ba=float(s_ba["chi2_red"]),
+        profile_z_ab=float(s_ab.get("profile_z", np.nan)),
+        profile_z_ba=float(s_ba.get("profile_z", np.nan)),
+        err_ab=float(errors[0]),
+        err_ba=float(errors[1]),
+        err_method_ab=methods[0],
+        err_method_ba=methods[1],
+        npix_ab=int(s_ab["npix"]),
+        npix_ba=int(s_ba["npix"]),
+        # masked native pixels of each spectrum inside the window of the
+        # direction in which it is the profile
+        n_masked_a=int(s_ab.get("n_masked_prof", 0)),
+        n_masked_b=int(s_ba.get("n_masked_prof", 0)),
+        # the search of the two directions: fraction of the window kept in
+        # stage 1 and the smaller reach of the searched range (km/s)
+        common_frac=_finite_extreme(
+            (float(s_ab.get("common_frac", np.nan)), float(s_ba.get("common_frac", np.nan))), min
+        ),
+        search_reach=_finite_extreme(
+            tuple(min(abs(x) for x in s.get("search_range", (np.nan, np.nan))) for s in (s_ab, s_ba)), min
+        ),
+        # plausibility of the match: flux factors and a second minimum
+        scale_ok=_scales_ok(float(s_ab.get("scale", np.nan)), float(s_ba.get("scale", np.nan))),
+        ambiguous=bool(s_ab.get("ambiguous", False) or s_ba.get("ambiguous", False)),
+        dv_alt_ab=float(s_ab.get("dv_alt", np.nan)),
+        dv_alt_ba=float(s_ba.get("dv_alt", np.nan)),
+        dG_alt_ab=float(s_ab.get("dG_alt", np.nan)),
+        dG_alt_ba=float(s_ba.get("dG_alt", np.nan)),
+        s_ab=s_ab,
+        s_ba=s_ba,
+    )
 
 
 def narrow_zeropoint(res_a, res_b, prefer=("OIII", "SII"), vmax=800.0, **kw):
@@ -884,18 +1033,31 @@ def narrow_zeropoint(res_a, res_b, prefer=("OIII", "SII"), vmax=800.0, **kw):
         errors = (float(s_ab.get("err", np.nan)), float(s_ba.get("err", np.nan)))
         finite_err = all(np.isfinite(e) and e > 0 for e in errors)
         mismatch = float(abs(shifts[0] + shifts[1]))
-        tolerance = max(2.0 * float(np.hypot(*errors)), float(s_ab["dv_pix"]), float(s_ba["dv_pix"])) if finite_err else np.nan
+        tolerance = (
+            max(2.0 * float(np.hypot(*errors)), float(s_ab["dv_pix"]), float(s_ba["dv_pix"]))
+            if finite_err
+            else np.nan
+        )
         methods = (s_ab.get("err_method", "unavailable"), s_ba.get("err_method", "unavailable"))
         rec = dict(s_ab)
-        rec.update(dv=0.5 * (shifts[0] - shifts[1]), err=float(max(errors)) if finite_err else np.nan,
-                   err_method=(methods[0] if methods[0] == methods[1] else "mixed") if finite_err else "unavailable",
-                   bracket=(s_ab.get("bracket") if s_ab.get("bracket") == s_ba.get("bracket") else "mixed"),
-                   at_bound=bool(s_ab.get("at_bound", False) or s_ba.get("at_bound", False)),
-                   dv_ab=shifts[0], dv_ba=shifts[1], err_ab=errors[0], err_ba=errors[1],
-                   dir_mismatch=mismatch, consistent=bool(finite_err and mismatch <= tolerance),
-                   line=which, source=which)
+        rec.update(
+            dv=0.5 * (shifts[0] - shifts[1]),
+            err=float(max(errors)) if finite_err else np.nan,
+            err_method=(methods[0] if methods[0] == methods[1] else "mixed") if finite_err else "unavailable",
+            bracket=(s_ab.get("bracket") if s_ab.get("bracket") == s_ba.get("bracket") else "mixed"),
+            at_bound=bool(s_ab.get("at_bound", False) or s_ba.get("at_bound", False)),
+            dv_ab=shifts[0],
+            dv_ba=shifts[1],
+            err_ab=errors[0],
+            err_ba=errors[1],
+            dir_mismatch=mismatch,
+            consistent=bool(finite_err and mismatch <= tolerance),
+            line=which,
+            source=which,
+        )
         return rec
     return None
+
 
 def frame_check(zeropoint, name, dv, err):
     """Narrow-line frame check of a pair and the one zero-point rule.
@@ -919,7 +1081,9 @@ def frame_check(zeropoint, name, dv, err):
     directions' or 'zero point NNN km/s exceeds veto'."""
     z = zeropoint
     zp_dv = float(z["dv"]) if (z is not None and np.isfinite(z.get("dv", np.nan))) else np.nan
-    zp_err = float(z["err"]) if (z is not None and np.isfinite(z.get("err", np.nan)) and z["err"] > 0) else np.nan
+    zp_err = (
+        float(z["err"]) if (z is not None and np.isfinite(z.get("err", np.nan)) and z["err"] > 0) else np.nan
+    )
     at_bound = bool(z is not None and z.get("at_bound", False))
     source = z.get("source", z.get("line")) if z is not None else None
     if z is None or not np.isfinite(zp_dv):
@@ -935,9 +1099,19 @@ def frame_check(zeropoint, name, dv, err):
     applied = bool(ok and name == "Hbeta")
     dv_corr = float(dv - zp_dv) if applied else float(dv)
     err_corr = float(np.hypot(err, zp_err)) if applied else float(err)
-    return dict(zp_dv=zp_dv, zp_err=zp_err, zp_err_method=(z.get("err_method", "unavailable") if z is not None else "unavailable"),
-                zp_line=(source or ""), zp_source=source, zp_at_bound=at_bound,
-                frame_ok=ok, frame_reason=reason, zp_applied=applied, dv_corrected=dv_corr, err_corrected=err_corr)
+    return dict(
+        zp_dv=zp_dv,
+        zp_err=zp_err,
+        zp_err_method=(z.get("err_method", "unavailable") if z is not None else "unavailable"),
+        zp_line=(source or ""),
+        zp_source=source,
+        zp_at_bound=at_bound,
+        frame_ok=ok,
+        frame_reason=reason,
+        zp_applied=applied,
+        dv_corrected=dv_corr,
+        err_corrected=err_corr,
+    )
 
 
 def pair_analysis(res_a, res_b, name="Halpha", zp=True, details=False, **kw):
@@ -973,21 +1147,62 @@ def pair_analysis(res_a, res_b, name="Halpha", zp=True, details=False, **kw):
     s = shift_bidirectional(pa, pb, **kw)
     if s is None:
         return None
-    out = dict(name=name, dv=s["dv"], err=s["err"], consistent=s.get("consistent", False),
-               at_bound=s.get("at_bound", False), chi2_red=s.get("chi2_red", np.nan),
-               profile_z=_finite_extreme((s.get("s_ab", {}).get("profile_z", np.nan), s.get("s_ba", {}).get("profile_z", np.nan)))
-               if s.get("s_ab") else np.nan,
-               npix=s.get("npix", 0), regridded=s.get("regridded", False),
-               snr_proxy=_finite_extreme((s.get("s_ab", {}).get("snr_proxy", np.nan), s.get("s_ba", {}).get("snr_proxy", np.nan)), min)
-               if s.get("s_ab") else np.nan,
-               dir_mismatch=s.get("dir_mismatch", np.nan), resid_frac=s.get("resid_frac", np.nan))
-    for key in ("statistically_valid", "algorithm_version", "covariance_mode", "uncertainty_calibrated",
-                "interpolation_covariance_ignored", "velocity_convention", "err_method",
-                "n_mc_requested", "n_mc_success", "bootstrap_fallback_reason",
-                "scale_ab", "scale_ba", "chi2_red_ab", "chi2_red_ba", "profile_z_ab", "profile_z_ba",
-                "err_ab", "err_ba", "err_method_ab", "err_method_ba", "npix_ab", "npix_ba",
-                "n_masked_a", "n_masked_b", "common_frac", "search_reach", "scale_ok", "ambiguous", "dv_alt_ab", "dv_alt_ba",
-                "dG_alt_ab", "dG_alt_ba"):
+    out = dict(
+        name=name,
+        dv=s["dv"],
+        err=s["err"],
+        consistent=s.get("consistent", False),
+        at_bound=s.get("at_bound", False),
+        chi2_red=s.get("chi2_red", np.nan),
+        profile_z=_finite_extreme(
+            (s.get("s_ab", {}).get("profile_z", np.nan), s.get("s_ba", {}).get("profile_z", np.nan))
+        )
+        if s.get("s_ab")
+        else np.nan,
+        npix=s.get("npix", 0),
+        regridded=s.get("regridded", False),
+        snr_proxy=_finite_extreme(
+            (s.get("s_ab", {}).get("snr_proxy", np.nan), s.get("s_ba", {}).get("snr_proxy", np.nan)), min
+        )
+        if s.get("s_ab")
+        else np.nan,
+        dir_mismatch=s.get("dir_mismatch", np.nan),
+        resid_frac=s.get("resid_frac", np.nan),
+    )
+    for key in (
+        "statistically_valid",
+        "algorithm_version",
+        "covariance_mode",
+        "uncertainty_calibrated",
+        "interpolation_covariance_ignored",
+        "velocity_convention",
+        "err_method",
+        "n_mc_requested",
+        "n_mc_success",
+        "bootstrap_fallback_reason",
+        "scale_ab",
+        "scale_ba",
+        "chi2_red_ab",
+        "chi2_red_ba",
+        "profile_z_ab",
+        "profile_z_ba",
+        "err_ab",
+        "err_ba",
+        "err_method_ab",
+        "err_method_ba",
+        "npix_ab",
+        "npix_ba",
+        "n_masked_a",
+        "n_masked_b",
+        "common_frac",
+        "search_reach",
+        "scale_ok",
+        "ambiguous",
+        "dv_alt_ab",
+        "dv_alt_ba",
+        "dG_alt_ab",
+        "dG_alt_ba",
+    ):
         out[key] = s[key]
     out["profile_grade"] = profile_grade(out["profile_z"])
     if details:
@@ -1011,7 +1226,8 @@ def epoch_shifts(epoch_results, template_res, name="Halpha", bidirectional=True,
         if s is None:
             continue
         s = dict(s)
-        s.pop("s_ab", None); s.pop("s_ba", None)
+        s.pop("s_ab", None)
+        s.pop("s_ba", None)
         s.update(label=lab, mjd=mjd, fwhm=p["fwhm"], c50_sys=p["c50_sys"], name=name)
         out.append(s)
     return out
@@ -1057,17 +1273,27 @@ def two_line_consistent(pair_a, pair_b, nsig=2.0, covariance=0.0):
     dict(consistent, difference, sigma, same_sign) or None when either pair is
     missing, at bound or without a finite error."""
     for p in (pair_a, pair_b):
-        if (p is None or p.get("at_bound") or not np.isfinite(p.get("dv", np.nan))
-                or not np.isfinite(p.get("err", np.nan)) or p["err"] <= 0):
+        if (
+            p is None
+            or p.get("at_bound")
+            or not np.isfinite(p.get("dv", np.nan))
+            or not np.isfinite(p.get("err", np.nan))
+            or p["err"] <= 0
+        ):
             return None
     if not np.isfinite(covariance) or abs(covariance) > pair_a["err"] * pair_b["err"]:
         raise ValueError("cross-line covariance must define a positive semidefinite error matrix")
     d = float(pair_a["dv"] - pair_b["dv"])
-    e = float(np.sqrt(max(pair_a["err"]**2 + pair_b["err"]**2 - 2.0*covariance, 0.0)))
-    sig_a = abs(pair_a["dv"]) > pair_a["err"]; sig_b = abs(pair_b["dv"]) > pair_b["err"]
+    e = float(np.sqrt(max(pair_a["err"] ** 2 + pair_b["err"] ** 2 - 2.0 * covariance, 0.0)))
+    sig_a = abs(pair_a["dv"]) > pair_a["err"]
+    sig_b = abs(pair_b["dv"]) > pair_b["err"]
     same_sign = bool(np.sign(pair_a["dv"]) == np.sign(pair_b["dv"])) if (sig_a and sig_b) else True
-    return dict(consistent=bool(abs(d) <= nsig * e and same_sign), difference=d,
-                sigma=float(abs(d) / e) if e > 0 else np.nan, same_sign=same_sign)
+    return dict(
+        consistent=bool(abs(d) <= nsig * e and same_sign),
+        difference=d,
+        sigma=float(abs(d) / e) if e > 0 else np.nan,
+        same_sign=same_sign,
+    )
 
 
 def is_reliable(pair, dir_cut=None):
@@ -1083,8 +1309,13 @@ def is_reliable(pair, dir_cut=None):
     up with the pair's ``name`` (a line missing from it has no finite cut, so the
     pair is not reliable). This is how a run applies a recalibrated cut (three
     times the recalibrated floor) without changing the package constant."""
-    if (pair is None or pair.get("at_bound") or not np.isfinite(pair.get("dv", np.nan))
-            or not np.isfinite(pair.get("err", np.nan)) or pair["err"] <= 0):
+    if (
+        pair is None
+        or pair.get("at_bound")
+        or not np.isfinite(pair.get("dv", np.nan))
+        or not np.isfinite(pair.get("err", np.nan))
+        or pair["err"] <= 0
+    ):
         return False
     if dir_cut is None:
         cut = CCF_DIR_CUT_KMS.get(pair.get("name"), np.nan)
@@ -1093,7 +1324,12 @@ def is_reliable(pair, dir_cut=None):
     else:
         cut = dir_cut
     cut = float(cut) if cut is not None else np.nan
-    return bool(np.isfinite(pair.get("profile_z", np.nan)) and pair["profile_z"] < CCF_PROFILE_Z_MAX
-                and np.isfinite(pair.get("dir_mismatch", np.nan)) and pair["dir_mismatch"] < cut
-                and pair.get("frame_ok", False) and pair.get("scale_ok", True)
-                and not pair.get("ambiguous", False))
+    return bool(
+        np.isfinite(pair.get("profile_z", np.nan))
+        and pair["profile_z"] < CCF_PROFILE_Z_MAX
+        and np.isfinite(pair.get("dir_mismatch", np.nan))
+        and pair["dir_mismatch"] < cut
+        and pair.get("frame_ok", False)
+        and pair.get("scale_ok", True)
+        and not pair.get("ambiguous", False)
+    )

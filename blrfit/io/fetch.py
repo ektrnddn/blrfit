@@ -3,14 +3,14 @@ Public spectra of a sky position: SDSS through the Data Lab catalogue mirror and
 archive server, DESI public releases through the DESI file server
 (data.desi.lbl.gov/public).
 
-Nothing here runs unless asked for (the ``blrfit fetch`` subcommand or a
-direct call); the fitting code never touches the network.
+Nothing here runs unless asked for (``blrfit fetch``, ``blrfit fit`` without a
+file, or a direct call); the fitting code never touches the network.
 
 SDSS: all SpecObjAll products within at most 1.5 arcsec are listed from the
 Data Lab mirror (DR17 by default) and downloaded from the corresponding SDSS
 science archive. Repeat products are retained by plate/MJD/fiber identity.
-The CLI uses io.public for indexed DESI discovery; fetch_desi below retains the
-older coordinate/file-search Python API for compatibility.
+The command line finds DESI targets through the catalogue index of io.public;
+``fetch_desi`` below is the older search by position, kept for Python use.
 
 DESI: the position gives the nside = 64 nested healpix; for each public release
 (DR1 = ``iron``, EDR = ``fuji``) and each survey/program combination, the
@@ -19,9 +19,9 @@ remotely with range requests (``astropy`` + ``fsspec``), so only the FIBERMAP
 and the rows of the matched target are transferred, not the whole 100-800 MB
 file. The matched target is written as a single-target coadd, with the
 redrock redshift file reduced alongside, in the layout ``read_desi`` expects.
-A TARGETID alone does not determine the healpix, so RA and Dec are always
-required; a TARGETID, when given, selects the row exactly instead of by
-position.
+A TARGETID alone does not determine the healpix, so ``fetch_desi`` needs RA
+and Dec; a TARGETID, when given, selects the row exactly instead of by
+position. (The command line resolves a TARGETID alone through io.public.)
 
 DESI tile epochs: a target observed on several tiles has one spectrum per
 tile, and the release keeps each as a tile-cumulative coadd (all exposures of
@@ -34,6 +34,7 @@ the same layout, checksums and provenance as the healpix bundles. The healpix
 coadd of a survey/program stacks all of those tiles, so it is not an epoch in
 itself. DR1 (``iron``) holds the observations up to 2022 June 13.
 """
+
 from __future__ import annotations
 
 import os
@@ -48,22 +49,47 @@ import numpy as np
 from .healpix import ang2pix_nest
 from .desi import write_single_target
 
-SDSS_SAS = "https://data.sdss.org/sas/dr16"
 DESI_PUBLIC = "https://data.desi.lbl.gov/public"
 DESI_RELEASES = {"dr1": "iron", "edr": "fuji"}
 DESI_SURVEY_PROGRAMS = {
-    "dr1": [("main", "dark"), ("main", "bright"), ("main", "backup"),
-            ("sv3", "dark"), ("sv3", "bright"), ("sv3", "backup"),
-            ("sv1", "dark"), ("sv1", "bright"), ("sv1", "backup"), ("sv1", "other"),
-            ("sv2", "dark"), ("sv2", "bright"), ("sv2", "backup"),
-            ("special", "dark"), ("special", "bright"), ("special", "backup"), ("cmx", "other")],
-    "edr": [("sv3", "dark"), ("sv3", "bright"), ("sv3", "backup"),
-            ("sv1", "dark"), ("sv1", "bright"), ("sv1", "backup"), ("sv1", "other"),
-            ("sv2", "dark"), ("sv2", "bright"), ("sv2", "backup"),
-            ("special", "dark"), ("special", "bright"), ("special", "backup"), ("cmx", "other")],
+    "dr1": [
+        ("main", "dark"),
+        ("main", "bright"),
+        ("main", "backup"),
+        ("sv3", "dark"),
+        ("sv3", "bright"),
+        ("sv3", "backup"),
+        ("sv1", "dark"),
+        ("sv1", "bright"),
+        ("sv1", "backup"),
+        ("sv1", "other"),
+        ("sv2", "dark"),
+        ("sv2", "bright"),
+        ("sv2", "backup"),
+        ("special", "dark"),
+        ("special", "bright"),
+        ("special", "backup"),
+        ("cmx", "other"),
+    ],
+    "edr": [
+        ("sv3", "dark"),
+        ("sv3", "bright"),
+        ("sv3", "backup"),
+        ("sv1", "dark"),
+        ("sv1", "bright"),
+        ("sv1", "backup"),
+        ("sv1", "other"),
+        ("sv2", "dark"),
+        ("sv2", "bright"),
+        ("sv2", "backup"),
+        ("special", "dark"),
+        ("special", "bright"),
+        ("special", "backup"),
+        ("cmx", "other"),
+    ],
 }
 DESI_NSIDE = 64
-DESI_TILE_GROUP = "cumulative"    # the tile coadds that stack every exposure of a tile through its last night
+DESI_TILE_GROUP = "cumulative"  # the tile coadds that stack every exposure of a tile through its last night
 # Block size of the range requests. The rows of one target are 11 KB in a
 # flux extension and 121 KB in a resolution extension, so 64 KB blocks
 # transfer 3 MB per coadd against 29 MB with 1 MB blocks, at the same wall
@@ -111,24 +137,30 @@ def query_sdss(ra, dec, radius_arcsec=1.5, data_release=17):
     """
     import csv
     import io
+
     requests = require_requests()
     from .public import position, separation, TAP_URL, MAX_PRODUCTS
+
     ra, dec = position(ra, dec)
     if not np.isfinite(radius_arcsec) or not 0 < radius_arcsec <= 1.5:
         raise ValueError("SDSS matching radius must be positive and at most 1.5 arcsec")
     if data_release not in (16, 17):
         raise ValueError("public SDSS lookup supports DR16 or DR17")
-    query = (f"SELECT TOP {MAX_PRODUCTS+1} plate,mjd,fiberid,run2d,ra,dec,z,class "
-             f"FROM sdss_dr{data_release}.specobjall WHERE "
-             f"'t'=q3c_radial_query(ra,dec,{ra:.15g},{dec:.15g},{radius_arcsec/3600:.15g})")
-    response = requests.get(TAP_URL, params=dict(REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=query), timeout=60)
+    query = (
+        f"SELECT TOP {MAX_PRODUCTS + 1} plate,mjd,fiberid,run2d,ra,dec,z,class "
+        f"FROM sdss_dr{data_release}.specobjall WHERE "
+        f"'t'=q3c_radial_query(ra,dec,{ra:.15g},{dec:.15g},{radius_arcsec / 3600:.15g})"
+    )
+    response = requests.get(
+        TAP_URL, params=dict(REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=query), timeout=60
+    )
     response.raise_for_status()
     reader = csv.DictReader(io.StringIO(response.text))
     required = {"plate", "mjd", "fiberid", "run2d", "ra", "dec", "z", "class"}
     if not required.issubset(reader.fieldnames or []):
         raise RuntimeError("SDSS catalogue service returned an error or an unexpected schema; retry later")
     found = list(reader)
-    if len(found) >= MAX_PRODUCTS+1:
+    if len(found) >= MAX_PRODUCTS + 1:
         raise ValueError("too many SDSS products; narrow the query")
     rows, seen = [], set()
     for r in found:
@@ -143,10 +175,24 @@ def query_sdss(ra, dec, radius_arcsec=1.5, data_release=17):
         if sep > radius_arcsec:
             continue
         url, fn = sdss_spec_url(*key, run2d=r["run2d"], data_release=data_release)
-        rows.append(dict(plate=key[0], mjd=key[1], fiberid=key[2], run2d=r["run2d"],
-                         ra=rra, dec=rdec, z=float(r["z"]), cls=r["class"], sep_arcsec=sep,
-                         data_release=data_release, url=url, filename=fn,
-                         catalogue=f"sdss_dr{data_release}.specobjall", product="pipeline_coadd"))
+        rows.append(
+            dict(
+                plate=key[0],
+                mjd=key[1],
+                fiberid=key[2],
+                run2d=r["run2d"],
+                ra=rra,
+                dec=rdec,
+                z=float(r["z"]),
+                cls=r["class"],
+                sep_arcsec=sep,
+                data_release=data_release,
+                url=url,
+                filename=fn,
+                catalogue=f"sdss_dr{data_release}.specobjall",
+                product="pipeline_coadd",
+            )
+        )
     return rows
 
 
@@ -154,7 +200,8 @@ def download(url, dest, clobber=False, timeout=120):
     """Download ``url`` to ``dest`` through a temporary file; a partial file never
     gets the final name. Returns the path, or None on failure."""
     requests = require_requests()
-    dest = Path(dest); dest.parent.mkdir(parents=True, exist_ok=True)
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0 and not clobber:
         return str(dest)
     tmp = None
@@ -164,8 +211,9 @@ def download(url, dest, clobber=False, timeout=120):
                 return None
             # A unique temporary file prevents simultaneous downloads from
             # truncating or publishing each other's partial response.
-            with tempfile.NamedTemporaryFile(dir=dest.parent, prefix=f".{dest.name}.",
-                                             suffix=".part", delete=False) as fh:
+            with tempfile.NamedTemporaryFile(
+                dir=dest.parent, prefix=f".{dest.name}.", suffix=".part", delete=False
+            ) as fh:
                 tmp = Path(fh.name)
                 for chunk in resp.iter_content(1 << 20):
                     if chunk:
@@ -191,11 +239,12 @@ def fetch_sdss(ra, dec, out_dir, radius_arcsec=1.5, data_release=17, verbose=Tru
     Returns the list of ``query_sdss`` rows with a ``path`` entry for each file obtained."""
     rows = query_sdss(ra, dec, radius_arcsec=radius_arcsec, data_release=data_release)
     if verbose:
-        print(f"SDSS: {len(rows)} spectrum(s) within {radius_arcsec}\" of ({ra:.5f}, {dec:+.5f})")
+        print(f'SDSS: {len(rows)} spectrum(s) within {radius_arcsec}" of ({ra:.5f}, {dec:+.5f})')
     for r in rows:
         p = download(r["url"], Path(out_dir) / "sdss" / f"dr{data_release}" / r["filename"])
         if p:
             from .sdss import read_sdss
+
             data = read_sdss(p)
             if (data["plate"], data["mjd"], data["fiber"]) != (r["plate"], r["mjd"], r["fiberid"]):
                 raise ValueError(f"SDSS downloaded product identity does not match the catalogue: {p}")
@@ -216,8 +265,10 @@ def desi_healpix(ra, dec):
 def desi_coadd_url(release, survey, program, healpix):
     spec = DESI_RELEASES[release]
     hp = int(healpix)
-    return (f"{DESI_PUBLIC}/{release}/spectro/redux/{spec}/healpix/{survey}/{program}/{hp // 100}/{hp}/"
-            f"coadd-{survey}-{program}-{hp}.fits")
+    return (
+        f"{DESI_PUBLIC}/{release}/spectro/redux/{spec}/healpix/{survey}/{program}/{hp // 100}/{hp}/"
+        f"coadd-{survey}-{program}-{hp}.fits"
+    )
 
 
 def _redrock_url(coadd_url):
@@ -231,8 +282,10 @@ def desi_tile_coadd_url(release, tileid, lastnight, petal):
     of the tile through its last night, ``coadd-<petal>-<tileid>-thru<lastnight>.fits``."""
     spec = DESI_RELEASES[release]
     t, n, pt = int(tileid), int(lastnight), int(petal)
-    return (f"{DESI_PUBLIC}/{release}/spectro/redux/{spec}/tiles/{DESI_TILE_GROUP}/{t}/{n}/"
-            f"coadd-{pt}-{t}-thru{n}.fits")
+    return (
+        f"{DESI_PUBLIC}/{release}/spectro/redux/{spec}/tiles/{DESI_TILE_GROUP}/{t}/{n}/"
+        f"coadd-{pt}-{t}-thru{n}.fits"
+    )
 
 
 def desi_tile_redrock_url(release, tileid, lastnight, petal):
@@ -274,11 +327,15 @@ def read_desi_tiles_table(path):
     with open(path, newline="") as fh:
         for row in csv.DictReader(fh):
             tileid = int(row["TILEID"])
-            out[tileid] = dict(tileid=tileid, survey=str(row.get("SURVEY", "")).strip(),
-                               program=str(row.get("PROGRAM", "")).strip(),
-                               lastnight=num(row, "LASTNIGHT", int, None),
-                               tilera=num(row, "TILERA", float, np.nan), tiledec=num(row, "TILEDEC", float, np.nan),
-                               nexp=num(row, "NEXP", int, -1))
+            out[tileid] = dict(
+                tileid=tileid,
+                survey=str(row.get("SURVEY", "")).strip(),
+                program=str(row.get("PROGRAM", "")).strip(),
+                lastnight=num(row, "LASTNIGHT", int, None),
+                tilera=num(row, "TILERA", float, np.nan),
+                tiledec=num(row, "TILEDEC", float, np.nan),
+                nexp=num(row, "NEXP", int, -1),
+            )
     return out
 
 
@@ -293,6 +350,7 @@ def _url_exists(url, timeout=20):
 
 def _open_remote(url, block_size=DESI_REMOTE_BLOCK_SIZE):
     from astropy.io import fits
+
     return fits.open(url, use_fsspec=True, fsspec_kwargs={"block_size": int(block_size)}, lazy_load_hdus=True)
 
 
@@ -334,15 +392,16 @@ def _exposure_provenance(h, targetid):
                     record[name.lower()] = value
                 records.append(record)
             if "EXPID" in names:
-                expids = sorted({int(r["expid"]) for r in records
-                                 if r["expid"] is not None and int(r["expid"]) >= 0})
+                expids = sorted(
+                    {int(r["expid"]) for r in records if r["expid"] is not None and int(r["expid"]) >= 0}
+                )
     records.sort(key=_canonical_json)
     fingerprint = None
     if records and expids and all(r.get("expid") is not None and int(r["expid"]) >= 0 for r in records):
-        fingerprint = hashlib.sha256(_canonical_json({"targetid": int(targetid),
-                                                      "exposure_ids": expids}).encode()).hexdigest()
-    return {"exposures": records, "exposure_ids": expids,
-            "exposure_fingerprint": fingerprint}
+        fingerprint = hashlib.sha256(
+            _canonical_json({"targetid": int(targetid), "exposure_ids": expids}).encode()
+        ).hexdigest()
+    return {"exposures": records, "exposure_ids": expids, "exposure_fingerprint": fingerprint}
 
 
 def _extract_desi_bundle(h, targetid, out_dir, release, survey, program, healpix, url):
@@ -350,9 +409,18 @@ def _extract_desi_bundle(h, targetid, out_dir, release, survey, program, healpix
     (``out_dir/desi/<release>/<specprod>/<survey>-<program>-<healpix>-<targetid>/<bundle_id>``)."""
     specprod = DESI_RELEASES[release]
     stem = f"{survey}-{program}-{healpix}-{targetid}"
-    identity = dict(schema_version=1, release=release, specprod=specprod, survey=survey, program=program,
-                    healpix=int(healpix), targetid=int(targetid))
-    return _publish_desi_bundle(h, targetid, out_dir / "desi" / release / specprod / stem, stem, url, identity)
+    identity = dict(
+        schema_version=1,
+        release=release,
+        specprod=specprod,
+        survey=survey,
+        program=program,
+        healpix=int(healpix),
+        targetid=int(targetid),
+    )
+    return _publish_desi_bundle(
+        h, targetid, out_dir / "desi" / release / specprod / stem, stem, url, identity
+    )
 
 
 def _extract_desi_tile_bundle(h, targetid, out_dir, release, epoch, url):
@@ -363,12 +431,28 @@ def _extract_desi_tile_bundle(h, targetid, out_dir, release, epoch, url):
     specprod = DESI_RELEASES[release]
     tileid, lastnight, petal = int(epoch["tileid"]), int(epoch["lastnight"]), int(epoch["petal"])
     stem = f"{petal}-{tileid}-thru{lastnight}-{targetid}"
-    identity = dict(schema_version=1, release=release, specprod=specprod, group=DESI_TILE_GROUP,
-                    survey=epoch.get("survey"), program=epoch.get("program"),
-                    healpix=int(epoch["healpix"]) if epoch.get("healpix") is not None else None,
-                    tileid=tileid, lastnight=lastnight, petal=petal, targetid=int(targetid))
-    return _publish_desi_bundle(h, targetid, out_dir / "desi" / release / specprod / "tiles" / stem, stem, url,
-                                identity, with_nights=True)
+    identity = dict(
+        schema_version=1,
+        release=release,
+        specprod=specprod,
+        group=DESI_TILE_GROUP,
+        survey=epoch.get("survey"),
+        program=epoch.get("program"),
+        healpix=int(epoch["healpix"]) if epoch.get("healpix") is not None else None,
+        tileid=tileid,
+        lastnight=lastnight,
+        petal=petal,
+        targetid=int(targetid),
+    )
+    return _publish_desi_bundle(
+        h,
+        targetid,
+        out_dir / "desi" / release / specprod / "tiles" / stem,
+        stem,
+        url,
+        identity,
+        with_nights=True,
+    )
 
 
 def _publish_desi_bundle(h, targetid, parent, stem, url, identity, with_nights=False):
@@ -393,8 +477,13 @@ def _publish_desi_bundle(h, targetid, parent, stem, url, identity, with_nights=F
         # extracted target is part of the immutable artifact.
         with tempfile.TemporaryDirectory(dir=parent, prefix=".redrock-") as rr_stage:
             rr_tmp = download(rr_url, Path(rr_stage) / "redrock.fits")
-            write_single_target(h, targetid, str(stage / coadd_name), redrock_in=rr_tmp,
-                                redrock_out=str(stage / rr_name) if rr_tmp else None)
+            write_single_target(
+                h,
+                targetid,
+                str(stage / coadd_name),
+                redrock_in=rr_tmp,
+                redrock_out=str(stage / rr_name) if rr_tmp else None,
+            )
         data = read_desi(str(stage / coadd_name), targetid, use_desispec=False)
         files = {coadd_name: _sha256(stage / coadd_name)}
         if rr_tmp:
@@ -403,11 +492,18 @@ def _publish_desi_bundle(h, targetid, parent, stem, url, identity, with_nights=F
                 if np.count_nonzero(matches) != 1:
                     raise ValueError(f"Redrock has no unique redshift row for TARGETID {targetid}: {rr_url}")
             files[rr_name] = _sha256(stage / rr_name)
-        provenance = dict(identity, coadd_url=url, redrock_url=rr_url, redrock_available=bool(rr_tmp),
-                          files=files, **_exposure_provenance(h, targetid))
+        provenance = dict(
+            identity,
+            coadd_url=url,
+            redrock_url=rr_url,
+            redrock_available=bool(rr_tmp),
+            files=files,
+            **_exposure_provenance(h, targetid),
+        )
         if with_nights:
-            provenance["nights"] = sorted({int(r["night"]) for r in provenance["exposures"]
-                                           if r.get("night") is not None})
+            provenance["nights"] = sorted(
+                {int(r["night"]) for r in provenance["exposures"] if r.get("night") is not None}
+            )
         encoded = _canonical_json(provenance)
         bundle_id = hashlib.sha256(encoded.encode()).hexdigest()
         (stage / "provenance.json").write_text(encoded + "\n", encoding="utf-8")
@@ -423,15 +519,17 @@ def _publish_desi_bundle(h, targetid, parent, stem, url, identity, with_nights=F
             same = same and {p.name for p in destination.iterdir()} == set(files) | {"provenance.json"}
             same = same and all(_sha256(destination / name) == digest for name, digest in files.items())
             if not same:
-                raise ValueError(f"Existing DESI bundle is inconsistent: {destination}")
-        paths = dict(path=str(destination / coadd_name),
-                     redrock=str(destination / rr_name) if rr_tmp else None,
-                     provenance_path=str(destination / "provenance.json"), bundle_id=bundle_id)
+                raise ValueError(f"Existing DESI bundle is inconsistent: {destination}") from None
+        paths = dict(
+            path=str(destination / coadd_name),
+            redrock=str(destination / rr_name) if rr_tmp else None,
+            provenance_path=str(destination / "provenance.json"),
+            bundle_id=bundle_id,
+        )
         return data, dict(provenance, **paths)
 
 
-def fetch_desi(ra, dec, out_dir, targetid=None, radius_arcsec=1.0, releases=("dr1", "edr"),
-               verbose=True):
+def fetch_desi(ra, dec, out_dir, targetid=None, radius_arcsec=1.0, releases=("dr1", "edr"), verbose=True):
     """Find and extract the DESI public spectra of a position.
 
     Returns a list of dicts (release, specprod, survey, program, healpix,
@@ -443,7 +541,8 @@ def fetch_desi(ra, dec, out_dir, targetid=None, radius_arcsec=1.0, releases=("dr
     """
     hp = desi_healpix(ra, dec)
     out = []
-    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     cosd = np.cos(np.radians(dec))
     for rel in releases:
         for survey, program in DESI_SURVEY_PROGRAMS[rel]:
@@ -458,29 +557,52 @@ def fetch_desi(ra, dec, out_dir, targetid=None, radius_arcsec=1.0, releases=("dr
                     idx = np.flatnonzero(tids == int(targetid))
                     if idx.size == 0:
                         if verbose:
-                            print(f"  {rel} {survey}/{program} healpix {hp}: TARGETID {int(targetid)} not in this coadd")
+                            print(
+                                f"  {rel} {survey}/{program} healpix {hp}: TARGETID {int(targetid)} not in this coadd"
+                            )
                         continue
                     i = int(idx[0])
                 else:
-                    sep = np.hypot((np.asarray(fm["TARGET_RA"], float) - ra) * cosd,
-                                   np.asarray(fm["TARGET_DEC"], float) - dec) * 3600.0
+                    sep = (
+                        np.hypot(
+                            (np.asarray(fm["TARGET_RA"], float) - ra) * cosd,
+                            np.asarray(fm["TARGET_DEC"], float) - dec,
+                        )
+                        * 3600.0
+                    )
                     i = int(np.argmin(sep))
                     if sep[i] > radius_arcsec:
                         if verbose:
-                            print(f"  {rel} {survey}/{program} healpix {hp}: nearest target {sep[i]:.1f}\" away, no match")
+                            print(
+                                f'  {rel} {survey}/{program} healpix {hp}: nearest target {sep[i]:.1f}" away, no match'
+                            )
                         continue
                 tid = int(tids[i])
-                sep_i = float(np.hypot((float(fm["TARGET_RA"][i]) - ra) * cosd, float(fm["TARGET_DEC"][i]) - dec) * 3600.0)
+                sep_i = float(
+                    np.hypot((float(fm["TARGET_RA"][i]) - ra) * cosd, float(fm["TARGET_DEC"][i]) - dec)
+                    * 3600.0
+                )
                 d, provenance = _extract_desi_bundle(h, tid, out_dir, rel, survey, program, hp, url)
-            rec = dict(provenance, sep_arcsec=sep_i,
-                       z=d["z"], zwarn=d["zwarn"], spectype=d["spectype"], mjd=d["mjd"], ebv=d["ebv"])
+            rec = dict(
+                provenance,
+                sep_arcsec=sep_i,
+                z=d["z"],
+                zwarn=d["zwarn"],
+                spectype=d["spectype"],
+                mjd=d["mjd"],
+                ebv=d["ebv"],
+            )
             out.append(rec)
             if verbose:
-                print(f"  {rel} {survey}/{program} healpix {hp}: TARGETID {tid} ({sep_i:.2f}\"), "
-                      f"z = {d['z']:.4f} {d['spectype']} ZWARN {d['zwarn']}, MJD {d['mjd']:.1f} -> {rec['path']} "
-                      f"[{time.time() - t0:.1f} s]")
+                print(
+                    f'  {rel} {survey}/{program} healpix {hp}: TARGETID {tid} ({sep_i:.2f}"), '
+                    f"z = {d['z']:.4f} {d['spectype']} ZWARN {d['zwarn']}, MJD {d['mjd']:.1f} -> {rec['path']} "
+                    f"[{time.time() - t0:.1f} s]"
+                )
     if verbose and not out:
-        print(f"DESI: no public spectrum within {radius_arcsec}\" of ({ra:.5f}, {dec:+.5f}) in {', '.join(releases)} (healpix {hp})")
+        print(
+            f'DESI: no public spectrum within {radius_arcsec}" of ({ra:.5f}, {dec:+.5f}) in {", ".join(releases)} (healpix {hp})'
+        )
     return out
 
 
@@ -504,7 +626,9 @@ def list_desi_epochs(ra, dec, targetid, release="dr1", tiles_csv=None, out_dir=N
     tid = int(targetid)
     if tiles_csv is None:
         if out_dir is None:
-            raise ValueError("list_desi_epochs needs tiles_csv= or out_dir= (where the tiles table is downloaded)")
+            raise ValueError(
+                "list_desi_epochs needs tiles_csv= or out_dir= (where the tiles table is downloaded)"
+            )
         tiles_csv = fetch_desi_tiles_table(release, out_dir)
     tiles = read_desi_tiles_table(tiles_csv)
     spec = DESI_RELEASES[release]
@@ -523,7 +647,9 @@ def list_desi_epochs(ra, dec, targetid, release="dr1", tiles_csv=None, out_dir=N
             rows = np.flatnonzero(np.asarray(table["TARGETID"]).astype(np.int64) == tid)
             if rows.size == 0 or "TILEID" not in names:
                 if verbose:
-                    print(f"  {release} {survey}/{program} healpix {hp}: TARGETID {tid} not in the exposure table")
+                    print(
+                        f"  {release} {survey}/{program} healpix {hp}: TARGETID {tid} not in the exposure table"
+                    )
                 continue
             tileids = np.asarray(table["TILEID"][rows]).astype(np.int64)
             for tileid in sorted(set(tileids.tolist())):
@@ -537,27 +663,50 @@ def list_desi_epochs(ra, dec, targetid, release="dr1", tiles_csv=None, out_dir=N
                 if len(petals) != 1:
                     # a target has one fiber per tile; anything else is not a tile coadd of this target
                     if verbose:
-                        print(f"  {release} {survey}/{program} tile {tileid}: petal of TARGETID {tid} undetermined {petals}")
+                        print(
+                            f"  {release} {survey}/{program} tile {tileid}: petal of TARGETID {tid} undetermined {petals}"
+                        )
                     continue
                 tile = tiles.get(tileid)
                 lastnight = tile["lastnight"] if tile else None
-                ep = dict(release=release, specprod=spec, survey=survey, program=program, healpix=hp, targetid=tid,
-                          tileid=tileid, lastnight=lastnight, petal=petals[0],
-                          nights=sorted({int(v) for v in table["NIGHT"][sel]}) if "NIGHT" in names else [],
-                          expids=sorted({int(v) for v in table["EXPID"][sel]}) if "EXPID" in names else [],
-                          mjds=sorted(float(v) for v in table["MJD"][sel]) if "MJD" in names else [],
-                          in_tiles_table=tile is not None, epoch_key=None, coadd_url=None, redrock_url=None)
+                ep = dict(
+                    release=release,
+                    specprod=spec,
+                    survey=survey,
+                    program=program,
+                    healpix=hp,
+                    targetid=tid,
+                    tileid=tileid,
+                    lastnight=lastnight,
+                    petal=petals[0],
+                    nights=sorted({int(v) for v in table["NIGHT"][sel]}) if "NIGHT" in names else [],
+                    expids=sorted({int(v) for v in table["EXPID"][sel]}) if "EXPID" in names else [],
+                    mjds=sorted(float(v) for v in table["MJD"][sel]) if "MJD" in names else [],
+                    in_tiles_table=tile is not None,
+                    epoch_key=None,
+                    coadd_url=None,
+                    redrock_url=None,
+                )
                 if lastnight is not None:
                     ep["epoch_key"] = f"{tileid}-{lastnight}-{petals[0]}"
                     ep["coadd_url"] = desi_tile_coadd_url(release, tileid, lastnight, petals[0])
                     ep["redrock_url"] = _redrock_url(ep["coadd_url"])
                 epochs.append(ep)
-    epochs.sort(key=lambda e: (min(e["mjds"]) if e["mjds"] else float(min(e["nights"])) if e["nights"] else np.inf,
-                               e["tileid"]))
+    epochs.sort(
+        key=lambda e: (
+            min(e["mjds"]) if e["mjds"] else float(min(e["nights"])) if e["nights"] else np.inf,
+            e["tileid"],
+        )
+    )
     if verbose:
-        print(f"DESI {release}: {len(epochs)} tile epoch(s) of TARGETID {tid} (healpix {hp}): "
-              + ", ".join(f"{e['tileid']}/{e['program']} {'-'.join(str(n) for n in e['nights'])}"
-                          + ("" if e["in_tiles_table"] else " (not in the tiles table)") for e in epochs))
+        print(
+            f"DESI {release}: {len(epochs)} tile epoch(s) of TARGETID {tid} (healpix {hp}): "
+            + ", ".join(
+                f"{e['tileid']}/{e['program']} {'-'.join(str(n) for n in e['nights'])}"
+                + ("" if e["in_tiles_table"] else " (not in the tiles table)")
+                for e in epochs
+            )
+        )
     return epochs
 
 
@@ -581,11 +730,13 @@ def fetch_desi_epochs(ra, dec, targetid, out_dir, release="dr1", tiles_csv=None,
     (no coadd file on the server) and 'not_in_coadd' (the target is not in
     that petal's file); such epochs have ``path`` None.
     """
-    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     tid = int(targetid)
     if epochs is None:
-        epochs = list_desi_epochs(ra, dec, tid, release=release, tiles_csv=tiles_csv, out_dir=out_dir,
-                                  verbose=verbose)
+        epochs = list_desi_epochs(
+            ra, dec, tid, release=release, tiles_csv=tiles_csv, out_dir=out_dir, verbose=verbose
+        )
     out = []
     for ep in epochs:
         rec = dict(ep, status=None, path=None, redrock=None)
@@ -593,7 +744,9 @@ def fetch_desi_epochs(ra, dec, targetid, out_dir, release="dr1", tiles_csv=None,
         if ep.get("lastnight") is None:
             rec["status"] = "no_lastnight"
         else:
-            url = ep.get("coadd_url") or desi_tile_coadd_url(release, ep["tileid"], ep["lastnight"], ep["petal"])
+            url = ep.get("coadd_url") or desi_tile_coadd_url(
+                release, ep["tileid"], ep["lastnight"], ep["petal"]
+            )
             if not _url_exists(url):
                 rec["status"] = "missing"
             else:
@@ -604,16 +757,25 @@ def fetch_desi_epochs(ra, dec, targetid, out_dir, release="dr1", tiles_csv=None,
                     else:
                         d, provenance = _extract_desi_tile_bundle(h, tid, out_dir, release, ep, url)
                         listed = sorted(int(v) for v in ep.get("expids") or [])
-                        rec.update(provenance, status="ok", z=d["z"], zwarn=d["zwarn"], spectype=d["spectype"],
-                                   mjd=d["mjd"], ebv=d["ebv"],
-                                   expids_match=(listed == provenance["exposure_ids"]) if listed else None)
+                        rec.update(
+                            provenance,
+                            status="ok",
+                            z=d["z"],
+                            zwarn=d["zwarn"],
+                            spectype=d["spectype"],
+                            mjd=d["mjd"],
+                            ebv=d["ebv"],
+                            expids_match=(listed == provenance["exposure_ids"]) if listed else None,
+                        )
         out.append(rec)
         if verbose:
             key = ep.get("epoch_key") or f"{ep['tileid']}-?-{ep['petal']}"
             if rec["status"] == "ok":
-                print(f"  {release} tile epoch {key}: z = {rec['z']:.4f} {rec['spectype']} ZWARN {rec['zwarn']}, "
-                      f"MJD {rec['mjd']:.1f}, {len(rec['exposure_ids'])} exposure(s) -> {rec['path']} "
-                      f"[{time.time() - t0:.1f} s]")
+                print(
+                    f"  {release} tile epoch {key}: z = {rec['z']:.4f} {rec['spectype']} ZWARN {rec['zwarn']}, "
+                    f"MJD {rec['mjd']:.1f}, {len(rec['exposure_ids'])} exposure(s) -> {rec['path']} "
+                    f"[{time.time() - t0:.1f} s]"
+                )
             else:
                 print(f"  {release} tile epoch {key}: {rec['status']}")
     return out

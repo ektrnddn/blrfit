@@ -19,23 +19,57 @@ parabola through the smoothed profile above 80 per cent of its maximum
 (``data_peak_top``), and lightly smoothed data-side measures are carried
 alongside (``data_*``).
 """
+
 from __future__ import annotations
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
-from .constants import (C_KMS, LAM, COMPLEX_LINE, PROFILE_GRID_KMS, PROFILE_GRID_MAX_KMS,
-                        PEAK_HEIGHT_FRAC, PEAK_PROMINENCE_FRAC, DATA_PEAK_FRAC,
-                        DATA_PEAK_SMOOTH_KMS, DATA_PEAK_GUARD_HBETA_KMS, DATA_SMOOTH_KMS)
+from .constants import (
+    C_KMS,
+    LAM,
+    COMPLEX_LINE,
+    PROFILE_GRID_KMS,
+    PROFILE_GRID_MAX_KMS,
+    PEAK_HEIGHT_FRAC,
+    PEAK_PROMINENCE_FRAC,
+    DATA_PEAK_FRAC,
+    DATA_PEAK_SMOOTH_KMS,
+    DATA_PEAK_GUARD_HBETA_KMS,
+    DATA_SMOOTH_KMS,
+    DEGENERATE_DCHI2,
+    RESIDUAL_OUTLIER_SIGMA,
+    RESIDUAL_PROTECT_KMS,
+)
 from .model.params import gauss_lam
 from .model.lines import eval_components
 
 _trapz = getattr(np, "trapezoid", None) or np.trapz
 
-MEASURE_KEYS = ["v_peak", "centroid", "sigma_line", "skew", "fwhm", "W25", "W75", "W90",
-                "c25", "c50", "c75", "c90", "AI", "KI", "n_peaks", "peak_sep", "dip_frac",
-                "vB50", "vR50", "vB25", "vR25"]
+MEASURE_KEYS = [
+    "v_peak",
+    "centroid",
+    "sigma_line",
+    "skew",
+    "fwhm",
+    "W25",
+    "W75",
+    "W90",
+    "c25",
+    "c50",
+    "c75",
+    "c90",
+    "AI",
+    "KI",
+    "n_peaks",
+    "peak_sep",
+    "dip_frac",
+    "vB50",
+    "vR50",
+    "vB25",
+    "vR25",
+]
 
 
 def _crossings(v, P, level):
@@ -46,7 +80,7 @@ def _crossings(v, P, level):
     idx = np.where(above)[0]
     i0, i1 = idx[0], idx[-1]
 
-    def interp(i, j):                       # crossing between samples i (below) and j (above)
+    def interp(i, j):  # crossing between samples i (below) and j (above)
         if i < 0 or j >= len(v) or P[j] == P[i]:
             return v[j]
         return v[i] + (level - P[i]) * (v[j] - v[i]) / (P[j] - P[i])
@@ -62,7 +96,8 @@ def profile_measures(v, P):
     if P is None or not np.isfinite(P).any() or np.nanmax(P) <= 0:
         return out
     P = np.where(np.isfinite(P), P, 0.0)
-    Pmax = P.max(); ipk = int(np.argmax(P))
+    Pmax = P.max()
+    ipk = int(np.argmax(P))
     out["v_peak"] = float(v[ipk])
     for f, lab in ((0.5, "50"), (0.25, "25"), (0.75, "75"), (0.9, "90")):
         vB, vR = _crossings(v, P, f * Pmax)
@@ -78,22 +113,23 @@ def profile_measures(v, P):
         mu3 = _trapz((v - cen) ** 3 * P, v) / norm
         out["centroid"] = float(cen)
         out["sigma_line"] = float(np.sqrt(max(mu2, 0)))
-        out["skew"] = float(mu3 / mu2 ** 1.5) if mu2 > 0 else np.nan
+        out["skew"] = float(mu3 / mu2**1.5) if mu2 > 0 else np.nan
     W25 = out["W25"]
     if np.isfinite(W25) and W25 > 0:
-        out["AI"] = (out["vR25"] + out["vB25"] - 2 * out["v_peak"]) / W25   # Marziani A.I.(1/4)
-        out["KI"] = out["W75"] / W25                                         # Gaussian: 0.456
+        out["AI"] = (out["vR25"] + out["vB25"] - 2 * out["v_peak"]) / W25  # Marziani A.I.(1/4)
+        out["KI"] = out["W75"] / W25  # Gaussian: 0.456
     pk, props = find_peaks(P, height=PEAK_HEIGHT_FRAC * Pmax, prominence=PEAK_PROMINENCE_FRAC * Pmax)
     out["n_peaks"] = int(len(pk))
     if len(pk) >= 2:
         out["peak_sep"] = float(v[pk[-1]] - v[pk[0]])
-        seg = P[pk[0]:pk[-1] + 1]
+        seg = P[pk[0] : pk[-1] + 1]
         out["dip_frac"] = float(1.0 - seg.min() / min(P[pk[0]], P[pk[-1]]))
     return out
 
 
-def data_peak_top(r, lam0, frac=DATA_PEAK_FRAC, smooth_kms=DATA_PEAK_SMOOTH_KMS, guard_kms=None,
-                  vmax=9000.0, support=None):
+def data_peak_top(
+    r, lam0, frac=DATA_PEAK_FRAC, smooth_kms=DATA_PEAK_SMOOTH_KMS, guard_kms=None, vmax=9000.0, support=None
+):
     """Peak velocity of the continuum- and narrow-subtracted DATA (Eracleous et
     al. 2012): mask +/- guard_kms around every narrow component, smooth, take
     the maximum inside the broad profile's support and fit a parabola to the
@@ -109,11 +145,13 @@ def data_peak_top(r, lam0, frac=DATA_PEAK_FRAC, smooth_kms=DATA_PEAK_SMOOTH_KMS,
     if guard_kms is None:
         guard_kms = DATA_PEAK_GUARD_HBETA_KMS if r.get("name") == "Hbeta" else 0.0
     v = (x / lam0 - 1.0) * C_KMS
-    o = np.argsort(v); v, y = v[o], y[o]; x = x[o]
+    o = np.argsort(v)
+    v, y = v[o], y[o]
+    x = x[o]
     resid = y - eval_components(x, d, r["comps"], kinds=("narrow", "wing", "nwing"))
     mask = np.zeros_like(v, bool)
     if guard_kms > 0:
-        for lab, l0, an, vn, sn, kind, ratio in r["comps"]:
+        for _lab, l0, an, vn, _sn, kind, _ratio in r["comps"]:
             if kind in ("narrow", "wing") and d[an] > 0:
                 vc = ((l0 * (1 + d[vn] / C_KMS)) / lam0 - 1.0) * C_KMS
                 mask |= np.abs(v - vc) < guard_kms
@@ -127,17 +165,20 @@ def data_peak_top(r, lam0, frac=DATA_PEAK_FRAC, smooth_kms=DATA_PEAK_SMOOTH_KMS,
     if sel.sum() < 5 or not np.isfinite(sm[sel]).any():
         return np.nan
     vs, ss = v[sel], sm[sel]
-    i = int(np.nanargmax(ss)); top = ss[i]
+    i = int(np.nanargmax(ss))
+    top = ss[i]
     if not np.isfinite(top) or top <= 0:
         return np.nan
     # contiguous region around the maximum above frac * top
     j0 = i
-    while j0 > 0 and ss[j0 - 1] >= frac * top: j0 -= 1
+    while j0 > 0 and ss[j0 - 1] >= frac * top:
+        j0 -= 1
     j1 = i
-    while j1 < len(ss) - 1 and ss[j1 + 1] >= frac * top: j1 += 1
+    while j1 < len(ss) - 1 and ss[j1 + 1] >= frac * top:
+        j1 += 1
     if j1 - j0 >= 4:
         try:
-            a, b, c = np.polyfit(vs[j0:j1 + 1], ss[j0:j1 + 1], 2)
+            a, b, c = np.polyfit(vs[j0 : j1 + 1], ss[j0 : j1 + 1], 2)
             if a < 0:
                 vp = -b / (2 * a)
                 if vs[j0] <= vp <= vs[j1]:
@@ -157,6 +198,50 @@ def centroid_above(v, P, frac):
     return float(_trapz(v[m] * P[m], v[m]) / _trapz(P[m], v[m]))
 
 
+def equivalent_end_points(r, lam0, vgrid):
+    """How far apart equally good decompositions of fit ``r`` put the broad
+    profile: the end points of its starts (``r['end_points']``) whose
+    chi-square lies within DEGENERATE_DCHI2 x max(1, reduced chi-square) of
+    the selected one are measured, each c(1/2) relative to its own narrow-line
+    velocity. Returns (dv_spread, fwhm_spread, n_equivalent): the ranges of
+    c(1/2) - v_sys and of the FWHM over those end points, and their number
+    (the selected one included). NaN, NaN, 0 for a fit without end points
+    (results written before version 0.3)."""
+    ends = r.get("end_points")
+    if not ends or "ps" not in r:
+        return np.nan, np.nan, 0
+    dof = max(r["npix"] - r["nfree"], 1)
+    tol = DEGENERATE_DCHI2 * max(1.0, r["chi2"] / dof)
+    lam = lam0 * (1.0 + vgrid / C_KMS)
+    c50, fwhm = [], []
+    for e in ends:
+        if not e["chi2"] - r["chi2"] <= tol:
+            continue
+        d = r["ps"].full(e["x"])
+        pm = profile_measures(vgrid, eval_components(lam, d, r["comps"], kinds=("broad",)))
+        c50.append(pm["c50"] - d.get("n_v", np.nan))
+        fwhm.append(pm["fwhm"])
+    c50, fwhm = np.asarray(c50, float), np.asarray(fwhm, float)
+    dv = float(np.ptp(c50[np.isfinite(c50)])) if np.isfinite(c50).any() else np.nan
+    dw = float(np.ptp(fwhm[np.isfinite(fwhm)])) if np.isfinite(fwhm).any() else np.nan
+    return dv, dw, int(c50.size)
+
+
+def residual_outliers(r):
+    """Pixels of fit ``r`` that the model misses by more than
+    RESIDUAL_OUTLIER_SIGMA, farther than RESIDUAL_PROTECT_KMS from the centre of
+    every narrow line (whose steep cores leave large residuals in bright
+    spectra)."""
+    x, y, w, d = r["x"], r["y"], r["w"], r["d"]
+    resid = (y - eval_components(x, d, r["comps"])) * w
+    near = np.zeros(x.size, bool)
+    for _lab, l0, _an, vn, _sn, kind, _rr in r["comps"]:
+        if kind == "narrow":
+            lc = l0 * (1.0 + d[vn] / C_KMS)
+            near |= np.abs(x / lc - 1.0) * C_KMS < RESIDUAL_PROTECT_KMS
+    return int(np.sum((np.abs(resid) > RESIDUAL_OUTLIER_SIGMA) & ~near))
+
+
 def broad_profile(r, lam0, vgrid):
     """The summed broad model of fit ``r`` on a velocity grid about lam0."""
     lam = lam0 * (1.0 + vgrid / C_KMS)
@@ -172,22 +257,30 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
     ``wave_rest``; fluxes inherit the input flux units and ``broad_lum`` assumes
     them to be 1e-17 erg/s/cm^2/A (``dl_cm`` is the luminosity distance).
     """
-    name = r["name"]; d = r["d"]
+    name = r["name"]
+    d = r["d"]
     lam0 = LAM[COMPLEX_LINE[name]]
     if vgrid is None:
         vgrid = np.arange(-PROFILE_GRID_MAX_KMS, PROFILE_GRID_MAX_KMS + 0.01, PROFILE_GRID_KMS)
     P = broad_profile(r, lam0, vgrid)
     m = profile_measures(vgrid, P)
+    m["dv_spread"], m["fwhm_spread"], m["n_equivalent"] = equivalent_end_points(r, lam0, vgrid)
 
     # systemic reference from the same fit
-    v_sys = d.get("n_v", np.nan); sig_sys = d.get("n_sig", np.nan)
+    v_sys = d.get("n_v", np.nan)
+    sig_sys = d.get("n_sig", np.nan)
     v_o3 = d.get("o3_v", np.nan)
-    m["v_sys"] = float(v_sys); m["sig_sys"] = float(sig_sys); m["v_o3"] = float(v_o3)
-    m["v_sii"] = float(d.get("s2_v", np.nan)); m["sig_sii"] = float(d.get("s2_sig", np.nan))
-    m["nw_f"] = float(d.get("nw_f", np.nan)); m["nw_v"] = float(d.get("nw_v", np.nan))
+    m["v_sys"] = float(v_sys)
+    m["sig_sys"] = float(sig_sys)
+    m["v_o3"] = float(v_o3)
+    m["v_sii"] = float(d.get("s2_v", np.nan))
+    m["sig_sii"] = float(d.get("s2_sig", np.nan))
+    m["nw_f"] = float(d.get("nw_f", np.nan))
+    m["nw_v"] = float(d.get("nw_v", np.nan))
     m["nw_sig"] = float(d.get("nw_sig", np.nan))
     vc = r.get("v_cover", (np.nan, np.nan))
-    m["v_cover_lo"] = float(vc[0]); m["v_cover_hi"] = float(vc[1])
+    m["v_cover_lo"] = float(vc[0])
+    m["v_cover_hi"] = float(vc[1])
     for k in ("v_peak", "centroid", "c25", "c50", "c75", "c90"):
         m[f"{k}_sys"] = m[k] - v_sys if np.isfinite(v_sys) else np.nan
         if name == "Hbeta":
@@ -214,7 +307,8 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
         if kind == "broad":
             continue
         A = d[an] * (ratio[1] if ratio else 1.0)
-        lc = lam0n * (1 + d[vn] / C_KMS); sl = lc * d[sn] / C_KMS
+        lc = lam0n * (1 + d[vn] / C_KMS)
+        sl = lc * d[sn] / C_KMS
         m[f"flux_{lab}"] = float(A * sl * np.sqrt(2 * np.pi))
     # data-side peak (Eracleous et al. 2012) and centroids above fractional
     # levels (first moments insensitive to the wings)
@@ -232,14 +326,21 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
     noise = float(np.median(1.0 / r["w"])) if len(r["w"]) else np.nan
     m["broad_peak_snr"] = float(P.max() / noise) if noise > 0 else np.nan
     # integrated S/N: flux / (sigma_pix * dlambda * sqrt(N_pix inside W25))
-    x_ = r["x"]; dlam = float(np.median(np.diff(np.sort(x_)))) if len(x_) > 2 else np.nan
+    x_ = r["x"]
+    dlam = float(np.median(np.diff(np.sort(x_)))) if len(x_) > 2 else np.nan
     if np.isfinite(m["vB25"]) and np.isfinite(m["vR25"]) and noise > 0 and np.isfinite(dlam):
         inw = (x_ > lam0 * (1 + m["vB25"] / C_KMS)) & (x_ < lam0 * (1 + m["vR25"] / C_KMS))
         m["broad_flux_snr"] = fb / (noise * dlam * np.sqrt(max(int(inw.sum()), 1)))
     else:
         m["broad_flux_snr"] = np.nan
-    nar_peak = max([d[an] for lab, l0, an, vn, sn, kind, rr in r["comps"]
-                    if kind == "narrow" and lab not in ("HeII4686_n",)] + [0.0])
+    nar_peak = max(
+        [
+            d[an]
+            for lab, l0, an, vn, sn, kind, rr in r["comps"]
+            if kind == "narrow" and lab not in ("HeII4686_n",)
+        ]
+        + [0.0]
+    )
     m["narrow_peak_snr"] = float(nar_peak / noise) if noise > 0 else np.nan
     # S/N of the component that DEFINES the systemic: the [O III] core for Hbeta
     # (when the Halpha prior is not used), the Halpha narrow group for Halpha.
@@ -252,7 +353,7 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
         vg = np.arange(-3000.0, 3000.01, 5.0)
         lam_g = LAM["OIII5007"] * (1.0 + vg / C_KMS)
         yo3 = np.zeros_like(vg)
-        for lab, l0, an, vn, sn, kind, rr in r["comps"]:
+        for lab, l0, an, vn, sn, _kind, _rr in r["comps"]:
             if lab in ("OIII5007c", "OIII5007w"):
                 yo3 += gauss_lam(lam_g, d[an], l0, d[vn], d[sn])
         m["v_o3_peak"] = float(vg[int(np.argmax(yo3))]) if yo3.max() > 0 else np.nan
@@ -260,6 +361,8 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
         m["sys_snr"] = m["narrow_peak_snr"]
     m["chi2_red"] = r["chi2"] / max(r["npix"] - r["nfree"], 1)
     m["n_broad"] = r["n_broad"]
+    m["params_at_bound"] = list(r.get("params_at_bound", []))
+    m["n_residual_outliers"] = residual_outliers(r)
     m["bic_all"] = r.get("all_bic", [])
     # single-Gaussian centre, for comparison with single-Gaussian pipelines
     if r["n_broad"] == 1:
@@ -269,16 +372,20 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
     x, y = r["x"], r["y"]
     resid = y - eval_components(x, d, r["comps"], kinds=("narrow", "wing", "nwing"))
     vd = (x / lam0 - 1.0) * C_KMS
-    order = np.argsort(vd); vd, resid = vd[order], resid[order]
+    order = np.argsort(vd)
+    vd, resid = vd[order], resid[order]
     if len(vd) > 20:
         pix = np.median(np.diff(vd))
         sm = gaussian_filter1d(resid, max(DATA_SMOOTH_KMS / pix, 0.5))
         md = profile_measures(vd, np.clip(sm, 0, None))
-        m["data_v_peak"] = md["v_peak"]; m["data_c50"] = md["c50"]
+        m["data_v_peak"] = md["v_peak"]
+        m["data_c50"] = md["c50"]
         m["data_centroid_win"] = np.nan
         if np.isfinite(m["vB25"]) and np.isfinite(m["vR25"]):
             win = (vd > m["vB25"] - 0.25 * m["W25"]) & (vd < m["vR25"] + 0.25 * m["W25"])
             if win.sum() > 5 and _trapz(np.clip(sm[win], 0, None), vd[win]) > 0:
-                m["data_centroid_win"] = float(_trapz(vd[win] * np.clip(sm[win], 0, None), vd[win])
-                                               / _trapz(np.clip(sm[win], 0, None), vd[win]))
+                m["data_centroid_win"] = float(
+                    _trapz(vd[win] * np.clip(sm[win], 0, None), vd[win])
+                    / _trapz(np.clip(sm[win], 0, None), vd[win])
+                )
     return m

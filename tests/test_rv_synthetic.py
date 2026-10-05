@@ -26,6 +26,7 @@ the Halpha peak value).
 Numbers quoted in the tolerances were measured with this file's helpers and
 are listed next to each assertion.
 """
+
 import functools
 
 import numpy as np
@@ -37,13 +38,13 @@ from blrfit.constants import C_KMS, LAM, S2F, CCF_SYS_KMS, CCF_SYS_HBETA_LOWSNR_
 from synth import make_spectrum, SDSS_LOGLAM
 
 Z = 0.25
-V0 = 600.0                 # broad-line velocity of the template, km/s from the narrow lines
-EW_HA, EW_HB = 150.0, 45.0 # broad equivalent widths, Angstrom
+V0 = 600.0  # broad-line velocity of the template, km/s from the narrow lines
+EW_HA, EW_HB = 150.0, 45.0  # broad equivalent widths, Angstrom
 SHIFTS = (-600.0, -150.0, 300.0, 900.0)
-PAPER_BIAS_KMS = 10.0      # "unbiased to better than 10 km/s" (FWHM <= 5000, peak S/N >= 8)
-PULL_BAND = (0.6, 1.6)     # "unit pulls" at peak S/N above 20, cross-correlation alone
-PIPELINE_PULL_BAND = (0.6, 1.7)   # the full pipeline at peak S/N 25 measures 1.57 for FWHM 5000 (slow grid)
-NR_CCF = 40                # noise realisations per configuration for the cross-correlation alone
+PAPER_BIAS_KMS = 10.0  # "unbiased to better than 10 km/s" (FWHM <= 5000, peak S/N >= 8)
+PULL_BAND = (0.6, 1.6)  # "unit pulls" at peak S/N above 20, cross-correlation alone
+PIPELINE_PULL_BAND = (0.6, 1.7)  # the full pipeline at peak S/N 25 measures 1.57 for FWHM 5000 (slow grid)
+NR_CCF = 40  # noise realisations per configuration for the cross-correlation alone
 
 
 # ---------------------------------------------------------------------------
@@ -92,8 +93,9 @@ def continuum_snr_for_peak(peak, fwhm):
 
 def spectrum(fwhm, v, peak, seed, wave=None):
     """Synthetic spectrum with broad Halpha and Hbeta at velocity v (km/s)."""
-    return make_spectrum(z=Z, snr=continuum_snr_for_peak(peak, fwhm), broad=broad_cfg(v, fwhm),
-                         seed=seed, wave=wave)
+    return make_spectrum(
+        z=Z, snr=continuum_snr_for_peak(peak, fwhm), broad=broad_cfg(v, fwhm), seed=seed, wave=wave
+    )
 
 
 def broad_peak_snr(sp, fwhm, v, peak, seed, wave=None, line="Halpha"):
@@ -117,8 +119,16 @@ def truth_profile(sp, fwhm, v, peak, seed, line="Halpha", noise_free=False):
     lo, hi = (6400.0, 6800.0) if line == "Halpha" else (4700.0, 5100.0)
     m = (wr > lo) & (wr < hi)
     n = int(m.sum())
-    return dict(v=vel[m], f=f[m], e=np.full(n, sp["truth"]["noise"]), ok=np.ones(n, bool),
-                nmod=np.zeros(n), v_sys=0.0, fwhm=float(fwhm), c50_sys=float(v))
+    return dict(
+        v=vel[m],
+        f=f[m],
+        e=np.full(n, sp["truth"]["noise"]),
+        ok=np.ones(n, bool),
+        nmod=np.zeros(n),
+        v_sys=0.0,
+        fwhm=float(fwhm),
+        c50_sys=float(v),
+    )
 
 
 @functools.lru_cache(maxsize=None)
@@ -132,15 +142,18 @@ def fit(fwhm, v, peak, seed, grid="desi", wave_scale=1.0, complexes=("Halpha", "
 def pipeline_pair(fwhm, shift, peak, seed_t, seed_e, name="Halpha", **kw):
     """pair_analysis of an epoch shifted by ``shift`` against a template, both fitted,
     with the two one-directional results under 'details'."""
-    return rv.pair_analysis(fit(fwhm, V0 + shift, peak, seed_e), fit(fwhm, V0, peak, seed_t), name=name,
-                            details=True, **kw)
+    return rv.pair_analysis(
+        fit(fwhm, V0 + shift, peak, seed_e), fit(fwhm, V0, peak, seed_t), name=name, details=True, **kw
+    )
 
 
 def ccf_pair(fwhm, shift, peak, seed_t, seed_e):
     """shift_bidirectional on truth-subtracted profiles (no fitting)."""
-    spT = spectrum(fwhm, V0, peak, seed_t); spE = spectrum(fwhm, V0 + shift, peak, seed_e)
-    return rv.shift_bidirectional(truth_profile(spE, fwhm, V0 + shift, peak, seed_e),
-                                  truth_profile(spT, fwhm, V0, peak, seed_t))
+    spT = spectrum(fwhm, V0, peak, seed_t)
+    spE = spectrum(fwhm, V0 + shift, peak, seed_e)
+    return rv.shift_bidirectional(
+        truth_profile(spE, fwhm, V0 + shift, peak, seed_e), truth_profile(spT, fwhm, V0, peak, seed_t)
+    )
 
 
 @functools.lru_cache(maxsize=None)
@@ -149,7 +162,9 @@ def ccf_sample(fwhm, shift, peak, nreal=NR_CCF):
     d, e, mism = [], [], []
     for i in range(nreal):
         s = ccf_pair(fwhm, shift, peak, 1000 + i, 2000 + i)
-        d.append(s["dv"] - shift); e.append(s["err"]); mism.append(s["dir_mismatch"])
+        d.append(s["dv"] - shift)
+        e.append(s["err"])
+        mism.append(s["dir_mismatch"])
     arrays = (np.array(d), np.array(e), np.array(mism))
     for a in arrays:
         a.flags.writeable = False
@@ -159,9 +174,11 @@ def ccf_sample(fwhm, shift, peak, nreal=NR_CCF):
 def summary(label, d, e):
     pull = d / e
     ok = np.isfinite(pull)
-    return (f"{label}: n {len(d)} median {np.median(d):+.1f} NMAD {nmad(d):.1f} km/s, err median {np.nanmedian(e):.1f}, "
-            f"pull NMAD {nmad(pull[ok]):.2f} std {np.std(pull[ok]):.2f} max|pull| {np.max(np.abs(pull[ok])):.2f}, "
-            f"NaN errors {int((~ok).sum())}")
+    return (
+        f"{label}: n {len(d)} median {np.median(d):+.1f} NMAD {nmad(d):.1f} km/s, err median {np.nanmedian(e):.1f}, "
+        f"pull NMAD {nmad(pull[ok]):.2f} std {np.std(pull[ok]):.2f} max|pull| {np.max(np.abs(pull[ok])):.2f}, "
+        f"NaN errors {int((~ok).sum())}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +208,8 @@ def test_ccf_exact_without_noise(fwhm):
     offset appears at all shifts for FWHM 4000-5000. These are below the
     paper's 10 km/s and are bounded by it here."""
     for shift in (-600.0, -150.0, 300.0, 900.0, 14.6, 43.8, 7.3):
-        spT = spectrum(fwhm, V0, 25, seed=0); spE = spectrum(fwhm, V0 + shift, 25, seed=1)
+        spT = spectrum(fwhm, V0, 25, seed=0)
+        spE = spectrum(fwhm, V0 + shift, 25, seed=1)
         pT = truth_profile(spT, fwhm, V0, 25, 0, noise_free=True)
         pE = truth_profile(spE, fwhm, V0 + shift, 25, 1, noise_free=True)
         s = rv.ccf_shift(pE, pT)
@@ -200,7 +218,7 @@ def test_ccf_exact_without_noise(fwhm):
         assert abs(s["dv"] - shift) < tol, (fwhm, shift, s["dv"])
         if fwhm >= 5000 and shift >= 900:
             b = rv.shift_bidirectional(pE, pT)
-            assert abs(b["dv"] - shift) < 4.0            # measured 2.6 km/s
+            assert abs(b["dv"] - shift) < 4.0  # measured 2.6 km/s
 
 
 @pytest.mark.parametrize("fwhm", (2500, 4000, 5000))
@@ -224,8 +242,10 @@ def test_ccf_unbiased_at_peak_snr_above_20(fwhm, peak):
     pooled, pulls = [], []
     for shift in SHIFTS:
         d, e, mism = ccf_sample(fwhm, shift, peak)
-        print(summary(f"CCF alone FWHM {fwhm} peak {peak} shift {shift:+.0f}", d, e)
-              + f", within 4 sigma {np.mean(np.abs(d / e) < 4):.3f}")
+        print(
+            summary(f"CCF alone FWHM {fwhm} peak {peak} shift {shift:+.0f}", d, e)
+            + f", within 4 sigma {np.mean(np.abs(d / e) < 4):.3f}"
+        )
         assert np.isfinite(e).all()
         assert abs(np.median(d)) < bias_tolerance(d), (fwhm, peak, shift, np.median(d), bias_tolerance(d))
         pulls += list(d / e)
@@ -265,12 +285,25 @@ def test_ccf_bias_at_peak_snr_8_to_12(fwhm, peak):
     assert n_nan <= 0.2 * len(pooled)
 
 
-@pytest.mark.parametrize("fwhm,peak", [
-    (2500, 25), (4000, 25),
-    pytest.param(5000, 25, marks=pytest.mark.xfail(
-        strict=True, reason="measured pull NMAD 1.64 (1.69-1.94 per shift) for FWHM 5000 at peak S/N 25: "
-                            "the Delta chi-square error undercovers by 1.6-1.9, not unity as the paper states")),
-    (2500, 50), (4000, 50), (5000, 50)])
+@pytest.mark.parametrize(
+    "fwhm,peak",
+    [
+        (2500, 25),
+        (4000, 25),
+        pytest.param(
+            5000,
+            25,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="measured pull NMAD 1.64 (1.69-1.94 per shift) for FWHM 5000 at peak S/N 25: "
+                "the Delta chi-square error undercovers by a factor 1.6-1.9 here",
+            ),
+        ),
+        (2500, 50),
+        (4000, 50),
+        (5000, 50),
+    ],
+)
 def test_ccf_error_calibration_at_peak_snr_above_20(fwhm, peak):
     """Pulls (dv - truth) / err of the Delta chi-square error, 160 pairs per
     configuration (four shifts). Measured NMAD: 0.97, 1.33, 1.64 at peak S/N 25
@@ -285,18 +318,36 @@ def test_ccf_error_calibration_at_peak_snr_above_20(fwhm, peak):
         pulls += list(d / e)
     pulls = np.array(pulls)
     assert np.isfinite(pulls).all()
-    print(f"CCF alone FWHM {fwhm} peak {peak}: pull NMAD {nmad(pulls):.2f} (n {len(pulls)}), std {np.std(pulls):.2f}, "
-          f"median |pull| {np.median(np.abs(pulls)):.2f}")
+    print(
+        f"CCF alone FWHM {fwhm} peak {peak}: pull NMAD {nmad(pulls):.2f} (n {len(pulls)}), std {np.std(pulls):.2f}, "
+        f"median |pull| {np.median(np.abs(pulls)):.2f}"
+    )
     assert PULL_BAND[0] <= nmad(pulls) <= PULL_BAND[1], nmad(pulls)
 
 
-@pytest.mark.parametrize("fwhm", [
-    2500,
-    pytest.param(4000, marks=pytest.mark.xfail(strict=True, reason="measured pull NMAD 3.02 at peak S/N 8 for FWHM 4000; the paper quotes undercoverage factors of 1.2-2 below peak S/N 10")),
-    pytest.param(5000, marks=pytest.mark.xfail(strict=True, reason="measured pull NMAD 4.64 at peak S/N 8 for FWHM 5000; the paper quotes undercoverage factors of 1.2-2 below peak S/N 10"))])
+@pytest.mark.parametrize(
+    "fwhm",
+    [
+        2500,
+        pytest.param(
+            4000,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="measured pull NMAD 3.02 at peak S/N 8 for FWHM 4000: undercoverage beyond a factor 2",
+            ),
+        ),
+        pytest.param(
+            5000,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="measured pull NMAD 4.64 at peak S/N 8 for FWHM 5000: undercoverage beyond a factor 2",
+            ),
+        ),
+    ],
+)
 def test_ccf_undercoverage_at_peak_snr_8(fwhm):
-    """Below a peak S/N of about 10 the paper quotes undercoverage by factors of
-    1.2-2. Measured pull NMAD at peak S/N 8 (pairs with a defined error):
+    """Below a peak S/N of about 10 the Delta chi-square error is expected to
+    undercover by factors of 1.2-2. Measured pull NMAD at peak S/N 8 (pairs with a defined error):
     1.93, 3.02, 4.64 for FWHM 2500, 4000, 5000; at 12: 1.50, 2.13, 3.16. The
     factor 2 holds for FWHM 2500 only."""
     pulls = []
@@ -306,19 +357,22 @@ def test_ccf_undercoverage_at_peak_snr_8(fwhm):
         pulls += list(d[ok] / e[ok])
     pulls = np.array(pulls)
     print(f"CCF alone FWHM {fwhm} peak 8: pull NMAD {nmad(pulls):.2f} (n {len(pulls)})")
-    assert 1.0 <= nmad(pulls) <= 2.2, nmad(pulls)      # measured 1.93 for FWHM 2500; 2.2 leaves room for the noise stream
+    assert 1.0 <= nmad(pulls) <= 2.2, nmad(
+        pulls
+    )  # measured 1.93 for FWHM 2500; 2.2 leaves room for the noise stream
 
 
 # ---------------------------------------------------------------------------
 # the full pipeline: fit_spectrum of both epochs, then pair_analysis
 # ---------------------------------------------------------------------------
-FAST_CONFIGS = ((4000, 300.0),)                       # run on every test invocation
-SLOW_CONFIGS = ((2500, -600.0), (5000, 900.0))        # the rest of the paper's width range (slow)
+FAST_CONFIGS = ((4000, 300.0),)  # run on every test invocation
+SLOW_CONFIGS = ((2500, -600.0), (5000, 900.0))  # the rest of the paper's width range (slow)
 FAST_PEAK = 50
 NR_FAST = 6
-SEED_T, SEED_E = 300, 400           # template and epoch seeds of the fast recovery set
-RECOVERY_CASES = ([pytest.param(f, s, id=f"{f}-{s:+.0f}") for f, s in FAST_CONFIGS]
-                  + [pytest.param(f, s, id=f"{f}-{s:+.0f}", marks=pytest.mark.slow) for f, s in SLOW_CONFIGS])
+SEED_T, SEED_E = 300, 400  # template and epoch seeds of the fast recovery set
+RECOVERY_CASES = [pytest.param(f, s, id=f"{f}-{s:+.0f}") for f, s in FAST_CONFIGS] + [
+    pytest.param(f, s, id=f"{f}-{s:+.0f}", marks=pytest.mark.slow) for f, s in SLOW_CONFIGS
+]
 
 
 @pytest.mark.parametrize("fwhm,shift", RECOVERY_CASES)
@@ -337,7 +391,9 @@ def test_pipeline_recovers_injected_shift(fwhm, shift, name):
     for i in range(NR_FAST):
         p = pipeline_pair(fwhm, shift, FAST_PEAK, SEED_T + i, SEED_E + i, name=name)
         assert p is not None and not p["at_bound"] and not p["regridded"]
-        d.append(p["dv"] - shift); e.append(p["err"]); pairs.append(p)
+        d.append(p["dv"] - shift)
+        e.append(p["err"])
+        pairs.append(p)
     d, e = np.array(d), np.array(e)
     print(summary(f"pipeline FWHM {fwhm} shift {shift:+.0f} {name}", d, e))
     assert np.isfinite(e).all()
@@ -366,14 +422,15 @@ def test_pipeline_error_calibration_fwhm4000_peak25():
         for i in range(n):
             p = pipeline_pair(4000, 300.0, 25, 500 + i, 600 + i, name=name)
             assert p is not None and not p["at_bound"] and p["consistent"]
-            d.append(p["dv"] - 300.0); e.append(p["err"])
+            d.append(p["dv"] - 300.0)
+            e.append(p["err"])
         d, e = np.array(d), np.array(e)
         assert np.isfinite(e).all()
         out[name] = d / e
         print(summary(f"pipeline FWHM 4000 shift +300 peak 25 {name}", d, e))
     lo, hi = nmad_interval_unit_pulls(n)
     assert lo <= nmad(out["Halpha"]) <= hi, (nmad(out["Halpha"]), lo, hi)
-    assert np.median(np.abs(out["Halpha"])) < 1.24       # 99th percentile of the median |pull| for n = 12
+    assert np.median(np.abs(out["Halpha"])) < 1.24  # 99th percentile of the median |pull| for n = 12
     assert nmad(out["Hbeta"]) <= 2.0
 
 
@@ -403,7 +460,8 @@ def test_bidirectional_consistency():
     # the construction dv = (s_ab - s_ba) / 2 makes it exact)
     pa = rv.broad_profile_data(fit(4000, V0 + 300.0, FAST_PEAK, SEED_E), "Halpha")
     pb = rv.broad_profile_data(fit(4000, V0, FAST_PEAK, SEED_T), "Halpha")
-    s1 = rv.shift_bidirectional(pa, pb); s2 = rv.shift_bidirectional(pb, pa)
+    s1 = rv.shift_bidirectional(pa, pb)
+    s2 = rv.shift_bidirectional(pb, pa)
     assert abs(s1["dv"] + s2["dv"]) < s1["s_ab"]["dv_pix"]
     assert abs(s1["dv"] - 300.0) < 4 * s1["err"]
 
@@ -420,7 +478,9 @@ def test_shift_beyond_search_range_is_at_bound():
         assert p["consistent"] is False
         assert rv.is_reliable(p) is False
         q = pipeline_pair(4000, 2500.0, FAST_PEAK, SEED_T, SEED_E, name=name, vmax=4000.0)
-        print(f"at_bound test {name}: vmax 2000 dv {p['dv']:+.0f}; vmax 4000 dv {q['dv']:+.1f} +/- {q['err']:.1f}")
+        print(
+            f"at_bound test {name}: vmax 2000 dv {p['dv']:+.0f}; vmax 4000 dv {q['dv']:+.1f} +/- {q['err']:.1f}"
+        )
         assert not q["at_bound"]
         assert abs(q["dv"] - 2500.0) < 4 * q["err"]
 
@@ -440,7 +500,9 @@ def test_profile_change_detection():
     for name in ("Halpha", "Hbeta"):
         same = rv.pair_analysis(rE_same, rT, name=name)
         wide = rv.pair_analysis(rE_wide, rT, name=name)
-        print(f"profile change {name}: same profile z {same['profile_z']:+.2f}, 3000 -> 5000 z {wide['profile_z']:+.2f}")
+        print(
+            f"profile change {name}: same profile z {same['profile_z']:+.2f}, 3000 -> 5000 z {wide['profile_z']:+.2f}"
+        )
         assert same["profile_z"] < 3.0
         assert rv.is_reliable(same) is True
         assert abs(same["dv"]) < 4 * same["err"]
@@ -461,7 +523,8 @@ def test_regridded_sdss_epoch_against_desi_template():
             rT = fit(4000, V0, FAST_PEAK, SEED_T + i)
             p = rv.pair_analysis(rE, rT, name=name)
             assert p["regridded"] is True and not p["at_bound"]
-            d.append(p["dv"] - 300.0); e.append(p["err"])
+            d.append(p["dv"] - 300.0)
+            e.append(p["err"])
         d, e = np.array(d), np.array(e)
         print(summary(f"regridded SDSS epoch {name}", d, e))
         assert abs(np.median(d)) < 30.0
@@ -480,7 +543,9 @@ def test_narrow_line_zero_point_oiii():
     rT = fit(4000, V0, FAST_PEAK, SEED_T)
     for name in ("Hbeta", "Halpha"):
         p = rv.pair_analysis(rE, rT, name=name)
-        print(f"zero-point {name}: zp {p['zp_line']} {p['zp_dv']:+.1f} +/- {p['zp_err']:.1f}, broad dv {p['dv']:+.1f} +/- {p['err']:.1f}")
+        print(
+            f"zero-point {name}: zp {p['zp_line']} {p['zp_dv']:+.1f} +/- {p['zp_err']:.1f}, broad dv {p['dv']:+.1f} +/- {p['err']:.1f}"
+        )
         assert p["zp_line"] == "OIII"
         assert abs(p["zp_dv"] - 40.0) < 15.0
         assert np.isfinite(p["zp_err"]) and p["zp_err"] < 15.0
@@ -501,7 +566,9 @@ def test_narrow_line_zero_point_sii_when_hbeta_absent():
     rT = fit(4000, V0, FAST_PEAK, SEED_T, complexes=("Halpha",))
     assert "Hbeta" not in rE["fits"] and "Hbeta" not in rT["fits"]
     p = rv.pair_analysis(rE, rT, name="Halpha")
-    print(f"zero-point [S II]: {p['zp_dv']:+.1f} +/- {p['zp_err']:.1f}, broad dv {p['dv']:+.1f} +/- {p['err']:.1f}")
+    print(
+        f"zero-point [S II]: {p['zp_dv']:+.1f} +/- {p['zp_err']:.1f}, broad dv {p['dv']:+.1f} +/- {p['err']:.1f}"
+    )
     assert p["zp_line"] == "SII"
     assert abs(p["zp_dv"] - 40.0) < 15.0
     assert abs(p["dv"] - 40.0) < 4 * p["err"]
@@ -546,11 +613,25 @@ NR_GRID = 8
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("fwhm,peak", [
-    pytest.param(2500, 10, marks=pytest.mark.xfail(
-        strict=True, reason="pipeline bias for FWHM 2500 at peak S/N 10: pooled Halpha median -51.9 km/s (n 32, "
-                            "tolerance 35.5), see the docstring")),
-    (4000, 10), (5000, 10), (2500, 25), (4000, 25), (5000, 25)])
+@pytest.mark.parametrize(
+    "fwhm,peak",
+    [
+        pytest.param(
+            2500,
+            10,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="pipeline bias for FWHM 2500 at peak S/N 10: pooled Halpha median -51.9 km/s (n 32, "
+                "tolerance 35.5), see the docstring",
+            ),
+        ),
+        (4000, 10),
+        (5000, 10),
+        (2500, 25),
+        (4000, 25),
+        (5000, 25),
+    ],
+)
 def test_pipeline_grid(fwhm, peak):
     """Four shifts x 8 independent pairs per (FWHM, peak S/N) through the full
     pipeline (each template shared by its four epochs). Bias: |median| of the
@@ -585,15 +666,20 @@ def test_pipeline_grid(fwhm, peak):
             for i in range(NR_GRID):
                 p = pipeline_pair(fwhm, shift, peak, 900 + i, 950 + i, name=name)
                 assert p is not None and not p["at_bound"]
-                d.append(p["dv"] - shift); e.append(p["err"]); cons.append(p["consistent"])
+                d.append(p["dv"] - shift)
+                e.append(p["err"])
+                cons.append(p["consistent"])
             d, e = np.array(d), np.array(e)
             print(summary(f"grid FWHM {fwhm} peak {peak} shift {shift:+.0f} {name}", d, e))
-            d_all += list(d); e_all += list(e)
+            d_all += list(d)
+            e_all += list(e)
         d_all, e_all = np.array(d_all), np.array(e_all)
         ok = np.isfinite(e_all)
         pulls = d_all[ok] / e_all[ok]
-        print(f"grid FWHM {fwhm} peak {peak} {name} pooled: median {np.median(d_all):+.1f} NMAD {nmad(d_all):.1f} "
-              f"tolerance {bias_tolerance(d_all):.1f}, pull NMAD {nmad(pulls):.2f} (n {ok.sum()}), consistent {np.mean(cons):.2f}")
+        print(
+            f"grid FWHM {fwhm} peak {peak} {name} pooled: median {np.median(d_all):+.1f} NMAD {nmad(d_all):.1f} "
+            f"tolerance {bias_tolerance(d_all):.1f}, pull NMAD {nmad(pulls):.2f} (n {ok.sum()}), consistent {np.mean(cons):.2f}"
+        )
         assert abs(np.median(d_all)) < bias_tolerance(d_all), (fwhm, peak, name, np.median(d_all))
         if peak >= 20:
             assert ok.all()
@@ -618,18 +704,25 @@ def test_profile_grade_and_inflation():
 
 
 def test_two_line_consistent():
-    a = dict(dv=-300.0, err=40.0, at_bound=False); b = dict(dv=-220.0, err=30.0, at_bound=False)
+    a = dict(dv=-300.0, err=40.0, at_bound=False)
+    b = dict(dv=-220.0, err=30.0, at_bound=False)
     r = rv.two_line_consistent(a, b)
     assert r["consistent"] and r["same_sign"] and r["sigma"] == pytest.approx(80.0 / np.hypot(40.0, 30.0))
     # opposite significant signs are inconsistent even when the difference is within 2 sigma
-    r = rv.two_line_consistent(dict(dv=120.0, err=100.0, at_bound=False), dict(dv=-110.0, err=100.0, at_bound=False))
+    r = rv.two_line_consistent(
+        dict(dv=120.0, err=100.0, at_bound=False), dict(dv=-110.0, err=100.0, at_bound=False)
+    )
     assert r["sigma"] < 2.0 and not r["same_sign"] and not r["consistent"]
     # a large error makes the second shift insignificant: no sign imposed, the difference decides
-    r = rv.two_line_consistent(dict(dv=200.0, err=50.0, at_bound=False), dict(dv=-150.0, err=300.0, at_bound=False))
+    r = rv.two_line_consistent(
+        dict(dv=200.0, err=50.0, at_bound=False), dict(dv=-150.0, err=300.0, at_bound=False)
+    )
     assert r["same_sign"] and r["consistent"]
     # a shift consistent with zero in one line imposes no sign
-    r = rv.two_line_consistent(dict(dv=200.0, err=50.0, at_bound=False), dict(dv=-20.0, err=80.0, at_bound=False))
-    assert r["same_sign"] and not r["consistent"]          # 220 km/s apart, 2.3 sigma
+    r = rv.two_line_consistent(
+        dict(dv=200.0, err=50.0, at_bound=False), dict(dv=-20.0, err=80.0, at_bound=False)
+    )
+    assert r["same_sign"] and not r["consistent"]  # 220 km/s apart, 2.3 sigma
     assert rv.two_line_consistent(a, None) is None
     assert rv.two_line_consistent(a, dict(dv=-220.0, err=np.nan, at_bound=False)) is None
     assert rv.two_line_consistent(a, dict(dv=-220.0, err=30.0, at_bound=True)) is None
@@ -644,7 +737,8 @@ def test_resid_frac_measures_the_profile_change():
     rE_same = fit(3000, V0, FAST_PEAK, SEED_E)
     sp = make_spectrum(z=Z, snr=snr, broad=broad_cfg(V0, 5000), seed=SEED_E + 1)
     rE_wide = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z, complexes=("Halpha", "Hbeta"))
-    same = rv.pair_analysis(rE_same, rT, name="Halpha"); wide = rv.pair_analysis(rE_wide, rT, name="Halpha")
+    same = rv.pair_analysis(rE_same, rT, name="Halpha")
+    wide = rv.pair_analysis(rE_wide, rT, name="Halpha")
     assert np.isfinite(same["resid_frac"]) and np.isfinite(wide["resid_frac"])
     assert same["resid_frac"] < 0.06
     assert wide["resid_frac"] > 2.0 * same["resid_frac"]

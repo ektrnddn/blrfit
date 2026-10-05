@@ -2,11 +2,13 @@
 Readers for the three kinds of input (SDSS spec files, DESI coadds, generic
 tables) and ``read_spectrum``, which picks one from the file name.
 """
+
 from __future__ import annotations
 
 from .sdss import read_sdss, is_sdss_spec
 from .desi import read_desi, is_desi_coadd, is_desi_spectra, coadd_cameras, read_redrock, write_single_target
 from .generic import read_table, air_to_vacuum, vacuum_to_air, write_table
+from .dust import sfd_ebv
 
 
 def read_spectrum(path, targetid=None, *, survey="auto", mask_policy="ivar", redrock=None, **table_kw):
@@ -24,6 +26,7 @@ def read_spectrum(path, targetid=None, *, survey="auto", mask_policy="ivar", red
             if survey == "auto":
                 raise ValueError("a DESI coadd needs targetid= (survey='desi' can infer a sole row)")
             from astropy.io import fits
+
             with fits.open(path, memmap=False) as h:
                 if "FIBERMAP" not in h:
                     raise ValueError("not a DESI FITS file; specify survey='sdss' or 'generic'")
@@ -37,6 +40,19 @@ def read_spectrum(path, targetid=None, *, survey="auto", mask_policy="ivar", red
     return read_table(path, **table_kw)
 
 
-__all__ = ["read_spectrum", "read_sdss", "read_desi", "read_table", "is_sdss_spec", "is_desi_coadd", "is_desi_spectra",
-           "coadd_cameras", "read_redrock", "write_single_target", "air_to_vacuum", "vacuum_to_air",
-           "write_table"]
+__all__ = [
+    "read_spectrum",
+    "read_sdss",
+    "read_desi",
+    "read_table",
+    "is_sdss_spec",
+    "is_desi_coadd",
+    "is_desi_spectra",
+    "coadd_cameras",
+    "read_redrock",
+    "write_single_target",
+    "air_to_vacuum",
+    "vacuum_to_air",
+    "write_table",
+    "sfd_ebv",
+]

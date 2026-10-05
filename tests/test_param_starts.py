@@ -1,6 +1,7 @@
 """Starting values handed to the solver: always inside the bounds, a clear
 error for bounds that cannot hold one, and a clear error for a spectrum without
 a usable pixel (the case that produced such bounds)."""
+
 import numpy as np
 import pytest
 from scipy.optimize import least_squares
@@ -20,14 +21,17 @@ def test_ordinary_start_is_the_value_kept_1e9_inside():
     assert np.array_equal(ps.p0(), np.clip([0.0, 5.0, 12.0], 1e-9, 10.0 - 1e-9))
 
 
-@pytest.mark.parametrize("val, lb, ub, expect", [
-    (np.nan, 2.0, 4.0, 3.0),
-    (np.nan, 2.0, np.inf, 2.0 + 1e-9),
-    (np.nan, -np.inf, 4.0, 4.0 - 1e-9),
-    (np.nan, -np.inf, np.inf, 0.0),
-    (np.inf, 2.0, np.inf, 2.0 + 1e-9),
-    (-np.inf, -np.inf, 4.0, 4.0 - 1e-9),
-])
+@pytest.mark.parametrize(
+    "val, lb, ub, expect",
+    [
+        (np.nan, 2.0, 4.0, 3.0),
+        (np.nan, 2.0, np.inf, 2.0 + 1e-9),
+        (np.nan, -np.inf, 4.0, 4.0 - 1e-9),
+        (np.nan, -np.inf, np.inf, 0.0),
+        (np.inf, 2.0, np.inf, 2.0 + 1e-9),
+        (-np.inf, -np.inf, 4.0, 4.0 - 1e-9),
+    ],
+)
 def test_unusable_start_is_replaced_inside_the_bounds_with_a_warning(val, lb, ub, expect):
     ps = _ps(a=(val, lb, ub))
     with pytest.warns(RuntimeWarning, match="parameter a"):
@@ -38,6 +42,7 @@ def test_unusable_start_is_replaced_inside_the_bounds_with_a_warning(val, lb, ub
 @pytest.mark.parametrize("val, expect", [(np.inf, 4.0 - 1e-9), (-np.inf, 2.0 + 1e-9)])
 def test_infinite_start_with_a_finite_bound_is_clipped_as_before(val, expect):
     import warnings
+
     ps = _ps(a=(val, 2.0, 4.0))
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -96,6 +101,7 @@ def test_spectrum_without_a_usable_pixel_is_refused_by_name(fill):
     before the continuum and says why."""
     from blrfit.model.continuum import fit_continuum
     from blrfit.model.fit import fit_spectrum
+
     wave = np.linspace(3600.0, 9800.0, 4000)
     flux = np.ones_like(wave)
     ivar = np.full_like(wave, fill)

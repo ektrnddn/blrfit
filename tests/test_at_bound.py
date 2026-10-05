@@ -16,6 +16,7 @@ spec-1704 ends on the 1200 km/s bound with the solver's active set, that of
 the DESI example stops at 1259 km/s, inside the tolerance but not active, and
 the Fe II norm of SDSS J001224 ends on zero).
 """
+
 import numpy as np
 import pytest
 
@@ -23,13 +24,20 @@ import blrfit
 from blrfit.constants import FE_FWHM_MAX, FE_FWHM_MIN
 from blrfit.io import read_desi, read_sdss
 from blrfit.io.desi import read_redrock, redrock_sibling
-from blrfit.model.continuum import (FE_NORM_ZERO, FE_WIDTH_BOUND_TOL_FRAC, FE_WIDTH_BOUND_TOL_KMS,
-                                    FE_WIDTH_STATES, _add_pl_fe, fe_width_states, fit_continuum)
+from blrfit.model.continuum import (
+    FE_NORM_ZERO,
+    FE_WIDTH_BOUND_TOL_FRAC,
+    FE_WIDTH_BOUND_TOL_KMS,
+    FE_WIDTH_STATES,
+    _add_pl_fe,
+    fe_width_states,
+    fit_continuum,
+)
 from blrfit.model.params import ParamSet
 from conftest import DATA, DESI_EXAMPLE, DESI_TARGETID, SDSS_EXAMPLE, Z_J001224
 from synth import make_spectrum
 
-TOL = max(FE_WIDTH_BOUND_TOL_FRAC * (FE_FWHM_MAX - FE_FWHM_MIN), FE_WIDTH_BOUND_TOL_KMS)   # 88 km/s
+TOL = max(FE_WIDTH_BOUND_TOL_FRAC * (FE_FWHM_MAX - FE_FWHM_MIN), FE_WIDTH_BOUND_TOL_KMS)  # 88 km/s
 SPEC_1704 = DATA + "/spec-1704-53178-0562.fits"
 Z_1704 = 0.31839999556541443
 
@@ -70,8 +78,15 @@ def test_width_exactly_on_a_bound_is_flagged(bound, flag):
     assert t["state"] == "near_bound" and t["at_bound"] and not t["active"] and t["near"]
 
 
-@pytest.mark.parametrize("width, bound", [(FE_FWHM_MIN * 1.005, "lower"), (FE_FWHM_MIN + 0.5 * TOL, "lower"),
-                                          (FE_FWHM_MAX * 0.995, "upper"), (FE_FWHM_MAX - 0.5 * TOL, "upper")])
+@pytest.mark.parametrize(
+    "width, bound",
+    [
+        (FE_FWHM_MIN * 1.005, "lower"),
+        (FE_FWHM_MIN + 0.5 * TOL, "lower"),
+        (FE_FWHM_MAX * 0.995, "upper"),
+        (FE_FWHM_MAX - 0.5 * TOL, "upper"),
+    ],
+)
 def test_width_inside_the_tolerance_but_not_active_is_flagged(width, bound):
     ps, d = _params(width)
     s = fe_width_states(ps, d, _mask(ps))["feop_fwhm"]
@@ -140,7 +155,13 @@ def test_solver_active_width_of_spec_1704():
     info = res["continuum_info"]
     s = _states(info)["feop_fwhm"]
     assert "feop_fwhm" in info["at_bound"]
-    assert s["state"] == "solver_active" and s["at_bound"] and s["active"] and s["near"] and s["bound"] == "lower"
+    assert (
+        s["state"] == "solver_active"
+        and s["at_bound"]
+        and s["active"]
+        and s["near"]
+        and s["bound"] == "lower"
+    )
     assert s["value"] == res["conti"]["feop_fwhm"] == pytest.approx(FE_FWHM_MIN, abs=1e-6)
     assert "feop_fwhm" in info["at_bound_widths"] and not info["fe_norm_zero"]["feop"]
     # the ultraviolet width is held (239 covered pixels): fixed, not at a bound
@@ -165,8 +186,11 @@ def test_near_bound_width_of_the_desi_example_is_flagged_without_the_active_set(
 
 
 def test_zero_norm_of_j001224_is_fe_norm_zero_and_unidentified():
+    # the single-start continuum of J001224 (up to 0.2; the other starts reach a host solution with Fe II)
     sp = read_sdss(SDSS_EXAMPLE)
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",))
+    res = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",), conti_multistart=False
+    )
     info = res["continuum_info"]
     assert "feop_norm" in info["at_bound"] and res["conti"]["feop_norm"] <= FE_NORM_ZERO
     s = _states(info)["feop_fwhm"]
@@ -179,6 +203,7 @@ def test_zero_norm_of_j001224_is_fe_norm_zero_and_unidentified():
 @pytest.mark.parametrize("width, bound", [(12000.0, "upper"), (800.0, "lower")])
 def test_width_driven_onto_a_bound_by_the_data(width, bound):
     from blrfit.model.continuum import fe_templates
+
     z = 0.2
     s = make_spectrum(z=z, snr=20.0, seed=3, narrow=dict(ew_ha=0.0))
     wr = s["wave"] / (1 + z)
@@ -191,6 +216,7 @@ def test_width_driven_onto_a_bound_by_the_data(width, bound):
 
 def test_width_recovered_inside_the_range_is_interior():
     from blrfit.model.continuum import fe_templates
+
     z = 0.2
     s = make_spectrum(z=z, snr=20.0, seed=3, narrow=dict(ew_ha=0.0))
     wr = s["wave"] / (1 + z)

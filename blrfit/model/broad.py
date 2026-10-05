@@ -8,18 +8,29 @@ Bayesian information criterion, BIC = chi^2 + k ln N: the model with the fewest
 components is kept unless a more complex one improves the BIC by more than
 ``DBIC``.
 """
+
 from __future__ import annotations
 
 import numpy as np
 
-from ..constants import (S2F, LAM, V_BROAD_MAX, SIG_BROAD_MIN, SIG_BROAD_MAX,
-                         BROAD_WIDTH_SLOPE, BROAD_WIDTH_PENALTY_SCALE, BROAD_STARTS_KMS,
-                         CORE_COVER_KMS, EDGE_MARGIN_KMS)
+from ..constants import (
+    S2F,
+    LAM,
+    V_BROAD_MAX,
+    SIG_BROAD_MIN,
+    SIG_BROAD_MAX,
+    BROAD_WIDTH_SLOPE,
+    BROAD_WIDTH_PENALTY_SCALE,
+    BROAD_STARTS_KMS,
+    CORE_COVER_KMS,
+    EDGE_MARGIN_KMS,
+)
 from .narrow import amp_guess
 
 
-def add_broad_block(ps, comps, wave, fsub, lam0, prefix, n_broad, amax, vb_lo, vb_hi,
-                    sig_broad_min=SIG_BROAD_MIN):
+def add_broad_block(
+    ps, comps, wave, fsub, lam0, prefix, n_broad, amax, vb_lo, vb_hi, sig_broad_min=SIG_BROAD_MIN
+):
     """``n_broad`` Gaussians on ``lam0``: amplitude, velocity and width each."""
     for k in range(n_broad):
         a = amp_guess(wave, fsub, lam0) * (0.6 if n_broad > 1 else 0.8) / max(k + 1, 1)
@@ -29,22 +40,50 @@ def add_broad_block(ps, comps, wave, fsub, lam0, prefix, n_broad, amax, vb_lo, v
         ps.add(f"{prefix}_b{k}_A", a, 0.0, amax)
         ps.add(f"{prefix}_b{k}_v", v0, vb_lo, vb_hi)
         ps.add(f"{prefix}_b{k}_sig", max(s0, 1.2 * sig_broad_min), sig_broad_min, SIG_BROAD_MAX)
-        comps.append((f"{prefix}_broad{k}", lam0, f"{prefix}_b{k}_A",
-                      f"{prefix}_b{k}_v", f"{prefix}_b{k}_sig", "broad", None))
+        comps.append(
+            (
+                f"{prefix}_broad{k}",
+                lam0,
+                f"{prefix}_b{k}_A",
+                f"{prefix}_b{k}_v",
+                f"{prefix}_b{k}_sig",
+                "broad",
+                None,
+            )
+        )
 
 
-def add_mgii_doublet_block(ps, comps, wave, fsub, n_broad, amax, vb_lo, vb_hi,
-                           sig_broad_min=SIG_BROAD_MIN):
+def add_mgii_doublet_block(ps, comps, wave, fsub, n_broad, amax, vb_lo, vb_hi, sig_broad_min=SIG_BROAD_MIN):
     """Broad Mg II as a 2796/2803 doublet with a fixed 1:1 ratio (optional)."""
     for k in range(n_broad):
         a = amp_guess(wave, fsub, LAM["MgII"], 10.0) * 0.4 / max(k + 1, 1)
         ps.add(f"Mg_b{k}_A", a, 0.0, amax)
-        ps.add(f"Mg_b{k}_v", float(np.clip(0.0 if k == 0 else 1500.0 * (-1) ** k, vb_lo + 1, vb_hi - 1)), vb_lo, vb_hi)
-        ps.add(f"Mg_b{k}_sig", max(1500.0 if k == 0 else 2500.0, 1.2 * sig_broad_min), sig_broad_min, SIG_BROAD_MAX)
-        comps.append((f"Mg_broad{k}_2796", LAM["MgII2796"], f"Mg_b{k}_A", f"Mg_b{k}_v",
-                      f"Mg_b{k}_sig", "broad", None))
-        comps.append((f"Mg_broad{k}_2803", LAM["MgII2803"], f"Mg_b{k}_A", f"Mg_b{k}_v",
-                      f"Mg_b{k}_sig", "broad", (f"Mg_b{k}_A", 1.0)))
+        ps.add(
+            f"Mg_b{k}_v",
+            float(np.clip(0.0 if k == 0 else 1500.0 * (-1) ** k, vb_lo + 1, vb_hi - 1)),
+            vb_lo,
+            vb_hi,
+        )
+        ps.add(
+            f"Mg_b{k}_sig",
+            max(1500.0 if k == 0 else 2500.0, 1.2 * sig_broad_min),
+            sig_broad_min,
+            SIG_BROAD_MAX,
+        )
+        comps.append(
+            (f"Mg_broad{k}_2796", LAM["MgII2796"], f"Mg_b{k}_A", f"Mg_b{k}_v", f"Mg_b{k}_sig", "broad", None)
+        )
+        comps.append(
+            (
+                f"Mg_broad{k}_2803",
+                LAM["MgII2803"],
+                f"Mg_b{k}_A",
+                f"Mg_b{k}_v",
+                f"Mg_b{k}_sig",
+                "broad",
+                (f"Mg_b{k}_A", 1.0),
+            )
+        )
 
 
 def velocity_bounds(v_bounds):
@@ -70,13 +109,14 @@ def broad_parameter_pairs(comps):
     return list(dict.fromkeys(pairs))
 
 
-WIDTH_SLOPE_SIGMA = BROAD_WIDTH_SLOPE / S2F      # minimum sigma per km/s of |v|
+WIDTH_SLOPE_SIGMA = BROAD_WIDTH_SLOPE / S2F  # minimum sigma per km/s of |v|
 
 
 def width_offset_penalty(d, broad_pairs):
     """Hinge: sigma >= (BROAD_WIDTH_SLOPE / S2F) |v| for every broad component."""
-    return [max(0.0, WIDTH_SLOPE_SIGMA * abs(d[vn]) - d[sn]) / BROAD_WIDTH_PENALTY_SCALE
-            for vn, sn in broad_pairs]
+    return [
+        max(0.0, WIDTH_SLOPE_SIGMA * abs(d[vn]) - d[sn]) / BROAD_WIDTH_PENALTY_SCALE for vn, sn in broad_pairs
+    ]
 
 
 def first_component_starts(vlo_b, vhi_b, n_broad):
@@ -95,7 +135,8 @@ def select_by_bic(bics, dbic):
     chosen = best
     for i in range(best):
         if bics[i] - bics[best] < dbic:
-            chosen = i; break
+            chosen = i
+            break
     return chosen
 
 

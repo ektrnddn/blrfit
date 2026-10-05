@@ -2,7 +2,7 @@
 
 **Result: 67 pass, five inconclusive, zero fail. Overall: inconclusive.**
 This is conditional pooled evidence, not universal error calibration. Read the
-[scientific scope and five unresolved checks](../../docs/VALIDATION_STATUS.md).
+[scientific scope and five unresolved checks](../../docs/validation.md).
 
 The frozen candidate was commit `323f2a4dd40b9f993c5f429142850ca5a1f3f799`, version
 `0.2.0rc2.dev0`. Release 0.2.0 changes documentation/version metadata, not its

@@ -1,4 +1,5 @@
 """Gzipped SDSS and DESI files, and the continuum luminosity of the fitted power law."""
+
 import gzip
 import os
 import shutil
@@ -31,7 +32,9 @@ def test_sniffers_accept_gzipped_names():
     assert not is_sdss_spec("spec-0651-52141-0072.fits.bz2") and not is_sdss_spec("spec-0651.txt")
     assert is_desi_coadd("coadd-main-dark-17260.fits") and is_desi_coadd("coadd-main-dark-17260.fits.gz")
     assert not is_desi_coadd("coadd-main-dark-17260.fits.gz.part")
-    assert is_desi_spectra("spectra-main-dark-17260.fits.gz") and not is_desi_coadd("spectra-main-dark-17260.fits.gz")
+    assert is_desi_spectra("spectra-main-dark-17260.fits.gz") and not is_desi_coadd(
+        "spectra-main-dark-17260.fits.gz"
+    )
 
 
 def test_gzipped_sdss_reads_identically(tmp_path):
@@ -54,8 +57,22 @@ def test_gzipped_desi_reads_identically(tmp_path):
     assert b["kind"] == "desi" and b["targetid"] == DESI_TARGETID
     for k in ("wave", "flux", "ivar", "mask"):
         assert np.array_equal(np.asarray(a[k]), np.asarray(b[k])), k
-    for k in ("z", "zerr", "zwarn", "spectype", "ebv", "ra", "dec", "mjd", "mjd_min", "mjd_max", "nexp",
-              "survey", "program", "healpix"):
+    for k in (
+        "z",
+        "zerr",
+        "zwarn",
+        "spectype",
+        "ebv",
+        "ra",
+        "dec",
+        "mjd",
+        "mjd_min",
+        "mjd_max",
+        "nexp",
+        "survey",
+        "program",
+        "healpix",
+    ):
         assert a[k] == b[k], k
     assert read_desi(gz, DESI_TARGETID, use_desispec=False)["z"] == a["z"]
     with pytest.raises(ValueError):
@@ -87,13 +104,15 @@ def test_redrock_sibling_across_compression(tmp_path):
 def _planck18_dl_cm(z):
     from astropy.cosmology import Planck18
     import astropy.units as u
+
     return float(Planck18.luminosity_distance(z).to(u.cm).value)
 
 
 def test_lambda_l_lambda_helper():
     """The formula on a synthetic conti dictionary: 4 pi D_L^2 lam f_rest(lam) 1e-17
     with f_rest the fitted power law at lam, and no (1+z) beyond the one the fit applied."""
-    z = 0.25; conti = dict(pl_norm=10.0, pl_alpha=-1.5)
+    z = 0.25
+    conti = dict(pl_norm=10.0, pl_alpha=-1.5)
     dl = _planck18_dl_cm(z)
     assert lumdist_cm(z) == dl
     for lam in (5100.0, 3000.0, 4400.0):
@@ -102,7 +121,8 @@ def test_lambda_l_lambda_helper():
     assert lambda_l_lambda(conti, z) == lambda_l_lambda(conti, z, lam_rest=5100.0)
     # the pivot: lambda L_lambda(3000) is 4 pi D_L^2 * 3000 * pl_norm * 1e-17 whatever the slope
     assert lambda_l_lambda(dict(pl_norm=10.0, pl_alpha=0.7), z, lam_rest=PL_PIVOT) == pytest.approx(
-        4 * np.pi * dl**2 * PL_PIVOT * 10.0 * 1e-17, rel=1e-12)
+        4 * np.pi * dl**2 * PL_PIVOT * 10.0 * 1e-17, rel=1e-12
+    )
     # summary-row spelling of the keys, and arrays
     row = dict(conti_pl_norm=np.array([10.0, 0.0, np.nan]), conti_pl_alpha=np.array([-1.5, -1.5, -1.5]))
     out = lambda_l_lambda(row, np.array([z, z, z]))
@@ -118,26 +138,33 @@ def test_continuum_luminosity_round_trip_through_the_fitter():
     """An observed-frame spectrum built from a rest-frame lambda L_lambda(5100) of
     1e44 erg/s (Hogg 1999 eqs 22-23: f_obs(lam_obs) = L_lambda(lam_rest) / (4 pi D_L^2 (1+z))
     per observed Angstrom) is fitted and the luminosity recovered within 0.01 dex."""
-    z = 0.25; alpha = -1.5; l5100 = 1e44
+    z = 0.25
+    alpha = -1.5
+    l5100 = 1e44
     dl = _planck18_dl_cm(z)
-    wave = np.arange(3600.0, 9824.01, 0.8)                    # DESI grid, observed frame
+    wave = np.arange(3600.0, 9824.01, 0.8)  # DESI grid, observed frame
     wr = wave / (1 + z)
-    l_lambda = l5100 / 5100.0 * (wr / 5100.0) ** alpha         # erg/s/A per rest-frame Angstrom
-    f_obs = l_lambda / (4 * np.pi * dl**2 * (1 + z)) * 1e17    # per observed Angstrom, 1e-17 units
-    cont_rest = f_obs * (1 + z)                                # what the fit works on
+    l_lambda = l5100 / 5100.0 * (wr / 5100.0) ** alpha  # erg/s/A per rest-frame Angstrom
+    f_obs = l_lambda / (4 * np.pi * dl**2 * (1 + z)) * 1e17  # per observed Angstrom, 1e-17 units
+    cont_rest = f_obs * (1 + z)  # what the fit works on
+
     # a modest broad Hbeta and the narrow lines so that the Hbeta complex fits normally; the line
     # flux is defined in the rest frame and carried to the observed frame with the same Jacobian
     def gauss(lam0, v, sigma_kms, flux_rest):
-        lc = lam0 * (1 + v / C_KMS); sl = lc * sigma_kms / C_KMS
+        lc = lam0 * (1 + v / C_KMS)
+        sl = lc * sigma_kms / C_KMS
         return flux_rest / (sl * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((wr - lc) / sl) ** 2) / (1 + z)
+
     c_hb = float(np.interp(LAM["Hbeta"], wr, cont_rest))
-    lines = (gauss(LAM["Hbeta"], 0.0, 3000.0 / S2F, 60.0 * c_hb)
-             + gauss(LAM["Hbeta"], 0.0, 150.0, 5.0 * c_hb)
-             + gauss(LAM["OIII5007"], 0.0, 150.0, 40.0 * c_hb)
-             + gauss(LAM["OIII4959"], 0.0, 150.0, 40.0 * c_hb / 2.98))
+    lines = (
+        gauss(LAM["Hbeta"], 0.0, 3000.0 / S2F, 60.0 * c_hb)
+        + gauss(LAM["Hbeta"], 0.0, 150.0, 5.0 * c_hb)
+        + gauss(LAM["OIII5007"], 0.0, 150.0, 40.0 * c_hb)
+        + gauss(LAM["OIII4959"], 0.0, 150.0, 40.0 * c_hb / 2.98)
+    )
     model = f_obs + lines
     rng = np.random.default_rng(3)
-    sigma = np.full_like(model, c_hb / (1 + z) / 30.0)          # S/N 30 per pixel at Hbeta
+    sigma = np.full_like(model, c_hb / (1 + z) / 30.0)  # S/N 30 per pixel at Hbeta
     flux = model + rng.standard_normal(model.size) * sigma
     ivar = 1.0 / sigma**2
     res = blrfit.fit_spectrum(wave, flux, ivar, z, host=False, fe=False, complexes=("Hbeta",))
@@ -149,4 +176,5 @@ def test_continuum_luminosity_round_trip_through_the_fitter():
     assert lum == lambda_l_lambda(blrfit.summary_row(res), res["z"])
     # the same luminosity in erg/s per unit as broad_lum: both use D_L(z) of Planck 2018
     assert res["meas"]["Hbeta"]["broad_lum"] == pytest.approx(
-        4 * np.pi * dl**2 * res["meas"]["Hbeta"]["broad_flux"] * 1e-17, rel=1e-9)
+        4 * np.pi * dl**2 * res["meas"]["Hbeta"]["broad_flux"] * 1e-17, rel=1e-9
+    )

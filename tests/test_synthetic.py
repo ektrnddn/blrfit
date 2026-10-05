@@ -31,6 +31,7 @@ Each configuration is fitted once per session (the fits are cached by
 configuration) so that several tests can inspect the same result. A fit of
 both complexes takes 3-8 s on a laptop.
 """
+
 import copy
 import json
 
@@ -55,8 +56,9 @@ def fit(**kw):
     key = _key(kw)
     if key not in _FITS:
         sp = make_spectrum(**kw)
-        res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], kw.get("z", 0.25),
-                                  complexes=("Halpha", "Hbeta"))
+        res = blrfit.fit_spectrum(
+            sp["wave"], sp["flux"], sp["ivar"], kw.get("z", 0.25), complexes=("Halpha", "Hbeta")
+        )
         _FITS[key] = (sp, res)
     return _FITS[key]
 
@@ -66,7 +68,8 @@ def broad_peak_snr(kw, line="Halpha"):
     divided by the noise per pixel: the difference between the noiseless models
     with and without the broad components."""
     sp = make_spectrum(**kw)
-    kw0 = dict(kw); kw0["broad"] = None
+    kw0 = dict(kw)
+    kw0["broad"] = None
     sp0 = make_spectrum(**kw0)
     diff = sp["truth"]["model"] - sp0["truth"]["model"]
     wr = sp["wave"] / (1.0 + kw.get("z", 0.25))
@@ -93,14 +96,22 @@ def measures(res, name):
 def shift_config(v, snr):
     """Broad Halpha (EW 300 A, FWHM 3800) and Hbeta (EW 80 A) at velocity v with
     the default narrow lines (narrow Halpha EW 40 A)."""
-    return config(z=0.25, snr=snr, seed=11,
-                  broad=[dict(line="Halpha", v=v, fwhm=3800.0, ew=300.0),
-                         dict(line="Hbeta", v=v, fwhm=3800.0, ew=80.0)])
+    return config(
+        z=0.25,
+        snr=snr,
+        seed=11,
+        broad=[
+            dict(line="Halpha", v=v, fwhm=3800.0, ew=300.0),
+            dict(line="Hbeta", v=v, fwhm=3800.0, ew=80.0),
+        ],
+    )
 
 
-SHIFT_CASES = [pytest.param(v, snr, id=f"v{v:+.0f}_snr{snr}",
-                            marks=([] if snr in (6, 25) else [pytest.mark.slow]))
-               for v in (1200.0, -1200.0) for snr in (6, 10, 15, 25)]
+SHIFT_CASES = [
+    pytest.param(v, snr, id=f"v{v:+.0f}_snr{snr}", marks=([] if snr in (6, 25) else [pytest.mark.slow]))
+    for v in (1200.0, -1200.0)
+    for snr in (6, 10, 15, 25)
+]
 
 
 @pytest.mark.parametrize("v, snr", SHIFT_CASES)
@@ -141,11 +152,17 @@ def test_double_peaked_profile_classified_b():
     Measured: Halpha peak separation 5010 km/s, dip 0.71; Hbeta 4990 km/s, dip
     0.70; c(1/2) - v_sys = -4 and -11 km/s for a true value of +3.
     """
-    kw = config(z=0.25, snr=15, seed=3,
-                broad=[dict(line="Halpha", v=-2500.0, fwhm=3000.0, ew=150.0),
-                       dict(line="Halpha", v=2500.0, fwhm=3000.0, ew=150.0),
-                       dict(line="Hbeta", v=-2500.0, fwhm=3000.0, ew=40.0),
-                       dict(line="Hbeta", v=2500.0, fwhm=3000.0, ew=40.0)])
+    kw = config(
+        z=0.25,
+        snr=15,
+        seed=3,
+        broad=[
+            dict(line="Halpha", v=-2500.0, fwhm=3000.0, ew=150.0),
+            dict(line="Halpha", v=2500.0, fwhm=3000.0, ew=150.0),
+            dict(line="Hbeta", v=-2500.0, fwhm=3000.0, ew=40.0),
+            dict(line="Hbeta", v=2500.0, fwhm=3000.0, ew=40.0),
+        ],
+    )
     sp, res = fit(**kw)
     for name in ("Halpha", "Hbeta"):
         m, c = measures(res, name)
@@ -169,11 +186,17 @@ def test_asymmetric_profile_classified_c():
     Truth of the summed profile: c(1/2) = +312, A.I. = 0.15, tilt 0.10 FWHM.
     Measured: Halpha c(1/2) - v_sys = +322, A.I. 0.146; Hbeta +292, A.I. 0.130.
     """
-    kw = config(z=0.25, snr=15, seed=4,
-                broad=[dict(line="Halpha", v=0.0, fwhm=3500.0, ew=200.0),
-                       dict(line="Halpha", v=2000.0, fwhm=6000.0, ew=120.0),
-                       dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=50.0),
-                       dict(line="Hbeta", v=2000.0, fwhm=6000.0, ew=30.0)])
+    kw = config(
+        z=0.25,
+        snr=15,
+        seed=4,
+        broad=[
+            dict(line="Halpha", v=0.0, fwhm=3500.0, ew=200.0),
+            dict(line="Halpha", v=2000.0, fwhm=6000.0, ew=120.0),
+            dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=50.0),
+            dict(line="Hbeta", v=2000.0, fwhm=6000.0, ew=30.0),
+        ],
+    )
     sp, res = fit(**kw)
     for name in ("Halpha", "Hbeta"):
         m, c = measures(res, name)
@@ -181,7 +204,7 @@ def test_asymmetric_profile_classified_c():
         assert c["label"] == "C", (name, c)
         tilt = abs(m["c25"] - m["c75"]) / m["fwhm"]
         assert abs(m["AI"]) >= 0.12 or tilt >= 0.10 or abs(m["v_peak"] - m["centroid"]) / m["fwhm"] >= 0.20
-        assert np.sign(m["AI"]) == np.sign(tb["AI"]) and tb["AI"] > 0      # the red shoulder
+        assert np.sign(m["AI"]) == np.sign(tb["AI"]) and tb["AI"] > 0  # the red shoulder
         # the offset of the summed profile is recovered to within 100 km/s (measured 10 and 20)
         assert abs(m["c50_sys"] - tb["c50_sys"]) < 100.0, (name, m["c50_sys"], tb["c50_sys"])
         assert m["n_peaks"] == 1
@@ -190,9 +213,15 @@ def test_asymmetric_profile_classified_c():
 def test_symmetric_unshifted_profile_classified_f():
     """One broad Gaussian at the systemic velocity in both lines is class F with
     |c(1/2) - v_sys| < 100 km/s (measured -5 and -6 km/s) and no flag."""
-    kw = config(z=0.25, snr=15, seed=5,
-                broad=[dict(line="Halpha", v=0.0, fwhm=3500.0, ew=300.0),
-                       dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=80.0)])
+    kw = config(
+        z=0.25,
+        snr=15,
+        seed=5,
+        broad=[
+            dict(line="Halpha", v=0.0, fwhm=3500.0, ew=300.0),
+            dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=80.0),
+        ],
+    )
     sp, res = fit(**kw)
     for name in ("Halpha", "Hbeta"):
         m, c = measures(res, name)
@@ -200,15 +229,18 @@ def test_symmetric_unshifted_profile_classified_f():
         assert abs(m["c50_sys"]) < 100.0, (name, m["c50_sys"])
         assert abs(m["v_peak_sys"]) < 100.0
         assert c["flags"] == []
-        assert abs(m["fwhm"] - 3500.0) < 350.0        # measured 3516 in both lines
+        assert abs(m["fwhm"] - 3500.0) < 350.0  # measured 3516 in both lines
         assert abs(m["AI"]) < 0.12 and abs(m["KI"] - 0.456) < 0.05
 
 
 # ---------------------------------------------------------------------------
 # (3) pure narrow-line galaxies
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("ped_frac, snr", [(0.0, 25), (0.3, 10), (0.3, 25)],
-                         ids=["gaussian_snr25", "pedestal30_snr10", "pedestal30_snr25"])
+@pytest.mark.parametrize(
+    "ped_frac, snr",
+    [(0.0, 25), (0.3, 10), (0.3, 25)],
+    ids=["gaussian_snr25", "pedestal30_snr10", "pedestal30_snr25"],
+)
 def test_pure_narrow_line_galaxy_has_no_broad_line(ped_frac, snr):
     """Strong narrow lines (narrow Halpha EW 150 A) and no broad component,
     with Gaussian narrow lines or with 30 per cent of the flux in a pedestal
@@ -218,8 +250,9 @@ def test_pure_narrow_line_galaxy_has_no_broad_line(ped_frac, snr):
     Measured: class E in every case; the best "broad" component sits at the
     1200 km/s minimum width with integrated S/N 0.8-6.3 and peak S/N 0.1-1.2.
     """
-    kw = config(z=0.1, snr=snr, seed=7, broad=None,
-                narrow=dict(ew_ha=150.0, ped_frac=ped_frac, ped_width=3.0))
+    kw = config(
+        z=0.1, snr=snr, seed=7, broad=None, narrow=dict(ew_ha=150.0, ped_frac=ped_frac, ped_width=3.0)
+    )
     sp, res = fit(**kw)
     assert sp["truth"]["broad"] == {}
     for name in ("Halpha", "Hbeta"):
@@ -238,12 +271,18 @@ def test_pure_narrow_line_galaxy_has_no_broad_line(ped_frac, snr):
 def host_config(ew, snr, seed=21):
     """85 per cent host light at 4700 A, broad Halpha at +800 km/s (FWHM 3800)
     with the given equivalent width against the AGN continuum, no broad Hbeta."""
-    return config(z=0.1, snr=snr, seed=seed, host_frac=0.85,
-                  broad=[dict(line="Halpha", v=800.0, fwhm=3800.0, ew=float(ew))])
+    return config(
+        z=0.1,
+        snr=snr,
+        seed=seed,
+        host_frac=0.85,
+        broad=[dict(line="Halpha", v=800.0, fwhm=3800.0, ew=float(ew))],
+    )
 
 
-@pytest.mark.parametrize("ew, snr", [(60, 8), (60, 15), (120, 8), (120, 15), (200, 8), (200, 15)],
-                         ids=lambda x: str(x))
+@pytest.mark.parametrize(
+    "ew, snr", [(60, 8), (60, 15), (120, 8), (120, 15), (200, 8), (200, 15)], ids=lambda x: str(x)
+)
 def test_host_dominated_broad_halpha_offset_recovered(ew, snr):
     """A broad Halpha at +800 km/s under 85 per cent host light is recovered
     within 120 km/s, class A, with the host_dominated flag set, over broad
@@ -271,7 +310,7 @@ def test_host_dominated_broad_halpha_offset_recovered(ew, snr):
     assert res["host_info"]["applied"]
     # the narrow lines still define the systemic (measured v_sys +1 to +4 km/s)
     assert abs(m["v_sys"]) < 60.0
-    assert abs(m["fwhm"] - 3800.0) < 380.0          # measured within 60 km/s
+    assert abs(m["fwhm"] - 3800.0) < 380.0  # measured within 60 km/s
     mb, cb = measures(res, "Hbeta")
     assert cb["label"] in ("E", "W"), cb
 
@@ -299,16 +338,27 @@ def test_host_dominated_weak_line_is_rejected_or_flagged(snr):
 def sii_config(sii_dv):
     """Strong [S II] ([S II] 6716 equal to narrow Halpha, narrow Halpha EW 80 A)
     displaced by sii_dv from the Balmer group; broad lines at the systemic."""
-    return config(z=0.1, snr=15, seed=31,
-                  broad=[dict(line="Halpha", v=0.0, fwhm=3500.0, ew=150.0),
-                         dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=40.0)],
-                  narrow=dict(ew_ha=80.0, sii=1.0, sii_dv=sii_dv))
+    return config(
+        z=0.1,
+        snr=15,
+        seed=31,
+        broad=[
+            dict(line="Halpha", v=0.0, fwhm=3500.0, ew=150.0),
+            dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=40.0),
+        ],
+        narrow=dict(ew_ha=80.0, sii=1.0, sii_dv=sii_dv),
+    )
 
 
-@pytest.mark.parametrize("sii_dv", [pytest.param(0.0, id="dv0"),
-                                    pytest.param(200.0, id="dv200", marks=pytest.mark.slow),
-                                    pytest.param(250.0, id="dv250"),
-                                    pytest.param(300.0, id="dv300", marks=pytest.mark.slow)])
+@pytest.mark.parametrize(
+    "sii_dv",
+    [
+        pytest.param(0.0, id="dv0"),
+        pytest.param(200.0, id="dv200", marks=pytest.mark.slow),
+        pytest.param(250.0, id="dv250"),
+        pytest.param(300.0, id="dv300", marks=pytest.mark.slow),
+    ],
+)
 def test_sii_kinematics_discrepant_from_the_balmer_group(sii_dv):
     """With [S II] displaced by 200-300 km/s the systemic velocity stays with
     narrow Halpha + [N II] (within 60 km/s of the truth; measured within 2
@@ -339,9 +389,13 @@ def pedestal_config(ped_frac):
     """Narrow lines (narrow Halpha EW 80 A) with ``ped_frac`` of their flux in a
     pedestal three times wider than the core, and a weak broad Halpha of 40 A at
     +800 km/s (FWHM 3500): injected peak S/N 7.3."""
-    return config(z=0.1, snr=15, seed=41,
-                  broad=[dict(line="Halpha", v=800.0, fwhm=3500.0, ew=40.0)],
-                  narrow=dict(ew_ha=80.0, ped_frac=ped_frac, ped_width=3.0))
+    return config(
+        z=0.1,
+        snr=15,
+        seed=41,
+        broad=[dict(line="Halpha", v=800.0, fwhm=3500.0, ew=40.0)],
+        narrow=dict(ew_ha=80.0, ped_frac=ped_frac, ped_width=3.0),
+    )
 
 
 def test_pedestal_narrow_lines_do_not_bias_a_weak_broad_halpha():
@@ -359,7 +413,7 @@ def test_pedestal_narrow_lines_do_not_bias_a_weak_broad_halpha():
     40-80 A the pedestal cases span +724 to +777 km/s.
     """
     kw0 = pedestal_config(0.0)
-    assert 5.0 <= broad_peak_snr(kw0) <= 10.0            # the weak-line regime: measured 7.3
+    assert 5.0 <= broad_peak_snr(kw0) <= 10.0  # the weak-line regime: measured 7.3
     sp0, res0 = fit(**kw0)
     m0, c0 = measures(res0, "Halpha")
     assert c0["label"] == "A"
@@ -393,9 +447,16 @@ def test_narrow_system_displaced_880_kms_from_the_input_redshift():
     reaching the +/-1500 km/s bound, and the offset relative to it is +800
     within 80 km/s (measured Halpha +787, Hbeta +775).
     """
-    kw = config(z=0.25, snr=10, seed=51, v_sys=880.0,
-                broad=[dict(line="Halpha", v=1680.0, fwhm=3800.0, ew=300.0),
-                       dict(line="Hbeta", v=1680.0, fwhm=3800.0, ew=80.0)])
+    kw = config(
+        z=0.25,
+        snr=10,
+        seed=51,
+        v_sys=880.0,
+        broad=[
+            dict(line="Halpha", v=1680.0, fwhm=3800.0, ew=300.0),
+            dict(line="Hbeta", v=1680.0, fwhm=3800.0, ew=80.0),
+        ],
+    )
     sp, res = fit(**kw)
     assert sp["truth"]["broad"]["Halpha"]["c50_sys"] == pytest.approx(800.0, abs=1.0)
     for name in ("Halpha", "Hbeta"):
@@ -406,7 +467,7 @@ def test_narrow_system_displaced_880_kms_from_the_input_redshift():
         assert "narrow_at_bound" not in c["flags"]
         assert c["flags"] == []
     m = res["meas"]["Halpha"]
-    assert abs(m["v_sii"] - 880.0) < 60.0                   # [S II] follows (measured 879.5)
+    assert abs(m["v_sii"] - 880.0) < 60.0  # [S II] follows (measured 879.5)
     assert abs(res["meas"]["Hbeta"]["v_o3"] - 880.0) < 60.0  # so does the [O III] core (measured 879.9)
     # the systemic redshift is the input redshift corrected by v_sys
     assert m["z_sys"] == pytest.approx((1 + 0.25) * (1 + m["v_sys"] / C_KMS) - 1, rel=1e-9)
@@ -421,10 +482,16 @@ def test_oiii_displaced_from_the_low_ionisation_lines():
     measured +0.1) despite the [O III]-informed prior, the [O III] core is
     measured at -500 (measured -499.6), and sys_disagree is raised on Halpha.
     """
-    kw = config(z=0.1, snr=15, seed=61,
-                broad=[dict(line="Halpha", v=0.0, fwhm=3500.0, ew=150.0),
-                       dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=40.0)],
-                narrow=dict(ew_ha=60.0, o3_dv=-500.0))
+    kw = config(
+        z=0.1,
+        snr=15,
+        seed=61,
+        broad=[
+            dict(line="Halpha", v=0.0, fwhm=3500.0, ew=150.0),
+            dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=40.0),
+        ],
+        narrow=dict(ew_ha=60.0, o3_dv=-500.0),
+    )
     sp, res = fit(**kw)
     m, c = measures(res, "Halpha")
     assert abs(m["v_sys"]) < 60.0, m["v_sys"]
@@ -445,9 +512,15 @@ def test_oiii_displaced_from_the_low_ionisation_lines():
 # (9) a line at the edge of the spectrum
 # ---------------------------------------------------------------------------
 def edge_config(z):
-    return config(z=z, snr=15, seed=71,
-                  broad=[dict(line="Halpha", v=0.0, fwhm=3500.0, ew=300.0),
-                         dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=80.0)])
+    return config(
+        z=z,
+        snr=15,
+        seed=71,
+        broad=[
+            dict(line="Halpha", v=0.0, fwhm=3500.0, ew=300.0),
+            dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=80.0),
+        ],
+    )
 
 
 def red_coverage_kms(z):
@@ -486,7 +559,7 @@ def test_halpha_at_the_red_edge_of_the_spectrum(z):
         assert "HA_class" not in blrfit.summary_row(res)
     mb, cb = measures(res, "Hbeta")
     assert cb["label"] == "F", cb
-    assert abs(mb["c50_sys"]) < 100.0, mb["c50_sys"]     # measured -7 and +6 km/s
+    assert abs(mb["c50_sys"]) < 100.0, mb["c50_sys"]  # measured -7 and +6 km/s
     assert "edge" not in cb["flags"]
     assert mb["v_cover_lo"] < -6000.0 and mb["v_cover_hi"] > 6000.0
 
@@ -500,12 +573,28 @@ def test_result_structure_and_frozen_settings():
     fitter: broad centres within +/-8000 km/s, narrow group within +/-1500,
     Delta BIC 10, the narrow-line-region wing, up to three broad Gaussians."""
     sp, res = fit(**shift_config(1200.0, 25))
-    for k in ("z", "wave_rest", "flux_rest", "ivar_rest", "host_model", "host_info", "conti",
-              "conti_model", "flux_sub", "o3_prefit", "settings", "fits", "meas", "cls", "mc", "err"):
+    for k in (
+        "z",
+        "wave_rest",
+        "flux_rest",
+        "ivar_rest",
+        "host_model",
+        "host_info",
+        "conti",
+        "conti_model",
+        "flux_sub",
+        "o3_prefit",
+        "settings",
+        "fits",
+        "meas",
+        "cls",
+        "mc",
+        "err",
+    ):
         assert k in res, k
     assert res["z"] == 0.25
     assert set(res["fits"]) == {"Halpha", "Hbeta"} == set(res["meas"]) == set(res["cls"])
-    assert res["mc"] == {} and res["err"] == {}              # nmc = 0
+    assert res["mc"] == {} and res["err"] == {}  # nmc = 0
     s = res["settings"]
     assert s["v_broad_max"] == 8000.0 == V_BROAD_MAX
     assert s["v_narrow_max"] == 1500.0 == V_NARROW_MAX
@@ -518,14 +607,45 @@ def test_result_structure_and_frozen_settings():
     assert s["sii_mode"] == "soft" and s["broad_width_slope"] == 0.4
     for name in ("Halpha", "Hbeta"):
         r = res["fits"][name]
-        for k in ("d", "comps", "chi2", "npix", "nfree", "bic", "n_broad", "x", "y", "w", "v_cover", "all_bic"):
+        for k in (
+            "d",
+            "comps",
+            "chi2",
+            "npix",
+            "nfree",
+            "bic",
+            "n_broad",
+            "x",
+            "y",
+            "w",
+            "v_cover",
+            "all_bic",
+        ):
             assert k in r, (name, k)
         assert 1 <= r["n_broad"] <= 3 and len(r["all_bic"]) == 3
         assert r["bic"] == pytest.approx(r["chi2"] + r["nfree"] * np.log(r["npix"]))
         m = res["meas"][name]
-        for k in ("v_sys", "c50_sys", "v_peak_sys", "fwhm", "AI", "KI", "n_peaks", "broad_flux_snr",
-                  "broad_peak_snr", "sys_snr", "host_frac", "pl_alpha", "v_cover_lo", "v_cover_hi",
-                  "chi2_red", "systemic_source", "broad_flux", "broad_ew", "z_sys"):
+        for k in (
+            "v_sys",
+            "c50_sys",
+            "v_peak_sys",
+            "fwhm",
+            "AI",
+            "KI",
+            "n_peaks",
+            "broad_flux_snr",
+            "broad_peak_snr",
+            "sys_snr",
+            "host_frac",
+            "pl_alpha",
+            "v_cover_lo",
+            "v_cover_hi",
+            "chi2_red",
+            "systemic_source",
+            "broad_flux",
+            "broad_ew",
+            "z_sys",
+        ):
             assert k in m, (name, k)
         assert m["z_sys"] == pytest.approx((1 + res["z"]) * (1 + m["v_sys"] / C_KMS) - 1)
     assert res["meas"]["Halpha"]["systemic_source"] == "own narrow group"
@@ -533,9 +653,25 @@ def test_result_structure_and_frozen_settings():
     # summary row
     row = blrfit.summary_row(res, prefix_meta=dict(targetid=1))
     assert row["targetid"] == 1 and row["z_in"] == 0.25
-    for k in ("HA_class", "HB_class", "HA_c50_sys", "HB_c50_sys", "HA_v_sys", "HB_v_sys", "HA_fwhm",
-              "HA_flags", "HB_flags", "HA_reason", "HA_systemic_source", "HA_broad_flux_snr",
-              "host_frac", "host_applied", "conti_pl_alpha", "HA_n_broad", "HB_v_o3"):
+    for k in (
+        "HA_class",
+        "HB_class",
+        "HA_c50_sys",
+        "HB_c50_sys",
+        "HA_v_sys",
+        "HB_v_sys",
+        "HA_fwhm",
+        "HA_flags",
+        "HB_flags",
+        "HA_reason",
+        "HA_systemic_source",
+        "HA_broad_flux_snr",
+        "host_frac",
+        "host_applied",
+        "conti_pl_alpha",
+        "HA_n_broad",
+        "HB_v_o3",
+    ):
         assert k in row, k
     assert row["HA_class"] == res["cls"]["Halpha"]["label"] == "A"
     assert row["HB_class"] == res["cls"]["Hbeta"]["label"] == "A"
@@ -564,10 +700,16 @@ def test_oiii_blue_wing_does_not_move_the_systemic():
     no sys_disagree flag is raised, and the fitted wing velocity and width are
     the injected ones (measured -308 / 598 and -510 / 797)."""
     for wing in ((-300.0, 600.0, 0.3), (-500.0, 800.0, 0.5)):
-        kw = config(z=0.1, snr=15, seed=61,
-                    broad=[dict(line="Halpha", v=0.0, fwhm=3500.0, ew=150.0),
-                           dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=40.0)],
-                    narrow=dict(ew_ha=60.0, o3=10.0, o3_wing=wing))
+        kw = config(
+            z=0.1,
+            snr=15,
+            seed=61,
+            broad=[
+                dict(line="Halpha", v=0.0, fwhm=3500.0, ew=150.0),
+                dict(line="Hbeta", v=0.0, fwhm=3500.0, ew=40.0),
+            ],
+            narrow=dict(ew_ha=60.0, o3=10.0, o3_wing=wing),
+        )
         sp, res = fit(**kw)
         for name in ("Halpha", "Hbeta"):
             m, c = measures(res, name)
@@ -594,13 +736,17 @@ def test_pedestal_wider_than_the_wing_model(ped_width, ped_v):
     displacements 0, +100, -100). The systemic velocity is unaffected
     (measured within 1 km/s). This documents a limit of the frozen model
     rather than a validated regime."""
-    kw = config(z=0.1, snr=15, seed=41,
-                broad=[dict(line="Halpha", v=800.0, fwhm=3500.0, ew=40.0)],
-                narrow=dict(ew_ha=80.0, ped_frac=0.3, ped_width=ped_width, ped_v=ped_v))
+    kw = config(
+        z=0.1,
+        snr=15,
+        seed=41,
+        broad=[dict(line="Halpha", v=800.0, fwhm=3500.0, ew=40.0)],
+        narrow=dict(ew_ha=80.0, ped_frac=0.3, ped_width=ped_width, ped_v=ped_v),
+    )
     sp, res = fit(**kw)
     m, c = measures(res, "Halpha")
     assert abs(m["v_sys"]) < 60.0, m["v_sys"]
-    assert m["nw_sig"] > 480.0                       # the wing saturates at its 510 km/s bound
+    assert m["nw_sig"] > 480.0  # the wing saturates at its 510 km/s bound
     if ped_width <= 4.0:
         assert c["label"] == "A" and abs(m["c50_sys"] - 800.0) < 120.0, (c["label"], m["c50_sys"])
     else:

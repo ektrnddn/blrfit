@@ -1,7 +1,7 @@
 include CHANGELOG.md CITATION.cff
 recursive-include docs *.md *.csv *.png
-recursive-include examples *.md *.fits *.csv
-recursive-include tests/data *.md *.fits *.json
+recursive-include examples *.md *.fits *.csv *.ipynb
+recursive-include tests/data *.md *.fits *.json *.csv
 recursive-include validation *.md *.py *.json
 recursive-include tools *.py
 global-exclude __pycache__ *.py[cod]

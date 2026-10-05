@@ -1,6 +1,7 @@
 """Offline pieces not covered elsewhere: the fetch URL and path construction, the
 redrock reader, the rejection of per-exposure files, the diagnostic figure, and
 a Mg II fit on a synthetic spectrum."""
+
 import os
 
 import numpy as np
@@ -17,7 +18,9 @@ from conftest import EXAMPLES, DESI_EXAMPLE, DESI_TARGETID, SDSS_EXAMPLE, Z_J001
 def test_sdss_spec_urls():
     url, fn = sdss_spec_url(651, 52141, 72, "26")
     assert fn == "spec-0651-52141-0072.fits"
-    assert url == "https://data.sdss.org/sas/dr16/sdss/spectro/redux/26/spectra/0651/spec-0651-52141-0072.fits"
+    assert (
+        url == "https://data.sdss.org/sas/dr16/sdss/spectro/redux/26/spectra/0651/spec-0651-52141-0072.fits"
+    )
     url, fn = sdss_spec_url(7169, 56628, 344, "v5_13_0")
     assert url.endswith("eboss/spectro/redux/v5_13_0/spectra/lite/7169/spec-7169-56628-0344.fits")
 
@@ -25,11 +28,16 @@ def test_sdss_spec_urls():
 def test_desi_coadd_urls_and_healpix():
     assert desi_healpix(3.1997083, -8.7834722) == 17260
     url = desi_coadd_url("dr1", "main", "dark", 17260)
-    assert url == ("https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/healpix/main/dark/172/17260/"
-                   "coadd-main-dark-17260.fits")
+    assert url == (
+        "https://data.desi.lbl.gov/public/dr1/spectro/redux/iron/healpix/main/dark/172/17260/"
+        "coadd-main-dark-17260.fits"
+    )
     assert desi_coadd_url("edr", "sv3", "bright", 10159).startswith(
-        "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/healpix/sv3/bright/101/10159/")
-    assert ("main", "dark") in DESI_SURVEY_PROGRAMS["dr1"] and ("main", "dark") not in DESI_SURVEY_PROGRAMS["edr"]
+        "https://data.desi.lbl.gov/public/edr/spectro/redux/fuji/healpix/sv3/bright/101/10159/"
+    )
+    assert ("main", "dark") in DESI_SURVEY_PROGRAMS["dr1"] and ("main", "dark") not in DESI_SURVEY_PROGRAMS[
+        "edr"
+    ]
     with pytest.raises(KeyError):
         desi_coadd_url("dr3", "main", "dark", 1)
 
@@ -52,15 +60,17 @@ def test_mjd_to_date():
 
 def test_plot_fit_renders(tmp_path):
     import matplotlib
+
     matplotlib.use("Agg")
     sp = read_spectrum(SDSS_EXAMPLE)
     res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",))
     fig = blrfit.plot_fit(res, title="test")
-    assert len(fig.axes) == 3                     # continuum panel, one line panel, its residual panel
+    assert len(fig.axes) == 3  # continuum panel, one line panel, its residual panel
     labels = [t.get_text() for t in fig.axes[1].get_legend().get_texts()]
     assert "c(1/2)" in labels and "total" in labels
     top = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
-    assert "power law + Fe II" in top             # the host is rejected for this spectrum
+    # since 0.3.0 the continuum of this spectrum reaches the host solution (several starts)
+    assert "host + power law + Fe II" in top and "host (Yip eigenspectra)" in top
     fig.savefig(tmp_path / "f.png", dpi=50)
     assert (tmp_path / "f.png").stat().st_size > 1000
 
@@ -70,11 +80,14 @@ def test_mgii_synthetic_offset():
     z = 1 on the DESI grid with white noise: class A with c(1/2) - v_sys within
     150 km/s of +900 (measured +893) for the single-line and the doublet model."""
     rng = np.random.default_rng(5)
-    w = np.arange(3600.0, 9824.01, 0.8); z = 1.0; wr = w / (1 + z)
+    w = np.arange(3600.0, 9824.01, 0.8)
+    z = 1.0
+    wr = w / (1 + z)
     cont = 5.0 * (wr / 3000.0) ** -1.5
     lam0 = LAM["MgII"]
-    line = (60.0 * np.exp(-0.5 * ((wr - lam0 * (1 + 900 / C_KMS)) / (lam0 * 2500 / 2.3548 / C_KMS)) ** 2)
-            + 10.0 * np.exp(-0.5 * ((wr - lam0) / (lam0 * 200 / C_KMS)) ** 2))
+    line = 60.0 * np.exp(
+        -0.5 * ((wr - lam0 * (1 + 900 / C_KMS)) / (lam0 * 2500 / 2.3548 / C_KMS)) ** 2
+    ) + 10.0 * np.exp(-0.5 * ((wr - lam0) / (lam0 * 200 / C_KMS)) ** 2)
     sig = cont / 8.0
     flux = cont + line + rng.standard_normal(w.size) * sig
     for kw in (dict(), dict(mgii_doublet=True)):
