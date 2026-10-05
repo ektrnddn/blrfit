@@ -31,6 +31,9 @@ Flags (a measurement with none of them is "clean")
                      mismatch at the few-per-cent level mimics a very broad line
     pl_at_bound      power-law slope at a bound: the continuum model is not
                      describing the spectrum
+    pl_unphysical    power-law slope bluer than a thin accretion disc can make
+                     (alpha < -2.5): the power law is not an AGN continuum and its
+                     luminosity is not an AGN luminosity
     peak_disagree    model peak and data peak differ by > 0.25 FWHM
     sii_disagree     [S II] velocity > 150 km/s from the systemic: narrow Halpha
                      contaminated by the broad line, or a complex narrow-line region
@@ -75,6 +78,7 @@ from .constants import (
     STRONG_OFFSET_KMS,
     DEGENERATE_DV_KMS,
     RESIDUAL_OUTLIER_MIN_PIX,
+    PL_ALPHA_BLUE_LIMIT,
 )
 
 LABEL_TEXT = {
@@ -94,6 +98,7 @@ FLAG_TEXT = {
     "low_peak_snr": "broad peak < 5 sigma per pixel",
     "host_dominated": "host >= 80 per cent of the 4200-5000 A light",
     "pl_at_bound": "power-law slope at a bound",
+    "pl_unphysical": "power-law slope bluer than an accretion disc (alpha < -2.5)",
     "peak_disagree": "model and data peaks differ by > 0.25 FWHM",
     "sii_disagree": "[S II] velocity > 150 km/s from the systemic",
     "sys_disagree": "systemic and [O III] core > 400 km/s apart",
@@ -162,6 +167,8 @@ def classify(m, err=None, t=None):
     pa = m.get("pl_alpha", np.nan)
     if np.isfinite(pa) and (pa <= -4.9 or pa >= 2.9):
         flags.append("pl_at_bound")  # within 0.1 of the bounds -5, 3
+    if np.isfinite(pa) and pa < PL_ALPHA_BLUE_LIMIT:
+        flags.append("pl_unphysical")
     vsys = m.get("v_sys", np.nan)
     if np.isfinite(vsys) and abs(vsys) >= 0.95 * V_NARROW_MAX:
         flags.append("narrow_at_bound")

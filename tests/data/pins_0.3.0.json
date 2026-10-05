@@ -103,7 +103,7 @@
     "HA_bic_gap": 57.74530040946382,
     "HA_class": "C",
     "HA_reason": "asymmetric: tilt 0.49 FWHM, A.I. 0.42, |peak-cen| 0.43 FWHM, offset -1567",
-    "HA_flags": "param_at_bound",
+    "HA_flags": "pl_unphysical,param_at_bound",
     "HA_systemic_source": "own narrow group",
     "HB_v_sys": -1.5242079227788263,
     "HB_sig_sys": 257.6895235135675,
@@ -169,7 +169,7 @@
     "HB_bic_gap": 17.144336440230006,
     "HB_class": "C",
     "HB_reason": "asymmetric: tilt 0.59 FWHM, A.I. 0.50, |peak-cen| 0.91 FWHM, offset -1329",
-    "HB_flags": "",
+    "HB_flags": "pl_unphysical",
     "HB_systemic_source": "Halpha prior"
    },
    "params": {
@@ -889,7 +889,7 @@
     "HA_bic_gap": 106.6196907471907,
     "HA_class": "F",
     "HA_reason": "symmetric, offset -37 km/s not significant",
-    "HA_flags": "param_at_bound",
+    "HA_flags": "pl_unphysical,param_at_bound",
     "HA_systemic_source": "own narrow group",
     "HB_v_sys": 20.428422102525953,
     "HB_sig_sys": 42.56272270551189,
@@ -955,7 +955,7 @@
     "HB_bic_gap": 41.122308507703565,
     "HB_class": "C",
     "HB_reason": "asymmetric: tilt 0.15 FWHM, A.I. 0.17, |peak-cen| 0.27 FWHM, no net offset",
-    "HB_flags": "param_at_bound",
+    "HB_flags": "pl_unphysical,param_at_bound",
     "HB_systemic_source": "Halpha prior"
    },
    "params": {

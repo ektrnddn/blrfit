@@ -80,6 +80,12 @@ CONTI_WINDOWS = [
 ERR_FLOOR = 0.02  # fractional flux error added in quadrature (see fit_spectrum)
 PL_PIVOT = 3000.0  # power-law pivot wavelength, Angstrom
 PL_ALPHA_MIN, PL_ALPHA_MAX = -5.0, 3.0
+# A thin accretion disc, f_nu ~ nu^(1/3), has f_lambda ~ lambda^(-7/3); a fitted
+# slope bluer than this limit is not an AGN continuum but the power law taking
+# light the model has nowhere else to put (host shape, Balmer continuum, Fe II),
+# and the luminosity of such a power law is not an AGN luminosity. Flagged
+# 'pl_unphysical' (both examples of the repository end near -3.9).
+PL_ALPHA_BLUE_LIMIT = -2.5
 FE_FWHM_MIN, FE_FWHM_MAX = 1200.0, 10000.0  # Fe II broadening range
 FE_SHIFT_MAX = 0.01  # fractional velocity shift of the Fe II templates
 FE_INTRINSIC_FWHM = 900.0  # intrinsic width of the I Zw 1 templates

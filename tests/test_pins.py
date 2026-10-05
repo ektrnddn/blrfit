@@ -202,7 +202,7 @@ KMS_STATS = frozenset(
 
 # summary-row columns and flags added since the 0.1.0 pins (0.3.0: equally good decompositions,
 # parameters on a bound, residual outliers); the comparison with those pins leaves them out
-FLAGS_SINCE_0_1 = frozenset({"degenerate", "param_at_bound", "residual_outliers"})
+FLAGS_SINCE_0_1 = frozenset({"degenerate", "param_at_bound", "residual_outliers", "pl_unphysical"})
 ROW_KEYS_SINCE_0_1 = frozenset(
     f"{p}_{k}"
     for p in ("HA", "HB", "MG")

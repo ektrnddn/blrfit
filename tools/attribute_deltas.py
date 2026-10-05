@@ -451,7 +451,7 @@ def jobs_from_list(path):
 
 # Diagnostic flags introduced in 0.3.0 without a switch: a legacy pin cannot hold them, so the
 # check of the baseline against a legacy summary leaves them out (the attribution itself keeps them)
-FLAGS_SINCE_0_3 = frozenset({"degenerate", "param_at_bound", "residual_outliers"})
+FLAGS_SINCE_0_3 = frozenset({"degenerate", "param_at_bound", "residual_outliers", "pl_unphysical"})
 
 
 def _without_flags(rec, flags):

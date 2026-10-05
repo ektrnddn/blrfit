@@ -20,9 +20,11 @@ Planck 2018 cosmology, as for ``broad_lum`` in ``measure_complex``.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
-from .constants import PL_PIVOT, FLUX_UNIT_CGS, LUM_REF_WAVE
+from .constants import PL_PIVOT, FLUX_UNIT_CGS, LUM_REF_WAVE, PL_ALPHA_BLUE_LIMIT
 from .model.fit import _lumdist_cm
 
 
@@ -71,10 +73,19 @@ def lambda_l_lambda(conti, z, lam_rest=LUM_REF_WAVE):
     is the power law alone, without Fe II or host light, and is NaN where the
     normalisation is not positive, the redshift is not finite or the input was
     not in 1e-17 erg/s/cm^2/A (the fitter does not know the input units; see
-    ``fit_spectrum``).
+    ``fit_spectrum``). A RuntimeWarning is issued when a slope is bluer than
+    PL_ALPHA_BLUE_LIMIT (flag ``pl_unphysical``): such a power law is not an
+    AGN continuum and its luminosity is not an AGN luminosity.
     """
     norm = _pl_parameter(conti, "pl_norm")
     alpha = _pl_parameter(conti, "pl_alpha")
+    if np.any(np.asarray(alpha) < PL_ALPHA_BLUE_LIMIT):
+        warnings.warn(
+            f"power-law slope bluer than {PL_ALPHA_BLUE_LIMIT} (pl_unphysical): not an AGN continuum, "
+            "its luminosity is not an AGN luminosity",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     lam = np.asarray(lam_rest, float)
     dl = lumdist_cm(z)
     with np.errstate(invalid="ignore", divide="ignore"):
