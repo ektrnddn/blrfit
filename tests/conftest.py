@@ -27,3 +27,18 @@ def data_dir():
 @pytest.fixture(scope="session")
 def examples_dir():
     return EXAMPLES
+
+
+@pytest.fixture(autouse=True)
+def _no_sfd_map(monkeypatch):
+    """The command line looks the Galactic E(B-V) of SDSS and generic inputs up in
+    the SFD98 map when dustmaps is installed. The tests hold it absent, so that their
+    SDSS fits stay at E(B-V) = 0, the value the pins assume, whatever is installed;
+    tests/test_ebv_policy.py installs a stand-in map where it needs one."""
+    import sys
+
+    from blrfit.io import dust
+
+    monkeypatch.setattr(dust, "_QUERY", None)
+    monkeypatch.setitem(sys.modules, "dustmaps", None)
+    monkeypatch.setitem(sys.modules, "dustmaps.sfd", None)

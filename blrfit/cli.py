@@ -22,6 +22,7 @@ import numpy as np
 from . import __version__
 from .constants import COMPLEX_WINDOW, MAX_BROAD, DBIC, ERR_FLOOR
 from .io import read_spectrum, is_desi_coadd, is_sdss_spec
+from .io.dust import sfd_ebv
 from .io.sdss import mjd_to_date
 from .model.fit import fit_spectrum, summary_row
 from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset
@@ -201,31 +202,29 @@ def _load(path, a, targetid=None):
         sys.exit("no redshift: give --z, or place the matching redrock-*.fits file next to the coadd")
     else:
         sys.exit("no redshift: give --z")
+    # Galactic E(B-V): the SFD98 value for every survey. DESI coadds carry it in
+    # their FIBERMAP; for other inputs it is looked up at the file's coordinates
+    # (or --ra/--dec) when dustmaps and its SFD map are installed, and otherwise
+    # taken as zero with a warning and the flag ebv_assumed_zero.
+    ra = a.ra if getattr(a, "ra", None) is not None else sp.get("ra", np.nan)
+    dec = a.dec if getattr(a, "dec", None) is not None else sp.get("dec", np.nan)
     if a.ebv is None:
-        ebv, esrc = (float(sp["ebv"]), "FIBERMAP") if sp.get("kind") == "desi" else (0.0, "default 0")
+        if sp.get("kind") == "desi":
+            ebv, esrc = float(sp["ebv"]), "FIBERMAP"
+        else:
+            ebv, why = sfd_ebv(ra, dec)
+            ebv, esrc = (ebv, "SFD map") if ebv is not None else (0.0, f"assumed 0: {why}")
     elif str(a.ebv).lower() in ("sfd", "dust", "map"):
-        ra = a.ra if getattr(a, "ra", None) is not None else sp.get("ra", np.nan)
-        dec = a.dec if getattr(a, "dec", None) is not None else sp.get("dec", np.nan)
-        ebv, esrc = _ebv_sfd(ra, dec), "SFD map"
+        ebv, why = sfd_ebv(ra, dec)
+        if ebv is None:
+            sys.exit(
+                f"--ebv sfd: {why}; give coordinates (--ra, --dec) if the file has none, install dustmaps "
+                '(pip install dustmaps) and fetch its map once: python -c "import dustmaps.sfd; dustmaps.sfd.fetch()"'
+            )
+        esrc = "SFD map"
     else:
         ebv, esrc = float(a.ebv), "argument"
     return sp, z, zsrc, ebv, esrc
-
-
-def _ebv_sfd(ra, dec):
-    """Galactic E(B-V) from the SFD map through the dustmaps package."""
-    if not (np.isfinite(ra) and np.isfinite(dec)):
-        sys.exit("--ebv sfd needs coordinates: --ra and --dec, or a file that carries them")
-    try:
-        from dustmaps.sfd import SFDQuery
-        from astropy.coordinates import SkyCoord
-        import astropy.units as u
-    except ImportError:
-        sys.exit(
-            "--ebv sfd needs the dustmaps package (pip install dustmaps; then fetch the SFD map "
-            "with dustmaps.sfd.fetch())"
-        )
-    return float(SFDQuery()(SkyCoord(ra * u.deg, dec * u.deg)))
 
 
 def _stem(path, sp, targetid=None):
@@ -418,6 +417,16 @@ def cmd_fit(a):
         if a.legacy_error_diagnostic and sp.get("kind") == "desi":
             rec["legacy_desi_repeat_error_diagnostic"] = legacy
         rec["uncertainty_calibrated"] = False
+    ebv_assumed_zero = esrc.startswith("assumed 0")
+    if ebv_assumed_zero:
+        out(
+            f"warning: Galactic E(B-V) taken as 0 ({esrc[len('assumed 0: ') :]}); give --ebv, or install dustmaps and "
+            'fetch its SFD map (python -c "import dustmaps.sfd; dustmaps.sfd.fetch()")'
+        )
+        for rec in recs.values():
+            if rec.get("fitted"):
+                rec["flags"] = list(rec["flags"]) + ["ebv_assumed_zero"]
+                rec["flag_text"] = list(rec["flag_text"]) + [FLAG_TEXT["ebv_assumed_zero"]]
     _print_fit_table(recs, res, out)
 
     stem = a.stem or _stem(a.spectrum, sp, a.targetid)
@@ -445,6 +454,7 @@ def cmd_fit(a):
             z_source=zsrc,
             ebv=ebv,
             ebv_source=esrc,
+            ebv_assumed_zero=ebv_assumed_zero,
             ra=sp.get("ra", np.nan),
             dec=sp.get("dec", np.nan),
             mjd=sp.get("mjd", np.nan),
@@ -810,7 +820,8 @@ def build_parser():
     f.add_argument(
         "--ebv",
         default=None,
-        help="Galactic E(B-V); a number, or 'sfd' for a dust-map lookup (default: DESI FIBERMAP value, else 0)",
+        help="Galactic E(B-V): a number, or 'sfd' for the SFD98 map (default: DESI FIBERMAP value; for other inputs the "
+        "SFD98 map when dustmaps is installed, else 0 with a warning and the flag ebv_assumed_zero)",
     )
     f.add_argument(
         "--ra",

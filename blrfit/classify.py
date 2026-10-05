@@ -117,6 +117,7 @@ FLAG_TEXT = {
     "insufficient_offset_samples": "too few Monte Carlo draws gave an offset; errors withheld",
     "failed_draws": "some Monte Carlo draws failed",
     "systemic_reference_changed": "Monte Carlo draws used different narrow-line references",
+    "ebv_assumed_zero": "no Galactic E(B-V) available: taken as 0 (set by the command line)",
 }
 
 

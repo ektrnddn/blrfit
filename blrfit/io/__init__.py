@@ -8,6 +8,7 @@ from __future__ import annotations
 from .sdss import read_sdss, is_sdss_spec
 from .desi import read_desi, is_desi_coadd, is_desi_spectra, coadd_cameras, read_redrock, write_single_target
 from .generic import read_table, air_to_vacuum, vacuum_to_air, write_table
+from .dust import sfd_ebv
 
 
 def read_spectrum(path, targetid=None, *, survey="auto", mask_policy="ivar", redrock=None, **table_kw):
@@ -53,4 +54,5 @@ __all__ = [
     "air_to_vacuum",
     "vacuum_to_air",
     "write_table",
+    "sfd_ebv",
 ]
