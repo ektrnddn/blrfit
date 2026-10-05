@@ -13,6 +13,7 @@ at which the narrow lines sit unless ``v_sys`` displaces them.
 Velocities are km/s relative to the input redshift; the truth dictionary
 records the broad-profile measures the fitter should recover.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -27,12 +28,24 @@ SDSS_LOGLAM = 10.0 ** np.arange(np.log10(3800.0), np.log10(9200.0), 1e-4)
 
 def gauss_v(wave_rest, lam0, v, sigma, flux):
     """Gaussian of integrated flux ``flux`` at lam0 (1 + v/c) with width sigma (km/s)."""
-    lc = lam0 * (1.0 + v / C_KMS); sl = lc * sigma / C_KMS
+    lc = lam0 * (1.0 + v / C_KMS)
+    sl = lc * sigma / C_KMS
     return flux / (sl * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((wave_rest - lc) / sl) ** 2)
 
 
-def make_spectrum(z=0.25, snr=15.0, pl_norm=10.0, pl_alpha=-1.5, host_frac=0.0,
-                  broad=None, narrow=None, v_sys=0.0, seed=0, wave=None, err_floor=0.0):
+def make_spectrum(
+    z=0.25,
+    snr=15.0,
+    pl_norm=10.0,
+    pl_alpha=-1.5,
+    host_frac=0.0,
+    broad=None,
+    narrow=None,
+    v_sys=0.0,
+    seed=0,
+    wave=None,
+    err_floor=0.0,
+):
     """Build one synthetic spectrum.
 
     snr        continuum signal-to-noise ratio per pixel at the power-law level near Halpha
@@ -66,33 +79,53 @@ def make_spectrum(z=0.25, snr=15.0, pl_norm=10.0, pl_alpha=-1.5, host_frac=0.0,
     model = cont_agn + host
     truth = dict(z=z, v_sys=v_sys, host_frac=host_frac, broad={}, narrow=dict(narrow or {}))
 
-    nar = dict(sigma=150.0, ew_ha=40.0, nii=1.0, sii=0.4, sii_ratio=1.3, balmer=3.0, o3=8.0,
-               ped_frac=0.0, ped_width=3.0, ped_v=0.0, o3_wing=None, sii_dv=0.0, o3_dv=0.0)
+    nar = dict(
+        sigma=150.0,
+        ew_ha=40.0,
+        nii=1.0,
+        sii=0.4,
+        sii_ratio=1.3,
+        balmer=3.0,
+        o3=8.0,
+        ped_frac=0.0,
+        ped_width=3.0,
+        ped_v=0.0,
+        o3_wing=None,
+        sii_dv=0.0,
+        o3_dv=0.0,
+    )
     nar.update(narrow or {})
     if nar["ew_ha"] > 0:
         c_ha = float(np.interp(LAM["Halpha"], wr, cont_agn))
         f_ha = nar["ew_ha"] * c_ha
-        lines = [(LAM["Halpha"], f_ha, v_sys), (LAM["NII6584"], nar["nii"] * f_ha, v_sys),
-                 (LAM["NII6548"], nar["nii"] * f_ha / R_NII, v_sys),
-                 (LAM["SII6716"], nar["sii"] * f_ha, v_sys + nar["sii_dv"]),
-                 (LAM["SII6731"], nar["sii"] * f_ha / nar["sii_ratio"], v_sys + nar["sii_dv"]),
-                 (LAM["Hbeta"], f_ha / nar["balmer"], v_sys),
-                 (LAM["OIII5007"], nar["o3"] * f_ha / nar["balmer"], v_sys + nar["o3_dv"]),
-                 (LAM["OIII4959"], nar["o3"] * f_ha / nar["balmer"] / R_OIII, v_sys + nar["o3_dv"])]
+        lines = [
+            (LAM["Halpha"], f_ha, v_sys),
+            (LAM["NII6584"], nar["nii"] * f_ha, v_sys),
+            (LAM["NII6548"], nar["nii"] * f_ha / R_NII, v_sys),
+            (LAM["SII6716"], nar["sii"] * f_ha, v_sys + nar["sii_dv"]),
+            (LAM["SII6731"], nar["sii"] * f_ha / nar["sii_ratio"], v_sys + nar["sii_dv"]),
+            (LAM["Hbeta"], f_ha / nar["balmer"], v_sys),
+            (LAM["OIII5007"], nar["o3"] * f_ha / nar["balmer"], v_sys + nar["o3_dv"]),
+            (LAM["OIII4959"], nar["o3"] * f_ha / nar["balmer"] / R_OIII, v_sys + nar["o3_dv"]),
+        ]
         for lam0, f, v in lines:
             core = f * (1.0 - nar["ped_frac"])
             model = model + gauss_v(wr, lam0, v, nar["sigma"], core)
             if nar["ped_frac"] > 0:
-                model = model + gauss_v(wr, lam0, v + nar["ped_v"], nar["sigma"] * nar["ped_width"], f * nar["ped_frac"])
+                model = model + gauss_v(
+                    wr, lam0, v + nar["ped_v"], nar["sigma"] * nar["ped_width"], f * nar["ped_frac"]
+                )
         if nar["o3_wing"] is not None:
             wv, wsig, wfrac = nar["o3_wing"]
             f_o3 = nar["o3"] * f_ha / nar["balmer"]
             model = model + gauss_v(wr, LAM["OIII5007"], v_sys + nar["o3_dv"] + wv, wsig, wfrac * f_o3)
-            model = model + gauss_v(wr, LAM["OIII4959"], v_sys + nar["o3_dv"] + wv, wsig, wfrac * f_o3 / R_OIII)
+            model = model + gauss_v(
+                wr, LAM["OIII4959"], v_sys + nar["o3_dv"] + wv, wsig, wfrac * f_o3 / R_OIII
+            )
         truth["narrow"].update(sigma=nar["sigma"], flux_ha=f_ha)
 
     vgrid = np.arange(-25000.0, 25000.01, 5.0)
-    for comp in (broad or []):
+    for comp in broad or []:
         lam0 = LAM[comp["line"]]
         c_line = float(np.interp(lam0, wr, cont_agn))
         flux = comp["ew"] * c_line
@@ -104,7 +137,9 @@ def make_spectrum(z=0.25, snr=15.0, pl_norm=10.0, pl_alpha=-1.5, host_frac=0.0,
         P["flux"] += flux
     for line, P in truth["broad"].items():
         m = profile_measures(vgrid, P["profile"])
-        P.update({k: m[k] for k in ("v_peak", "centroid", "c25", "c50", "c75", "fwhm", "AI", "KI", "n_peaks")})
+        P.update(
+            {k: m[k] for k in ("v_peak", "centroid", "c25", "c50", "c75", "fwhm", "AI", "KI", "n_peaks")}
+        )
         for k in ("v_peak", "centroid", "c50"):
             P[f"{k}_sys"] = P[k] - v_sys
         P.pop("profile")
@@ -115,7 +150,8 @@ def make_spectrum(z=0.25, snr=15.0, pl_norm=10.0, pl_alpha=-1.5, host_frac=0.0,
         sigma = np.sqrt(sigma**2 + (err_floor * np.abs(model)) ** 2)
     flux = model + rng.standard_normal(model.size) * sigma
     ivar = 1.0 / sigma**2
-    truth["noise"] = noise_level; truth["model"] = model
+    truth["noise"] = noise_level
+    truth["model"] = model
     return dict(wave=wave, flux=flux, ivar=ivar, truth=truth)
 
 

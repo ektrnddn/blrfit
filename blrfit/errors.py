@@ -19,18 +19,50 @@ which are strong offsets by construction, so the two prescriptions coincide
 there. The model was calibrated on broad Halpha in DESI spectra; for other
 lines and instruments it is an indication, not a measurement.
 """
+
 from __future__ import annotations
 
 import numpy as np
 
-from .constants import (ERR_MODEL_NORM_KMS, ERR_MODEL_FLOOR_KMS, ERR_MODEL_STRONG_FACTOR,
-                        STRONG_OFFSET_KMS, MC_DEFAULT_N, MC_MIN_SAMPLES, MC_ALIAS_KMS)
+from .constants import (
+    ERR_MODEL_NORM_KMS,
+    ERR_MODEL_FLOOR_KMS,
+    ERR_MODEL_STRONG_FACTOR,
+    STRONG_OFFSET_KMS,
+    MC_DEFAULT_N,
+    MC_MIN_SAMPLES,
+    MC_ALIAS_KMS,
+)
 from .model.continuum import fit_continuum
 
-MC_KEYS = ["v_peak", "centroid", "c25", "c50", "c75", "c90", "fwhm", "W25", "W75",
-           "sigma_line", "AI", "KI", "v_sys", "sig_sys", "v_o3", "broad_flux", "broad_ew",
-           "v_peak_sys", "centroid_sys", "c50_sys", "c25_sys", "c75_sys", "n_peaks",
-           "peak_top_sys", "centroid25_sys", "centroid50_sys"]
+MC_KEYS = [
+    "v_peak",
+    "centroid",
+    "c25",
+    "c50",
+    "c75",
+    "c90",
+    "fwhm",
+    "W25",
+    "W75",
+    "sigma_line",
+    "AI",
+    "KI",
+    "v_sys",
+    "sig_sys",
+    "v_o3",
+    "broad_flux",
+    "broad_ew",
+    "v_peak_sys",
+    "centroid_sys",
+    "c50_sys",
+    "c25_sys",
+    "c75_sys",
+    "n_peaks",
+    "peak_top_sys",
+    "centroid25_sys",
+    "centroid50_sys",
+]
 # Line statuses whose draw enters the percentile sample: a finite end point of
 # the line solver contributes whether or not the solver reported convergence.
 MC_CONTRIBUTING_STATUS = ("success", "success_unconverged")
@@ -77,23 +109,43 @@ def cluster_summary(draws):
     a = np.asarray(draws, float)
     a = np.sort(a[np.isfinite(a)])
     n = int(a.size)
-    out = dict(n=n, nmad_all=nmad(a) if n else np.nan, gap_kms=np.nan, n_left=0, n_right=0,
-               median_left=np.nan, median_right=np.nan, nmad_left=np.nan, nmad_right=np.nan,
-               separation_kms=np.nan, width_kms=np.nan, min_fraction=np.nan, qualifies=False)
+    out = dict(
+        n=n,
+        nmad_all=nmad(a) if n else np.nan,
+        gap_kms=np.nan,
+        n_left=0,
+        n_right=0,
+        median_left=np.nan,
+        median_right=np.nan,
+        nmad_left=np.nan,
+        nmad_right=np.nan,
+        separation_kms=np.nan,
+        width_kms=np.nan,
+        min_fraction=np.nan,
+        qualifies=False,
+    )
     if n < 2:
         return out
     gaps = np.diff(a)
     j = int(np.argmax(gaps))
-    left, right = a[:j + 1], a[j + 1:]
-    out.update(gap_kms=float(gaps[j]), n_left=int(left.size), n_right=int(right.size),
-               median_left=float(np.median(left)), median_right=float(np.median(right)),
-               nmad_left=nmad(left), nmad_right=nmad(right))
+    left, right = a[: j + 1], a[j + 1 :]
+    out.update(
+        gap_kms=float(gaps[j]),
+        n_left=int(left.size),
+        n_right=int(right.size),
+        median_left=float(np.median(left)),
+        median_right=float(np.median(right)),
+        nmad_left=nmad(left),
+        nmad_right=nmad(right),
+    )
     out["separation_kms"] = abs(out["median_right"] - out["median_left"])
     out["width_kms"] = max(float(np.hypot(out["nmad_left"], out["nmad_right"])), MC_NMAD_FLOOR_KMS)
     out["min_fraction"] = min(left.size, right.size) / n
-    out["qualifies"] = bool(min(left.size, right.size) >= MC_CLUSTER_MIN_FRACTION * n
-                            and out["separation_kms"] >= MC_ALIAS_KMS
-                            and out["separation_kms"] >= MC_SEPARATION_NMAD_RATIO * out["width_kms"])
+    out["qualifies"] = bool(
+        min(left.size, right.size) >= MC_CLUSTER_MIN_FRACTION * n
+        and out["separation_kms"] >= MC_ALIAS_KMS
+        and out["separation_kms"] >= MC_SEPARATION_NMAD_RATIO * out["width_kms"]
+    )
     return out
 
 
@@ -108,8 +160,16 @@ def basin_switch(draws, estimate):
     Assessed only with at least MC_MIN_SAMPLES draws and a finite estimate."""
     a = np.asarray(draws, float)
     a = a[np.isfinite(a)]
-    out = dict(assessed=False, n=int(a.size), estimate=float(estimate), median=np.nan,
-               nmad=np.nan, shift_kms=np.nan, threshold_kms=np.nan, switched=False)
+    out = dict(
+        assessed=False,
+        n=int(a.size),
+        estimate=float(estimate),
+        median=np.nan,
+        nmad=np.nan,
+        shift_kms=np.nan,
+        threshold_kms=np.nan,
+        switched=False,
+    )
     if a.size < MC_MIN_SAMPLES or not np.isfinite(estimate):
         return out
     out.update(assessed=True, median=float(np.median(a)), nmad=nmad(a))
@@ -130,8 +190,16 @@ def empirical_error(broad_flux_snr, dv=np.nan):
     return float(e) if np.ndim(e) == 0 else e
 
 
-def monte_carlo(res, nmc=MC_DEFAULT_N, seed=0, fe=None, use_ha_systemic=None,
-                kw=None, return_diagnostics=False, noise_policy=None):
+def monte_carlo(
+    res,
+    nmc=MC_DEFAULT_N,
+    seed=0,
+    fe=None,
+    use_ha_systemic=None,
+    kw=None,
+    return_diagnostics=False,
+    noise_policy=None,
+):
     """Refit perturbed spectra with the same line estimator as ``fit_spectrum``.
 
     Returns ``(mc, err)`` by default, or ``(mc, err, info)`` with
@@ -203,13 +271,19 @@ def monte_carlo(res, nmc=MC_DEFAULT_N, seed=0, fe=None, use_ha_systemic=None,
     # Results predating the selectable policy used A and a 3000 km/s fallback.
     # Resolve those historical defaults explicitly, even if a later release
     # changes its default; every draw refits under the recorded estimator.
-    continuum_kw = dict(fe_uv_width_policy=settings.get("fe_uv_width_policy", "A"),
-                        fe_uv_fallback_kms=settings.get("fe_uv_fallback_kms", 3000.0))
+    continuum_kw = dict(
+        fe_uv_width_policy=settings.get("fe_uv_width_policy", "A"),
+        fe_uv_fallback_kms=settings.get("fe_uv_fallback_kms", 3000.0),
+    )
     fe = settings.get("fe", True) if fe is None else bool(fe)
-    use_ha_systemic = (settings.get("use_ha_systemic", True)
-                       if use_ha_systemic is None else bool(use_ha_systemic))
-    line_kw = {k: settings[k] for k in ("oiii_wing", "heii", "mgii_narrow",
-               "mgii_doublet", "sig_broad_min") if k in settings}
+    use_ha_systemic = (
+        settings.get("use_ha_systemic", True) if use_ha_systemic is None else bool(use_ha_systemic)
+    )
+    line_kw = {
+        k: settings[k]
+        for k in ("oiii_wing", "heii", "mgii_narrow", "mgii_doublet", "sig_broad_min")
+        if k in settings
+    }
     line_kw.update(kw or {})
     rng = np.random.default_rng(seed)
     wr, fr, ir = res["wave_rest"], res["flux_rest"], res["ivar_rest"]
@@ -217,58 +291,106 @@ def monte_carlo(res, nmc=MC_DEFAULT_N, seed=0, fe=None, use_ha_systemic=None,
     if noise_key not in res:
         raise ValueError("input MC noise requires saved ivar_stat_rest; do not infer it from floored weights")
     noise_ivar = np.asarray(res[noise_key], dtype=float)
-    if (noise_ivar.shape != fr.shape or not np.all(np.isfinite(noise_ivar))
-            or np.any(noise_ivar < 0) or not np.array_equal(noise_ivar > 0, ir > 0)):
+    if (
+        noise_ivar.shape != fr.shape
+        or not np.all(np.isfinite(noise_ivar))
+        or np.any(noise_ivar < 0)
+        or not np.array_equal(noise_ivar > 0, ir > 0)
+    ):
         raise ValueError("MC noise inverse variance must be finite, nonnegative and match the fitting mask")
     sig = np.where(noise_ivar > 0, 1.0 / np.sqrt(np.where(noise_ivar > 0, noise_ivar, 1)), 0.0)
     z, host = res["z"], res["host_model"]
     counts = {name: r["n_broad"] for name, r in res["fits"].items()}
     complexes = settings.get("complexes", tuple(counts))
     samples = {name: {k: np.full(nmc, np.nan) for k in MC_KEYS} for name in counts}
-    info = dict(status="complete", n_requested=nmc, seed=seed,
-                uncertainty_model=("conditional_statistical" if noise_policy == "input" else "conditional_effective_noise"),
-                noise_policy=noise_policy, noise_variance_source=noise_key,
-                fit_weight_variance_source="ivar_rest", legacy_noise_policy=legacy_noise_policy,
-                fixed=["host_model", "broad_component_counts", "redshift", "extinction",
-                       "pixel_mask", "input_error_array"],
-                refitted=["power_law", "Fe_II_if_enabled", "OIII_prefit", "line_parameters",
-                          "systemic_starts_priors_and_transfers"],
-                component_counts=counts, fe=fe, use_ha_systemic=use_ha_systemic,
-                line_settings=line_kw, continuum_settings=continuum_kw,
-                continuum_convergence_checked=True,
-                main_continuum_domain_matched=not bool(res.get('host_info', {}).get('applied')),
-                continuum_domain='standard continuum windows; fixed-host conditional refit',
-                multimodality_assessed=True,
-                cluster_test=dict(statistic="median_separation", keys=list(MC_BASIN_KEYS),
-                                  min_contributing=MC_MIN_CONTRIBUTING,
-                                  min_fraction=MC_CLUSTER_MIN_FRACTION,
-                                  separation_kms=MC_ALIAS_KMS,
-                                  separation_nmad_ratio=MC_SEPARATION_NMAD_RATIO,
-                                  nmad_floor_kms=MC_NMAD_FLOOR_KMS,
-                                  basin_switch_kms=MC_ALIAS_KMS,
-                                  basin_switch_nmad_ratio=MC_BASIN_SWITCH_NMAD_RATIO),
-                n_unconverged_continuum=0, draws=[], lines={})
+    info = dict(
+        status="complete",
+        n_requested=nmc,
+        seed=seed,
+        uncertainty_model=(
+            "conditional_statistical" if noise_policy == "input" else "conditional_effective_noise"
+        ),
+        noise_policy=noise_policy,
+        noise_variance_source=noise_key,
+        fit_weight_variance_source="ivar_rest",
+        legacy_noise_policy=legacy_noise_policy,
+        fixed=[
+            "host_model",
+            "broad_component_counts",
+            "redshift",
+            "extinction",
+            "pixel_mask",
+            "input_error_array",
+        ],
+        refitted=[
+            "power_law",
+            "Fe_II_if_enabled",
+            "OIII_prefit",
+            "line_parameters",
+            "systemic_starts_priors_and_transfers",
+        ],
+        component_counts=counts,
+        fe=fe,
+        use_ha_systemic=use_ha_systemic,
+        line_settings=line_kw,
+        continuum_settings=continuum_kw,
+        continuum_convergence_checked=True,
+        main_continuum_domain_matched=not bool(res.get("host_info", {}).get("applied")),
+        continuum_domain="standard continuum windows; fixed-host conditional refit",
+        multimodality_assessed=True,
+        cluster_test=dict(
+            statistic="median_separation",
+            keys=list(MC_BASIN_KEYS),
+            min_contributing=MC_MIN_CONTRIBUTING,
+            min_fraction=MC_CLUSTER_MIN_FRACTION,
+            separation_kms=MC_ALIAS_KMS,
+            separation_nmad_ratio=MC_SEPARATION_NMAD_RATIO,
+            nmad_floor_kms=MC_NMAD_FLOOR_KMS,
+            basin_switch_kms=MC_ALIAS_KMS,
+            basin_switch_nmad_ratio=MC_BASIN_SWITCH_NMAD_RATIO,
+        ),
+        n_unconverged_continuum=0,
+        draws=[],
+        lines={},
+    )
     for i in range(nmc):
         draw = dict(index=i, lines={})
         try:
             f_i = fr + rng.standard_normal(fr.size) * sig
             fh = f_i - host
             _, cmodel, cinfo = fit_continuum(wr, fh, ir, fit_fe=fe, **continuum_kw)
-            draw['continuum_policy'] = {k: cinfo.get(k) for k in
-                ('feuv_policy', 'feuv_fallback_kms', 'feuv_fwhm_fixed',
-                 'feuv_refit', 'feuv_free_fit', 'fe_width_state')}
-            draw['continuum_solver'] = cinfo.get('solver', {})
+            draw["continuum_policy"] = {
+                k: cinfo.get(k)
+                for k in (
+                    "feuv_policy",
+                    "feuv_fallback_kms",
+                    "feuv_fwhm_fixed",
+                    "feuv_refit",
+                    "feuv_free_fit",
+                    "fe_width_state",
+                )
+            }
+            draw["continuum_solver"] = cinfo.get("solver", {})
             # An unconverged continuum solver keeps its draw and is counted per
             # line below (as in 0.1.0); only a non-finite model invalidates it.
-            draw['continuum_converged'] = bool(cinfo.get('solver', {}).get('success', False))
-            if not draw['continuum_converged']:
-                info['n_unconverged_continuum'] += 1
+            draw["continuum_converged"] = bool(cinfo.get("solver", {}).get("success", False))
+            if not draw["continuum_converged"]:
+                info["n_unconverged_continuum"] += 1
             if not np.all(np.isfinite(cmodel)):
                 raise ValueError("non-finite continuum model")
             draw["continuum_fallback"] = bool(cinfo.get("fallback", False))
             _, measures, prefit, fit_status = _fit_line_sequence(
-                wr, fh - cmodel, ir, cmodel, host, z, complexes,
-                use_ha_systemic=use_ha_systemic, fixed_n_broad=counts, kw=line_kw)
+                wr,
+                fh - cmodel,
+                ir,
+                cmodel,
+                host,
+                z,
+                complexes,
+                use_ha_systemic=use_ha_systemic,
+                fixed_n_broad=counts,
+                kw=line_kw,
+            )
             draw["o3_prefit"] = {k: prefit[k] for k in ("status", "v_o3", "snr")}
             for name in counts:
                 status = fit_status.get(name, dict(status="not_attempted"))
@@ -295,15 +417,13 @@ def monte_carlo(res, nmc=MC_DEFAULT_N, seed=0, fe=None, use_ha_systemic=None,
         statuses = [d["lines"][name]["status"] for d in info["draws"]]
         ok = np.array([s in MC_CONTRIBUTING_STATUS for s in statuses], bool)
         n_success = int(ok.sum())
-        line_info = dict(n_success=n_success, n_failed=nmc - n_success,
-                         n_finite={}, flags=[], samples={})
+        line_info = dict(n_success=n_success, n_failed=nmc - n_success, n_finite={}, flags=[], samples={})
         # Unconverged solvers keep their draws (as in 0.1.0) and are counted here.
         line_info["n_unconverged_lines"] = statuses.count("success_unconverged")
         converged = np.array([d.get("continuum_converged", True) for d in info["draws"]], bool)
         line_info["n_unconverged_continuum"] = int(np.sum(ok & ~converged))
         line_info["n_converged_lines"] = statuses.count("success")
-        line_info["n_converged_both"] = int(np.sum(
-            (np.asarray(statuses) == "success") & converged))
+        line_info["n_converged_both"] = int(np.sum((np.asarray(statuses) == "success") & converged))
         sources = [d["lines"][name].get("systemic_source") for d in info["draws"]]
         line_info["systemic_source_counts"] = {s: sources.count(s) for s in sorted(set(sources) - {None})}
         if n_success < nmc:
@@ -318,11 +438,17 @@ def monte_carlo(res, nmc=MC_DEFAULT_N, seed=0, fe=None, use_ha_systemic=None,
         # unperturbed estimate in v_sys or c50_sys sits in another basin.
         ref = res.get("meas", {}).get(name, {})
         ref_v, ref_c = float(ref.get("v_sys", np.nan)), float(ref.get("c50_sys", np.nan))
-        assessed = (ok & np.isfinite(dd["v_sys"]) & np.isfinite(dd["c50_sys"])
-                    & np.isfinite(ref_v) & np.isfinite(ref_c))
+        assessed = (
+            ok
+            & np.isfinite(dd["v_sys"])
+            & np.isfinite(dd["c50_sys"])
+            & np.isfinite(ref_v)
+            & np.isfinite(ref_c)
+        )
         with np.errstate(invalid="ignore"):
-            aliased = assessed & ((np.abs(dd["v_sys"] - ref_v) > MC_ALIAS_KMS)
-                            | (np.abs(dd["c50_sys"] - ref_c) > MC_ALIAS_KMS))
+            aliased = assessed & (
+                (np.abs(dd["v_sys"] - ref_v) > MC_ALIAS_KMS) | (np.abs(dd["c50_sys"] - ref_c) > MC_ALIAS_KMS)
+            )
         line_info["alias_reference"] = dict(v_sys=ref_v, c50_sys=ref_c)
         line_info["alias_count"] = int(aliased.sum())
         line_info["alias_n_assessed"] = int(assessed.sum())
@@ -336,13 +462,16 @@ def monte_carlo(res, nmc=MC_DEFAULT_N, seed=0, fe=None, use_ha_systemic=None,
         line_info["n_contributing_required"] = MC_MIN_CONTRIBUTING
         line_info["clusters"] = {key: cluster_summary(dd[key][ok]) for key in MC_BASIN_KEYS}
         line_info["cluster_test_run"] = all(
-            c["n"] >= MC_MIN_CONTRIBUTING for c in line_info["clusters"].values())
-        line_info["basin_switch"] = {key: basin_switch(dd[key][ok], {"v_sys": ref_v, "c50_sys": ref_c}[key])
-                                     for key in MC_BASIN_KEYS}
+            c["n"] >= MC_MIN_CONTRIBUTING for c in line_info["clusters"].values()
+        )
+        line_info["basin_switch"] = {
+            key: basin_switch(dd[key][ok], {"v_sys": ref_v, "c50_sys": ref_c}[key]) for key in MC_BASIN_KEYS
+        }
         line_info["mc_sigma"] = line_info["clusters"]["c50_sys"]["nmad_all"]
         line_info["mc_gap_kms"] = line_info["clusters"]["c50_sys"]["gap_kms"]
         bimodal = line_info["cluster_test_run"] and any(
-            c["qualifies"] for c in line_info["clusters"].values())
+            c["qualifies"] for c in line_info["clusters"].values()
+        )
         line_info["bimodal"] = bool(bimodal)
         if not line_info["cluster_test_run"]:
             line_info["flags"].append("mc_too_few")

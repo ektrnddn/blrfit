@@ -21,6 +21,7 @@ and a clearly double profile give margins above 20; along a monotone
 amplitude sweep of the second component the signed distance to the edge
 crosses zero where the chosen count changes and the margin is its modulus.
 """
+
 import json
 import os
 
@@ -46,16 +47,19 @@ def _flip_checks(s, dbic=DBIC):
     c = select_by_bic(s, dbic)
     margin, at, direction = selection_margin(s, dbic)
     assert margin >= 0 and 0 <= at < s.size and direction in (-1, 1)
-    moved = s.copy(); moved[at] += direction * (margin + EPS)
+    moved = s.copy()
+    moved[at] += direction * (margin + EPS)
     assert select_by_bic(moved, dbic) != c
-    if margin > EPS:      # a zero margin leaves no move short of the edge
-        moved = s.copy(); moved[at] += direction * (margin - EPS)
+    if margin > EPS:  # a zero margin leaves no move short of the edge
+        moved = s.copy()
+        moved[at] += direction * (margin - EPS)
         assert select_by_bic(moved, dbic) == c
         for j in range(s.size):
             for sign in (-1, 1):
                 if j == at and sign == direction:
                     continue
-                moved = s.copy(); moved[j] += sign * (margin - EPS)
+                moved = s.copy()
+                moved[j] += sign * (margin - EPS)
                 assert select_by_bic(moved, dbic) == c, (j, sign)
     return margin
 
@@ -69,13 +73,15 @@ def _smallest_flip(s, dbic=DBIC, tol=1e-9):
     best = np.inf
     for j in range(s.size):
         for sign in (-1, 1):
-            moved = s.copy(); moved[j] += sign * reach
+            moved = s.copy()
+            moved[j] += sign * reach
             if select_by_bic(moved, dbic) == c:
                 continue
             lo, hi = 0.0, reach
             while hi - lo > tol:
                 mid = 0.5 * (lo + hi)
-                moved = s.copy(); moved[j] += sign * mid
+                moved = s.copy()
+                moved[j] += sign * mid
                 if select_by_bic(moved, dbic) == c:
                     lo = mid
                 else:
@@ -155,8 +161,13 @@ def test_pinned_score_lists(pinned):
 WR = np.arange(6300.0, 6800.0, 0.8)
 CONT = 10.0
 SNR = 20.0
-NARROW = ((LAM["Halpha"], 40.0), (LAM["NII6584"], 40.0), (LAM["NII6548"], 40.0 / 2.96),
-          (LAM["SII6716"], 16.0), (LAM["SII6731"], 12.0))
+NARROW = (
+    (LAM["Halpha"], 40.0),
+    (LAM["NII6584"], 40.0),
+    (LAM["NII6548"], 40.0 / 2.96),
+    (LAM["SII6716"], 16.0),
+    (LAM["SII6731"], 12.0),
+)
 
 
 def window(ew2, seed=0, v2=3000.0, fwhm2=1500.0):
@@ -168,7 +179,7 @@ def window(ew2, seed=0, v2=3000.0, fwhm2=1500.0):
     if ew2 > 0:
         y += gauss_v(WR, LAM["Halpha"], v2, fwhm2 / 2.3548, ew2 * CONT)
     sig = CONT / SNR
-    return y + rng.normal(0.0, sig, WR.size), np.full(WR.size, 1.0 / sig ** 2)
+    return y + rng.normal(0.0, sig, WR.size), np.full(WR.size, 1.0 / sig**2)
 
 
 def fit(ew2, seed=0, max_broad=2):
@@ -282,10 +293,24 @@ def test_fit_spectrum_carries_the_margin():
     """The full fit persists the score list per line (``bic_all`` of the
     measures), the summary row exports the margin, and both the margin and the
     gap are recomputable from the persisted list with the recorded ``dbic``."""
-    sp = make_spectrum(snr=30.0, seed=7, broad=[dict(line="Halpha", v=1200.0, fwhm=4000.0, ew=150.0),
-                                                 dict(line="Hbeta", v=1200.0, fwhm=4000.0, ew=50.0)])
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], 0.25, host=False, fe=False,
-                              max_broad=3, complexes=("Halpha", "Hbeta"))
+    sp = make_spectrum(
+        snr=30.0,
+        seed=7,
+        broad=[
+            dict(line="Halpha", v=1200.0, fwhm=4000.0, ew=150.0),
+            dict(line="Hbeta", v=1200.0, fwhm=4000.0, ew=50.0),
+        ],
+    )
+    res = blrfit.fit_spectrum(
+        sp["wave"],
+        sp["flux"],
+        sp["ivar"],
+        0.25,
+        host=False,
+        fe=False,
+        max_broad=3,
+        complexes=("Halpha", "Hbeta"),
+    )
     row = blrfit.summary_row(res)
     dbic = res["settings"]["dbic"]
     for name, p in (("Halpha", "HA"), ("Hbeta", "HB")):

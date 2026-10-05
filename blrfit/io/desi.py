@@ -22,6 +22,7 @@ Coadd and redrock files compressed with gzip (``*.fits.gz``) are read in
 place; the redrock sibling of a coadd may be compressed or not independently
 of the coadd.
 """
+
 from __future__ import annotations
 
 import os
@@ -60,13 +61,13 @@ def redrock_sibling(path):
     stem = name[6:]
     for suf in FITS_SUFFIXES:
         if stem.lower().endswith(suf):
-            stem = stem[:-len(suf)]
+            stem = stem[: -len(suf)]
             break
     else:
         rr = os.path.join(d, "redrock-" + stem)
         return rr if os.path.exists(rr) else None
     own = name.lower().endswith(".fits.gz")
-    for suf in ((".fits.gz", ".fits") if own else (".fits", ".fits.gz")):
+    for suf in (".fits.gz", ".fits") if own else (".fits", ".fits.gz"):
         rr = os.path.join(d, "redrock-" + stem + suf)
         if os.path.exists(rr):
             return rr
@@ -84,12 +85,15 @@ def coadd_cameras(waves, fluxes, ivars, masks=None):
         w = np.asarray(w, float)
         wave = w if wave is None else np.append(wave, w[w > wave[-1] + WAVE_TOLERANCE])
     n = wave.size
-    flux = np.zeros(n); ivar = np.zeros(n); mask = np.zeros(n, dtype=np.int32)
+    flux = np.zeros(n)
+    ivar = np.zeros(n)
+    mask = np.zeros(n, dtype=np.int32)
     overlap_any = np.zeros(n, bool)
     slices, overlaps = [], []
     for i, w in enumerate(waves):
         w = np.asarray(w, float)
-        start = int(np.searchsorted(wave, w[0])); sl = slice(start, start + w.size)
+        start = int(np.searchsorted(wave, w[0]))
+        sl = slice(start, start + w.size)
         if np.any(np.abs(w - wave[sl]) > WAVE_TOLERANCE):
             raise ValueError("camera wavelength grids are not aligned")
         ov = np.zeros(w.size, bool)
@@ -97,15 +101,21 @@ def coadd_cameras(waves, fluxes, ivars, masks=None):
             ov |= np.isin(np.round(w, 4), np.round(np.asarray(waves[i - 1], float), 4))
         if i < len(waves) - 1:
             ov |= np.isin(np.round(w, 4), np.round(np.asarray(waves[i + 1], float), 4))
-        slices.append(sl); overlaps.append(ov)
+        slices.append(sl)
+        overlaps.append(ov)
     for i, (sl, ov) in enumerate(zip(slices, overlaps)):
-        f = np.asarray(fluxes[i], float); iv = np.asarray(ivars[i], float)
+        f = np.asarray(fluxes[i], float)
+        iv = np.asarray(ivars[i], float)
         m = np.asarray(masks[i]) if masks is not None else np.zeros(f.size, dtype=np.int32)
         idx = np.arange(sl.start, sl.stop)
-        flux[idx[~ov]] = f[~ov]; ivar[idx[~ov]] = iv[~ov]; mask[idx[~ov]] = m[~ov]
-        flux[idx[ov]] += iv[ov] * f[ov]; ivar[idx[ov]] += iv[ov]; mask[idx[ov]] |= m[ov].astype(np.int32)
+        flux[idx[~ov]] = f[~ov]
+        ivar[idx[~ov]] = iv[~ov]
+        mask[idx[~ov]] = m[~ov]
+        flux[idx[ov]] += iv[ov] * f[ov]
+        ivar[idx[ov]] += iv[ov]
+        mask[idx[ov]] |= m[ov].astype(np.int32)
         overlap_any[idx[ov]] = True
-    flux[overlap_any] /= (ivar[overlap_any] + (ivar[overlap_any] == 0))
+    flux[overlap_any] /= ivar[overlap_any] + (ivar[overlap_any] == 0)
     mask[ivar > 0] = 0
     return wave, flux, ivar, mask
 
@@ -130,10 +140,13 @@ def read_desi(path, targetid, redrock=None, use_desispec=None):
     """
     tid = int(targetid)
     if is_desi_spectra(path):
-        raise ValueError(f"{path} is a per-exposure spectra file (one row per exposure); "
-                         f"use the coadd-*.fits file of the same healpix or tile")
+        raise ValueError(
+            f"{path} is a per-exposure spectra file (one row per exposure); "
+            f"use the coadd-*.fits file of the same healpix or tile"
+        )
     if use_desispec is None:
         import importlib.util
+
         try:
             use_desispec = importlib.util.find_spec("desispec") is not None
         except (ImportError, ValueError):
@@ -153,6 +166,7 @@ def read_desi(path, targetid, redrock=None, use_desispec=None):
 def _read_with_desispec(path, tid):
     from desispec.io import read_spectra
     from desispec.coaddition import coadd_cameras as _cc
+
     sp = read_spectra(str(path), targetids=[tid])
     sp = _cc(sp)
     idx = np.flatnonzero(np.asarray(sp.fibermap["TARGETID"]) == tid)
@@ -169,6 +183,7 @@ def _read_with_desispec(path, tid):
 
 def _read_meta(path, tid):
     from astropy.io import fits
+
     with fits.open(path, memmap=False) as h:
         fm = h["FIBERMAP"].data
         i = _fibermap_row(fm, tid)
@@ -178,11 +193,15 @@ def _read_meta(path, tid):
 
 def _meta_from_fibermap(fm, i, h):
     names = fm.columns.names
-    meta = dict(ebv=float(fm["EBV"][i]) if "EBV" in names else 0.0,
-                ra=float(fm["TARGET_RA"][i]) if "TARGET_RA" in names else np.nan,
-                dec=float(fm["TARGET_DEC"][i]) if "TARGET_DEC" in names else np.nan,
-                nexp=int(fm["COADD_NUMEXP"][i]) if "COADD_NUMEXP" in names else -1,
-                mjd=np.nan, mjd_min=np.nan, mjd_max=np.nan)
+    meta = dict(
+        ebv=float(fm["EBV"][i]) if "EBV" in names else 0.0,
+        ra=float(fm["TARGET_RA"][i]) if "TARGET_RA" in names else np.nan,
+        dec=float(fm["TARGET_DEC"][i]) if "TARGET_DEC" in names else np.nan,
+        nexp=int(fm["COADD_NUMEXP"][i]) if "COADD_NUMEXP" in names else -1,
+        mjd=np.nan,
+        mjd_min=np.nan,
+        mjd_max=np.nan,
+    )
     hdr = h[0].header
     meta["survey"] = str(hdr.get("SURVEY", "")).strip()
     meta["program"] = str(hdr.get("PROGRAM", "")).strip()
@@ -204,6 +223,7 @@ def _read_with_astropy(path, tid):
     # with BZERO, which astropy cannot slice through a memory map; ``section`` still
     # reads only the rows it is asked for
     from astropy.io import fits
+
     with fits.open(path, memmap=False) as h:
         fm = h["FIBERMAP"].data
         i = _fibermap_row(fm, tid)
@@ -215,11 +235,16 @@ def _read_with_astropy(path, tid):
             waves.append(np.asarray(h[f"{c}_WAVELENGTH"].data, float))
             fluxes.append(np.asarray(h[f"{c}_FLUX"].section[i, :], float))
             ivars.append(np.asarray(h[f"{c}_IVAR"].section[i, :], float))
-            masks.append(np.asarray(h[f"{c}_MASK"].section[i, :]) if f"{c}_MASK" in h
-                         else np.zeros(waves[-1].size, dtype=np.int32))
+            masks.append(
+                np.asarray(h[f"{c}_MASK"].section[i, :])
+                if f"{c}_MASK" in h
+                else np.zeros(waves[-1].size, dtype=np.int32)
+            )
         order = np.argsort([np.mean(w) for w in waves])
-        waves = [waves[k] for k in order]; fluxes = [fluxes[k] for k in order]
-        ivars = [ivars[k] for k in order]; masks = [masks[k] for k in order]
+        waves = [waves[k] for k in order]
+        fluxes = [fluxes[k] for k in order]
+        ivars = [ivars[k] for k in order]
+        masks = [masks[k] for k in order]
         meta = _meta_from_fibermap(fm, i, h)
     if len(cams) == 1:
         return waves[0], fluxes[0], ivars[0], masks[0], meta
@@ -230,6 +255,7 @@ def _read_with_astropy(path, tid):
 def read_redrock(path, targetid):
     """Redshift of one target from a redrock file (extension REDSHIFTS)."""
     from astropy.io import fits
+
     tid = int(targetid)
     with fits.open(path, memmap=False) as h:
         t = h["REDSHIFTS"].data
@@ -237,9 +263,12 @@ def read_redrock(path, targetid):
         if idx.size == 0:
             return dict(z=np.nan, zerr=np.nan, zwarn=-1, spectype="")
         i = int(idx[0])
-        return dict(z=float(t["Z"][i]), zerr=float(t["ZERR"][i]) if "ZERR" in t.columns.names else np.nan,
-                    zwarn=int(t["ZWARN"][i]) if "ZWARN" in t.columns.names else -1,
-                    spectype=str(t["SPECTYPE"][i]).strip() if "SPECTYPE" in t.columns.names else "")
+        return dict(
+            z=float(t["Z"][i]),
+            zerr=float(t["ZERR"][i]) if "ZERR" in t.columns.names else np.nan,
+            zwarn=int(t["ZWARN"][i]) if "ZWARN" in t.columns.names else -1,
+            spectype=str(t["SPECTYPE"][i]).strip() if "SPECTYPE" in t.columns.names else "",
+        )
 
 
 def write_single_target(hdul_or_path, targetid, out_path, redrock_in=None, redrock_out=None):
@@ -247,6 +276,7 @@ def write_single_target(hdul_or_path, targetid, out_path, redrock_in=None, redro
     target, keeping the DESI extension layout so that both readers accept it.
     ``hdul_or_path`` may be an open HDUList (also a lazily loaded remote one)."""
     from astropy.io import fits
+
     tid = int(targetid)
     own = isinstance(hdul_or_path, (str, os.PathLike))
     h = fits.open(hdul_or_path, memmap=False) if own else hdul_or_path
@@ -257,14 +287,16 @@ def write_single_target(hdul_or_path, targetid, out_path, redrock_in=None, redro
         for hdu in h[1:]:
             name = hdu.name
             if name in ("FIBERMAP", "SCORES", "EXTRA_CATALOG"):
-                out.append(fits.BinTableHDU(data=hdu.data[i:i + 1], header=hdu.header, name=name))
+                out.append(fits.BinTableHDU(data=hdu.data[i : i + 1], header=hdu.header, name=name))
             elif name == "EXP_FIBERMAP":
                 rows = np.flatnonzero(np.asarray(hdu.data["TARGETID"]).astype(np.int64) == tid)
                 out.append(fits.BinTableHDU(data=hdu.data[rows], header=hdu.header, name=name))
             elif re.match(r"^[BRZ]_WAVELENGTH$", name):
                 out.append(fits.ImageHDU(data=np.asarray(hdu.data), header=hdu.header, name=name))
             elif re.match(r"^[BRZ]_(FLUX|IVAR|MASK|RESOLUTION|MODEL)$", name):
-                out.append(fits.ImageHDU(data=np.asarray(hdu.section[i:i + 1]), header=hdu.header, name=name))
+                out.append(
+                    fits.ImageHDU(data=np.asarray(hdu.section[i : i + 1]), header=hdu.header, name=name)
+                )
         fits.HDUList(out).writeto(out_path, overwrite=True)
     finally:
         if own:

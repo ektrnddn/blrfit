@@ -1,4 +1,5 @@
 """The command-line tool on the bundled examples."""
+
 import json
 
 import numpy as np
@@ -13,17 +14,48 @@ END_POINT_KMS = 100.0
 
 
 def test_fit_sdss_example(tmp_path):
-    rc = main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Halpha,Hbeta,MgII", "--out", str(tmp_path), "--no-figure", "--quiet"])
+    rc = main(
+        [
+            "fit",
+            SDSS_EXAMPLE,
+            "--survey",
+            "sdss",
+            "--sdss-mask-policy",
+            "ivar",
+            "--z",
+            str(Z_J001224),
+            "--lines",
+            "Halpha,Hbeta,MgII",
+            "--out",
+            str(tmp_path),
+            "--no-figure",
+            "--quiet",
+        ]
+    )
     assert rc == 0
     doc = json.load(open(tmp_path / "spec-0651-52141-0072_fit.json"))
-    assert doc["input"]["kind"] == "sdss" and doc["input"]["z"] == Z_J001224 and doc["input"]["z_source"] == "argument"
+    assert (
+        doc["input"]["kind"] == "sdss"
+        and doc["input"]["z"] == Z_J001224
+        and doc["input"]["z_source"] == "argument"
+    )
     assert doc["input"]["ebv"] == 0.0
     ha, hb, mg = doc["lines"]["Halpha"], doc["lines"]["Hbeta"], doc["lines"]["MgII"]
     # the pinned values, to the end-point tolerance
-    assert ha["fitted"] and ha["label"] == "C" and abs(ha["dv"] - (-1061.0)) < END_POINT_KMS and ha["strong_offset"]
+    assert (
+        ha["fitted"]
+        and ha["label"] == "C"
+        and abs(ha["dv"] - (-1061.0)) < END_POINT_KMS
+        and ha["strong_offset"]
+    )
     assert hb["fitted"] and hb["label"] == "C" and abs(hb["dv"] - (-1243.5)) < END_POINT_KMS
     assert hb["systemic_source"] == "Halpha prior"
-    assert not mg["fitted"] and mg["label"] == "" and mg["class_text"] == "not fitted" and "not fitted" in mg["reasons"][0]
+    assert (
+        not mg["fitted"]
+        and mg["label"] == ""
+        and mg["class_text"] == "not fitted"
+        and "not fitted" in mg["reasons"][0]
+    )
     assert mg["dv"] is None
     assert ha["dv_err_mc"] is None and ha["dv_err_model"] is None
     assert doc["uncertainty"]["status"] == "not_computed" and not doc["uncertainty"]["calibrated"]
@@ -34,7 +66,24 @@ def test_fit_sdss_example(tmp_path):
 
 
 def test_fit_writes_figure_and_pickle(tmp_path):
-    rc = main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--pickle", "--quiet"])
+    rc = main(
+        [
+            "fit",
+            SDSS_EXAMPLE,
+            "--survey",
+            "sdss",
+            "--sdss-mask-policy",
+            "ivar",
+            "--z",
+            str(Z_J001224),
+            "--lines",
+            "Hbeta",
+            "--out",
+            str(tmp_path),
+            "--pickle",
+            "--quiet",
+        ]
+    )
     assert rc == 0
     assert (tmp_path / "spec-0651-52141-0072_fit.png").stat().st_size > 10000
     assert (tmp_path / "spec-0651-52141-0072_fit.pkl").exists()
@@ -43,23 +92,84 @@ def test_fit_writes_figure_and_pickle(tmp_path):
 
 
 def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
-    rc = main(["fit", DESI_EXAMPLE, "--targetid", str(DESI_TARGETID), "--lines", "Halpha,Hbeta", "--out", str(tmp_path),
-               "--no-figure", "--quiet"])
+    rc = main(
+        [
+            "fit",
+            DESI_EXAMPLE,
+            "--targetid",
+            str(DESI_TARGETID),
+            "--lines",
+            "Halpha,Hbeta",
+            "--out",
+            str(tmp_path),
+            "--no-figure",
+            "--quiet",
+        ]
+    )
     assert rc == 0
     doc = json.load(open(tmp_path / "coadd-main-dark-17260-39627574082538900_fit.json"))
     assert doc["input"]["kind"] == "desi" and abs(doc["input"]["z"] - 0.22032) < 1e-4
     assert doc["input"]["ebv_source"] == "FIBERMAP" and abs(doc["input"]["ebv"] - 0.0323) < 1e-3
     ha = doc["lines"]["Halpha"]
-    assert ha["fitted"] and ha["label"] == "F" and abs(ha["dv"] + 37.0) < END_POINT_KMS and ha["flags"] == [] and ha["measurable"]
+    assert (
+        ha["fitted"]
+        and ha["label"] == "F"
+        and abs(ha["dv"] + 37.0) < END_POINT_KMS
+        and ha["flags"] == []
+        and ha["measurable"]
+    )
     assert doc["input"]["z_source"] == "redrock"
     assert doc["continuum"]["host_applied"]
 
 
 def test_fit_csv_example_matches_sdss_fit(tmp_path):
-    main(["fit", SDSS_EXAMPLE, "--survey", "sdss", "--sdss-mask-policy", "ivar", "--z", str(Z_J001224), "--lines", "Hbeta", "--out", str(tmp_path), "--no-figure", "--quiet"])
-    rc = main(["fit", CSV_EXAMPLE, "--survey", "generic", "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--wave-unit", "nm",
-               "--frame", "rest", "--air", "--z", str(Z_J001224), "--flux-scale", "10", "--lines", "Hbeta",
-               "--out", str(tmp_path), "--no-figure", "--quiet"])
+    main(
+        [
+            "fit",
+            SDSS_EXAMPLE,
+            "--survey",
+            "sdss",
+            "--sdss-mask-policy",
+            "ivar",
+            "--z",
+            str(Z_J001224),
+            "--lines",
+            "Hbeta",
+            "--out",
+            str(tmp_path),
+            "--no-figure",
+            "--quiet",
+        ]
+    )
+    rc = main(
+        [
+            "fit",
+            CSV_EXAMPLE,
+            "--survey",
+            "generic",
+            "--wave",
+            "lambda_nm",
+            "--flux",
+            "f_lambda",
+            "--err",
+            "sigma",
+            "--wave-unit",
+            "nm",
+            "--frame",
+            "rest",
+            "--air",
+            "--z",
+            str(Z_J001224),
+            "--flux-scale",
+            "10",
+            "--lines",
+            "Hbeta",
+            "--out",
+            str(tmp_path),
+            "--no-figure",
+            "--quiet",
+        ]
+    )
     assert rc == 0
     a = json.load(open(tmp_path / "spec-0651-52141-0072_fit.json"))["lines"]["Hbeta"]
     b = json.load(open(tmp_path / "J001224_rest_air_nm_fit.json"))["lines"]["Hbeta"]
@@ -69,17 +179,48 @@ def test_fit_csv_example_matches_sdss_fit(tmp_path):
 
 def test_fit_missing_redshift_exits():
     with pytest.raises(SystemExit):
-        main(["fit", CSV_EXAMPLE, "--survey", "generic", "--wave", "lambda_nm", "--flux", "f_lambda", "--err", "sigma", "--frame", "rest", "--quiet"])
+        main(
+            [
+                "fit",
+                CSV_EXAMPLE,
+                "--survey",
+                "generic",
+                "--wave",
+                "lambda_nm",
+                "--flux",
+                "f_lambda",
+                "--err",
+                "sigma",
+                "--frame",
+                "rest",
+                "--quiet",
+            ]
+        )
     with pytest.raises(SystemExit):
-        main(["fit", DESI_EXAMPLE, "--survey", "auto", "--quiet"])          # a coadd needs --targetid
+        main(["fit", DESI_EXAMPLE, "--survey", "auto", "--quiet"])  # a coadd needs --targetid
 
 
 def test_rv_two_sdss_epochs(tmp_path):
-    rc = main(["rv", SDSS_EXAMPLE, SDSS_EXAMPLE_2, "--z", str(Z_J001224), "--line", "Hbeta", "--out", str(tmp_path), "--quiet"])
+    rc = main(
+        [
+            "rv",
+            SDSS_EXAMPLE,
+            SDSS_EXAMPLE_2,
+            "--z",
+            str(Z_J001224),
+            "--line",
+            "Hbeta",
+            "--out",
+            str(tmp_path),
+            "--quiet",
+        ]
+    )
     assert rc == 0
     doc = json.load(open(tmp_path / "spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.json"))
     assert doc["measured"] and doc["line"] == "Hbeta"
-    assert doc["baseline_days"] == pytest.approx(56628 - 52141) and doc["baseline_rest_yr"] == pytest.approx(4487 / 365.25 / 1.2288, rel=1e-6)
+    assert doc["baseline_days"] == pytest.approx(56628 - 52141) and doc["baseline_rest_yr"] == pytest.approx(
+        4487 / 365.25 / 1.2288, rel=1e-6
+    )
     assert abs(doc["dv"] - (-294)) < 40 and 10 < doc["err"] < 100
     # two SDSS spectra on one logarithmic lattice are compared by integer placement, without resampling
     assert doc["consistent"] and not doc["at_bound"] and not doc["regridded"]
@@ -103,8 +244,21 @@ def test_rv_two_sdss_epochs(tmp_path):
 
 
 def test_rv_two_lines_and_the_two_line_criterion(tmp_path):
-    rc = main(["rv", SDSS_EXAMPLE, SDSS_EXAMPLE_2, "--z", str(Z_J001224), "--line", "Halpha,Hbeta", "--out", str(tmp_path),
-               "--no-figure", "--quiet"])
+    rc = main(
+        [
+            "rv",
+            SDSS_EXAMPLE,
+            SDSS_EXAMPLE_2,
+            "--z",
+            str(Z_J001224),
+            "--line",
+            "Halpha,Hbeta",
+            "--out",
+            str(tmp_path),
+            "--no-figure",
+            "--quiet",
+        ]
+    )
     assert rc == 0
     doc = json.load(open(tmp_path / "spec-0651-52141-0072_vs_spec-7169-56628-0344_rv.json"))
     assert set(doc["lines"]) == {"Halpha", "Hbeta"}
@@ -114,13 +268,13 @@ def test_rv_two_lines_and_the_two_line_criterion(tmp_path):
     assert ha["profile_grade"] == "changed" and hb["profile_grade"] == "stable"
     assert ha["frame_ok"] and hb["frame_ok"] and hb["zp_applied"] and not ha["zp_applied"]
     # The diagnostic now uses the same corrected shifts/errors as the display.
-    delta = ha['dv_corrected'] - hb['dv_corrected']
-    sigma = abs(delta) / np.hypot(ha['err_total'], hb['err_total'])
-    assert doc['two_line']['difference'] == pytest.approx(delta)
-    assert doc['two_line']['sigma'] == pytest.approx(sigma)
-    assert doc['two_line']['consistent'] == (sigma <= 2)
-    assert doc["two_line"]["same_sign"] and not doc['two_line']['calibration_supported']
-    assert doc["line"] == "Halpha" and doc["dv"] == ha["dv"]        # the first line at the top level
+    delta = ha["dv_corrected"] - hb["dv_corrected"]
+    sigma = abs(delta) / np.hypot(ha["err_total"], hb["err_total"])
+    assert doc["two_line"]["difference"] == pytest.approx(delta)
+    assert doc["two_line"]["sigma"] == pytest.approx(sigma)
+    assert doc["two_line"]["consistent"] == (sigma <= 2)
+    assert doc["two_line"]["same_sign"] and not doc["two_line"]["calibration_supported"]
+    assert doc["line"] == "Halpha" and doc["dv"] == ha["dv"]  # the first line at the top level
 
 
 def test_version():

@@ -18,6 +18,7 @@ every component count, the lowest finite objective belongs to a converged
 attempt, so the rule that discarded unconverged attempts would have selected
 the same solutions; the classes are those of the pins.
 """
+
 import json
 import os
 
@@ -32,19 +33,21 @@ from blrfit.model.fit import PREFIX
 from conftest import DATA, EXAMPLES, SDSS_EXAMPLE, Z_J001224
 from synth import make_spectrum
 
-BROAD = [dict(line="Halpha", v=1200., fwhm=4000., ew=150.),
-         dict(line="Hbeta", v=1200., fwhm=4000., ew=50.)]
+BROAD = [
+    dict(line="Halpha", v=1200.0, fwhm=4000.0, ew=150.0),
+    dict(line="Hbeta", v=1200.0, fwhm=4000.0, ew=50.0),
+]
 
 
 @pytest.fixture(scope="module")
 def synthetic():
-    return make_spectrum(snr=30., seed=7, broad=BROAD)
+    return make_spectrum(snr=30.0, seed=7, broad=BROAD)
 
 
 def fit_synthetic(sp, **kw):
     settings = dict(host=False, fe=False, max_broad=2, complexes=("Halpha", "Hbeta"))
     settings.update(kw)
-    return blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], .25, **settings)
+    return blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], 0.25, **settings)
 
 
 @pytest.fixture(scope="module")
@@ -117,11 +120,13 @@ def test_unconverged_continuum_does_not_stop_the_lines(synthetic, monkeypatch):
 
 def test_bic_margin_crosses_the_selection_edge_and_keeps_raw_gap(example, synthetic):
     from blrfit.model.broad import select_by_bic
+
     _, res = example
     row = blrfit.summary_row(res)
     for name in ("Halpha", "Hbeta"):
         r = res["fits"][name]
-        b = np.asarray(r["all_bic"]); i = r["all_n_broad"].index(r["n_broad"])
+        b = np.asarray(r["all_bic"])
+        i = r["all_n_broad"].index(r["n_broad"])
         assert len(b) == 3
         expected = min(abs(b[i] - b[j]) for j in range(len(b)) if j != i)
         assert np.isfinite(r["bic_margin"]) and r["bic_margin"] > 0
@@ -144,11 +149,13 @@ def test_bic_margin_crosses_the_selection_edge_and_keeps_raw_gap(example, synthe
 def test_input_scale_is_guarded(example):
     sp, _ = example
     with pytest.raises(ValueError, match="flux_scale"):
-        blrfit.fit_spectrum(sp["wave"], sp["flux"] * 1e-17, sp["ivar"] * 1e34, Z_J001224,
-                            complexes=("Halpha", "Hbeta"))
+        blrfit.fit_spectrum(
+            sp["wave"], sp["flux"] * 1e-17, sp["ivar"] * 1e34, Z_J001224, complexes=("Halpha", "Hbeta")
+        )
     with pytest.raises(ValueError, match="flux_scale"):
-        blrfit.fit_spectrum(sp["wave"], sp["flux"] * 1e6, sp["ivar"] * 1e-12, Z_J001224,
-                            complexes=("Halpha", "Hbeta"))
+        blrfit.fit_spectrum(
+            sp["wave"], sp["flux"] * 1e6, sp["ivar"] * 1e-12, Z_J001224, complexes=("Halpha", "Hbeta")
+        )
     for bad in (0.0, -1.0, np.nan, np.inf):
         with pytest.raises(ValueError, match="flux_scale"):
             blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z_J001224, flux_scale=bad)
@@ -163,9 +170,15 @@ def test_flux_scale_reproduces_the_unscaled_fit(example):
     flux), which moves the solver's end point by 0.08 km/s on this spectrum:
     the classes and the offsets agree to the tolerance of that sensitivity."""
     sp, res = example
-    scale = 2.0 ** -56                                     # 1.4e-17: the order of cgs flux
-    exact = blrfit.fit_spectrum(sp["wave"], sp["flux"] * scale, sp["ivar"] / scale**2, Z_J001224,
-                                complexes=("Halpha", "Hbeta"), flux_scale=1.0 / scale)
+    scale = 2.0**-56  # 1.4e-17: the order of cgs flux
+    exact = blrfit.fit_spectrum(
+        sp["wave"],
+        sp["flux"] * scale,
+        sp["ivar"] / scale**2,
+        Z_J001224,
+        complexes=("Halpha", "Hbeta"),
+        flux_scale=1.0 / scale,
+    )
     assert exact["settings"]["flux_scale"] == 1.0 / scale and res["settings"]["flux_scale"] == 1.0
     for k in ("wave_rest", "flux_rest", "ivar_rest"):
         assert np.array_equal(exact[k], res[k])
@@ -177,8 +190,14 @@ def test_flux_scale_reproduces_the_unscaled_fit(example):
         # flux-bearing outputs are in the scaled unit, that is, the unscaled one
         for k in ("broad_flux", "broad_lum", "broad_ew"):
             assert exact["meas"][name][k] == pytest.approx(res["meas"][name][k], rel=1e-9)
-    decimal = blrfit.fit_spectrum(sp["wave"], sp["flux"] * 1e-17, sp["ivar"] * 1e34, Z_J001224,
-                                  complexes=("Halpha", "Hbeta"), flux_scale=1e17)
+    decimal = blrfit.fit_spectrum(
+        sp["wave"],
+        sp["flux"] * 1e-17,
+        sp["ivar"] * 1e34,
+        Z_J001224,
+        complexes=("Halpha", "Hbeta"),
+        flux_scale=1e17,
+    )
     for name in ("Halpha", "Hbeta"):
         assert decimal["cls"][name]["label"] == res["cls"][name]["label"]
         assert decimal["fits"][name]["n_broad"] == res["fits"][name]["n_broad"]
@@ -205,8 +224,9 @@ def test_pins_select_converged_attempts(pin):
     to a converged attempt, the continuum converged, and the classes are the
     pinned ones."""
     sp = read_sdss(_spectrum_path(pin["file"]))
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"],
-                              complexes=tuple(pin["complexes"]))
+    res = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"], complexes=tuple(pin["complexes"])
+    )
     row = blrfit.summary_row(res)
     assert res["continuum_status"] == "success"
     assert set(res["fits"]) == set(pin["params"])

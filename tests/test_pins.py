@@ -97,6 +97,7 @@ differs from 0.1.0 by design (the continuous Fe II operator; the ultraviolet
 Fe II width fixed where its window is short), and what that changes on the
 pinned spectra is recorded in ``docs/deltas_0.1.0_to_0.2.0.csv``.
 """
+
 import json
 import os
 
@@ -105,15 +106,30 @@ import pytest
 
 import blrfit
 from blrfit.classify import classify
-from blrfit.constants import (BROAD_WIDTH_SLOPE, C_KMS, COMPLEX_LINE, COMPLEX_WINDOW, DBIC,
-                              ERR_FLOOR, HOST_CONTINUUM_ONLY, LAM, MIN_HOST_FRAC,
-                              NARROW_PRIOR_MIN_SNR, O3_START_MIN_SNR, SYS_PRIOR_KMS,
-                              SYS_PRIOR_MIN_SNR)
+from blrfit.constants import (
+    BROAD_WIDTH_SLOPE,
+    C_KMS,
+    COMPLEX_LINE,
+    COMPLEX_WINDOW,
+    DBIC,
+    ERR_FLOOR,
+    HOST_CONTINUUM_ONLY,
+    LAM,
+    MIN_HOST_FRAC,
+    NARROW_PRIOR_MIN_SNR,
+    O3_START_MIN_SNR,
+    SYS_PRIOR_KMS,
+    SYS_PRIOR_MIN_SNR,
+)
 from blrfit.io import read_desi, read_sdss
 from blrfit.io.desi import read_redrock, redrock_sibling
 from blrfit.measure import measure_complex
-from blrfit.model.broad import (broad_parameter_pairs, covered_velocity_bounds, select_by_bic,
-                                width_offset_penalty)
+from blrfit.model.broad import (
+    broad_parameter_pairs,
+    covered_velocity_bounds,
+    select_by_bic,
+    width_offset_penalty,
+)
 from blrfit.model.continuum import conti_model, fe_templates, host_continuum_only, pca_templates
 from blrfit.model.continuum import FeTemplate
 from blrfit.constants import S2F
@@ -121,28 +137,66 @@ from scipy.ndimage import gaussian_filter1d
 from blrfit.model.extinction import deredden
 from blrfit.model.fit import PREFIX, _lumdist_cm
 from blrfit.model.lines import build_complex, eval_components
-from blrfit.model.narrow import (has_oiii_ordering, nlr_wing_penalty, oiii_order_penalty,
-                                 sii_soft_tie_penalty, systemic_prior_penalty)
+from blrfit.model.narrow import (
+    has_oiii_ordering,
+    nlr_wing_penalty,
+    oiii_order_penalty,
+    sii_soft_tie_penalty,
+    systemic_prior_penalty,
+)
 from conftest import DATA, EXAMPLES
 
 STRICT = os.environ.get("BLRFIT_STRICT_PINS", "") not in ("", "0")
 
 # the end point of a fresh fit (second part)
-END_POINT_KMS = 100.0          # c50_sys: one third of the 300 km/s class threshold
-CHI2_WORSE = 0.10              # chi-square may exceed the pin by this fraction; lower is allowed
+END_POINT_KMS = 100.0  # c50_sys: one third of the 300 km/s class threshold
+CHI2_WORSE = 0.10  # chi-square may exceed the pin by this fraction; lower is allowed
 
 # the evaluation at the pinned parameters (first part)
 CHI2_REL = 1e-9
-KMS_ABS = 1e-3                 # velocities and widths, km/s (the profile grid is 5 km/s)
-Z_ABS = KMS_ABS / C_KMS        # z_sys: the same 1e-3 km/s
-OTHER_REL = 1e-6               # fluxes, ratios, indices, signal-to-noise
-KMS_STATS = frozenset(("v_sys", "sig_sys", "v_o3", "v_sii", "sig_sii", "v_peak", "centroid", "c25", "c50",
-                       "c75", "c90", "fwhm", "W25", "W75", "sigma_line", "peak_sep", "v_peak_sys",
-                       "centroid_sys", "c50_sys", "c25_sys", "c75_sys", "peak_top", "peak_top_sys",
-                       "centroid25_sys", "centroid50_sys", "v_o3_peak", "v_o3_pre", "nw_v", "nw_sig",
-                       "v_cover_lo", "v_cover_hi", "v_single_gauss", "data_v_peak", "data_c50",
-                       "data_centroid_win",
-                       "conti_feop_fwhm"))     # the Fe II broadening, a FWHM in km/s
+KMS_ABS = 1e-3  # velocities and widths, km/s (the profile grid is 5 km/s)
+Z_ABS = KMS_ABS / C_KMS  # z_sys: the same 1e-3 km/s
+OTHER_REL = 1e-6  # fluxes, ratios, indices, signal-to-noise
+KMS_STATS = frozenset(
+    (
+        "v_sys",
+        "sig_sys",
+        "v_o3",
+        "v_sii",
+        "sig_sii",
+        "v_peak",
+        "centroid",
+        "c25",
+        "c50",
+        "c75",
+        "c90",
+        "fwhm",
+        "W25",
+        "W75",
+        "sigma_line",
+        "peak_sep",
+        "v_peak_sys",
+        "centroid_sys",
+        "c50_sys",
+        "c25_sys",
+        "c75_sys",
+        "peak_top",
+        "peak_top_sys",
+        "centroid25_sys",
+        "centroid50_sys",
+        "v_o3_peak",
+        "v_o3_pre",
+        "nw_v",
+        "nw_sig",
+        "v_cover_lo",
+        "v_cover_hi",
+        "v_single_gauss",
+        "data_v_peak",
+        "data_c50",
+        "data_centroid_win",
+        "conti_feop_fwhm",
+    )
+)  # the Fe II broadening, a FWHM in km/s
 
 
 def _pins():
@@ -203,10 +257,12 @@ def rest_frame(sp, z, ebv, err_floor=ERR_FLOOR):
     the rest frame). The second part checks that the ``wave_rest``,
     ``flux_rest`` and ``ivar_rest`` arrays of a fresh fit equal these, so a
     change of that step, its default error floor included, is caught."""
-    wave_obs = np.asarray(sp["wave"], float); flux = np.asarray(sp["flux"], float)
+    wave_obs = np.asarray(sp["wave"], float)
+    flux = np.asarray(sp["flux"], float)
     ivar = np.asarray(sp["ivar"], float)
     bad = ~np.isfinite(flux) | ~np.isfinite(ivar) | (ivar <= 0)
-    flux = np.where(bad, 0.0, flux); ivar = np.where(bad, 0.0, ivar)
+    flux = np.where(bad, 0.0, flux)
+    ivar = np.where(bad, 0.0, ivar)
     flux, ivar = deredden(wave_obs, flux, ivar, ebv)
     if err_floor and err_floor > 0:
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -218,7 +274,8 @@ def rest_frame(sp, z, ebv, err_floor=ERR_FLOOR):
 def pinned_continuum(pin, wr):
     """Power law + Fe II and the host model from the pinned continuum parameters,
     as ``fit_spectrum`` stores them."""
-    cd = pin["conti"]; hi = pin["host_info"]
+    cd = pin["conti"]
+    hi = pin["host_info"]
     cmodel = conti_model(wr, cd, *fe_templates())
     host = np.zeros_like(wr)
     if hi["applied"]:
@@ -229,7 +286,7 @@ def pinned_continuum(pin, wr):
         host = np.clip(host, 0, None)
         if HOST_CONTINUUM_ONLY:
             host = host_continuum_only(wr, host)
-        cmodel = (cmodel + host) - host        # conti_model is stored as (total) - host
+        cmodel = (cmodel + host) - host  # conti_model is stored as (total) - host
     return cmodel, host
 
 
@@ -238,7 +295,8 @@ def pinned_complex(pin, name, wr, fsub, ir):
     the components of ``build_complex`` and the chi-square of ``fit_complex``
     (weighted residuals followed by the penalty terms in their frozen order),
     evaluated at the pinned parameter dictionary."""
-    pref = pin["params"][name]; p = PREFIX[name]
+    pref = pin["params"][name]
+    p = PREFIX[name]
     n_broad = pin["summary"][f"{p}_n_broad"]
     lo, hi = COMPLEX_WINDOW[name]
     m = (wr > lo) & (wr < hi) & np.isfinite(fsub) & (ir > 0)
@@ -253,15 +311,21 @@ def pinned_complex(pin, name, wr, fsub, ir):
             kw["nw_prior"] = (pref["nw_f"], pref["nw_v"], pref["nw_sig"])
     ps, comps = build_complex(name, x, y, n_broad=n_broad, **kw)
     assert set(ps.names) | set(ps.derived) == set(pref), name
-    d = ps.full(np.array([pref[k] for k in ps.free_names]))     # fixed, tied and derived entries rebuilt
+    d = ps.full(np.array([pref[k] for k in ps.free_names]))  # fixed, tied and derived entries rebuilt
 
     r = (y - eval_components(x, d, comps)) * w
     pairs = broad_parameter_pairs(comps)
     if BROAD_WIDTH_SLOPE > 0 and pairs:
         r = np.concatenate([r, width_offset_penalty(d, pairs)])
     pre = pin["o3_prefit"]
-    if (name == "Halpha" and pre["v_o3"] is not None and pre["snr"] >= max(O3_START_MIN_SNR, SYS_PRIOR_MIN_SNR)
-            and "n_v" in ps.names and "n_v" not in ps.fixed and "n_v" not in ps.tie):
+    if (
+        name == "Halpha"
+        and pre["v_o3"] is not None
+        and pre["snr"] >= max(O3_START_MIN_SNR, SYS_PRIOR_MIN_SNR)
+        and "n_v" in ps.names
+        and "n_v" not in ps.fixed
+        and "n_v" not in ps.tie
+    ):
         r = np.concatenate([r, systemic_prior_penalty(d, (pre["v_o3"], SYS_PRIOR_KMS))])
     if name == "Halpha" and "nw_sig" in ps.names and "nw_sig" not in ps.fixed:
         r = np.concatenate([r, nlr_wing_penalty(d)])
@@ -269,11 +333,26 @@ def pinned_complex(pin, name, wr, fsub, ir):
         r = np.concatenate([r, sii_soft_tie_penalty(d)])
     if has_oiii_ordering(name, ps):
         r = np.concatenate([r, oiii_order_penalty(d)])
-    chi2 = float(np.sum(r ** 2))
-    n = int(m.sum()); k = len(ps.free_names)
-    return dict(name=name, ps=ps, comps=comps, d=d, chi2=chi2, npix=n, nfree=k, bic=chi2 + k * np.log(n),
-                n_broad=n_broad, window=(lo, hi), x=x, y=y, w=w, v_cover=v_cover,
-                all_bic=list(pin["all_bic"][name]))
+    chi2 = float(np.sum(r**2))
+    n = int(m.sum())
+    k = len(ps.free_names)
+    return dict(
+        name=name,
+        ps=ps,
+        comps=comps,
+        d=d,
+        chi2=chi2,
+        npix=n,
+        nfree=k,
+        bic=chi2 + k * np.log(n),
+        n_broad=n_broad,
+        window=(lo, hi),
+        x=x,
+        y=y,
+        w=w,
+        v_cover=v_cover,
+        all_bic=list(pin["all_bic"][name]),
+    )
 
 
 def pinned_result(pin, sp):
@@ -283,14 +362,28 @@ def pinned_result(pin, sp):
     cmodel, host = pinned_continuum(pin, wr)
     fsub = fr - host - cmodel
     dl = _lumdist_cm(pin["z"])
-    hi = dict(pin["host_info"]); hi["host_frac_4200_5000"] = _nan(hi["host_frac_4200_5000"])
+    hi = dict(pin["host_info"])
+    hi["host_frac_4200_5000"] = _nan(hi["host_frac_4200_5000"])
     # the host is applied exactly when eigenspectra were kept and the host fraction reaches MIN_HOST_FRAC
     frac = hi["host_frac_4200_5000"]
     assert hi["applied"] == (hi["n_gal"] > 0 and np.isfinite(frac) and frac >= MIN_HOST_FRAC), hi
     pre = pin["o3_prefit"]
-    res = dict(z=pin["z"], wave_rest=wr, flux_rest=fr, ivar_rest=ir, host_model=host, host_info=hi,
-               conti=dict(pin["conti"]), conti_model=cmodel, flux_sub=fsub,
-               o3_prefit=dict(v_o3=_nan(pre["v_o3"]), snr=pre["snr"]), fits={}, meas={}, cls={}, err={})
+    res = dict(
+        z=pin["z"],
+        wave_rest=wr,
+        flux_rest=fr,
+        ivar_rest=ir,
+        host_model=host,
+        host_info=hi,
+        conti=dict(pin["conti"]),
+        conti_model=cmodel,
+        flux_sub=fsub,
+        o3_prefit=dict(v_o3=_nan(pre["v_o3"]), snr=pre["snr"]),
+        fits={},
+        meas={},
+        cls={},
+        err={},
+    )
     prior_snr = None
     for name in [c for c in ("Halpha", "Hbeta", "MgII") if c in pin["params"]]:
         r = pinned_complex(pin, name, wr, fsub, ir)
@@ -305,8 +398,10 @@ def pinned_result(pin, sp):
             if prior_snr is not None:
                 m["sys_snr"] = prior_snr
         if name == "Halpha":
-            m["v_o3_pre"] = res["o3_prefit"]["v_o3"]; m["o3_pre_snr"] = res["o3_prefit"]["snr"]
-        res["fits"][name] = r; res["meas"][name] = m
+            m["v_o3_pre"] = res["o3_prefit"]["v_o3"]
+            m["o3_pre_snr"] = res["o3_prefit"]["snr"]
+        res["fits"][name] = r
+        res["meas"][name] = m
         if name == "Halpha" and m["narrow_peak_snr"] >= NARROW_PRIOR_MIN_SNR and np.isfinite(m["v_sys"]):
             prior_snr = m["narrow_peak_snr"]
     for name, m in res["meas"].items():
@@ -317,18 +412,19 @@ def pinned_result(pin, sp):
 @pytest.mark.parametrize("pin", _pins(), ids=lambda p: p["file"])
 def test_legacy_pin_evaluated_from_the_parameters(pin, monkeypatch):
     """Reconstruct frozen 0.1.0 values with its historical Fe operator."""
-    def historical_broadening(self, width):
-        f = int(round(max(width, self.intrinsic + 10.) / 50.)) * 50.
-        sigma = np.sqrt(max(f**2 - self.intrinsic**2, 100.)) / S2F / self.pix_kms
-        return gaussian_filter1d(self.flux, sigma, mode='nearest')
 
-    monkeypatch.setattr(FeTemplate, 'broadened', historical_broadening)
+    def historical_broadening(self, width):
+        f = int(round(max(width, self.intrinsic + 10.0) / 50.0)) * 50.0
+        sigma = np.sqrt(max(f**2 - self.intrinsic**2, 100.0)) / S2F / self.pix_kms
+        return gaussian_filter1d(self.flux, sigma, mode="nearest")
+
+    monkeypatch.setattr(FeTemplate, "broadened", historical_broadening)
     sp = read_sdss(_spectrum_path(pin["file"]))
     res = pinned_result(pin, sp)
     departures = []
     for name, pref in pin["params"].items():
         r = res["fits"][name]
-        for k, v in pref.items():                     # the derived entries are rebuilt from the free ones
+        for k, v in pref.items():  # the derived entries are rebuilt from the free ones
             if not _close(r["d"][k], v, 1e-12, 0.0):
                 departures.append(f"{name} parameter {k} {r['d'][k]!r} vs pinned {v!r}")
         chi2_ref = pin["chi2"][name]
@@ -338,7 +434,9 @@ def test_legacy_pin_evaluated_from_the_parameters(pin, monkeypatch):
         if not _close(r["bic"], bics[r["n_broad"] - 1], CHI2_REL, 0.0):
             departures.append(f"{name} BIC {r['bic']!r} vs pinned {bics[r['n_broad'] - 1]!r}")
         if select_by_bic(bics, DBIC) != r["n_broad"] - 1:
-            departures.append(f"{name} BIC selection {select_by_bic(bics, DBIC) + 1} vs pinned n_broad {r['n_broad']}")
+            departures.append(
+                f"{name} BIC selection {select_by_bic(bics, DBIC) + 1} vs pinned n_broad {r['n_broad']}"
+            )
     departures += _row_departures(blrfit.summary_row(res), pin["summary"])
     assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
 
@@ -371,20 +469,27 @@ def _end_point_departures(res, row, pin):
         got, r = row[f"{p}_c50_sys"], _nan(ref[f"{p}_c50_sys"])
         if np.isfinite(r):
             if not abs(got - r) < END_POINT_KMS:
-                departures.append(f"{name} c50_sys {got:.1f} vs pinned {r:.1f} km/s (tolerance {END_POINT_KMS:.0f})")
+                departures.append(
+                    f"{name} c50_sys {got:.1f} vs pinned {r:.1f} km/s (tolerance {END_POINT_KMS:.0f})"
+                )
         elif np.isfinite(got):
             departures.append(f"{name} c50_sys {got:.1f} vs pinned NaN")
         chi2, chi2_ref = res["fits"][name]["chi2"], pin["chi2"][name]
         if not chi2 <= (1 + CHI2_WORSE) * chi2_ref:
-            departures.append(f"{name} chi2 {chi2:.2f} vs pinned {chi2_ref:.2f} (more than {100 * CHI2_WORSE:.0f} per cent worse)")
+            departures.append(
+                f"{name} chi2 {chi2:.2f} vs pinned {chi2_ref:.2f} (more than {100 * CHI2_WORSE:.0f} per cent worse)"
+            )
     return departures
 
 
 def _rest_frame_departures(res, sp, pin):
     """The fresh fit started from the rest-frame arrays of the first part."""
     wr, fr, ir = rest_frame(sp, pin["z"], pin["ebv"])
-    return [f"{k} of the fresh fit differs from the preprocessing of the first part"
-            for k, a in (("wave_rest", wr), ("flux_rest", fr), ("ivar_rest", ir)) if not np.array_equal(res[k], a)]
+    return [
+        f"{k} of the fresh fit differs from the preprocessing of the first part"
+        for k, a in (("wave_rest", wr), ("flux_rest", fr), ("ivar_rest", ir))
+        if not np.array_equal(res[k], a)
+    ]
 
 
 @pytest.mark.parametrize("pin", _pins(), ids=lambda p: p["file"])
@@ -395,9 +500,12 @@ def test_pin_reproduced(pin):
     first part. Not bit for bit in strict mode: the model changed since 0.1.0
     (the third part holds the corrected fitter to its own pins)."""
     sp = read_sdss(_spectrum_path(pin["file"]))
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"],
-                              complexes=tuple(pin["complexes"]))
-    departures = _end_point_departures(res, blrfit.summary_row(res), pin) + _rest_frame_departures(res, sp, pin)
+    res = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"], complexes=tuple(pin["complexes"])
+    )
+    departures = _end_point_departures(res, blrfit.summary_row(res), pin) + _rest_frame_departures(
+        res, sp, pin
+    )
     assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
 
 
@@ -435,14 +543,21 @@ def _bit_exact_departures(res, row, pin):
         d = res["fits"][name]["d"]
         if set(d) != set(pref):
             departures.append(f"{name} parameter names differ from the pin")
-        departures += [f"{name} parameter {k} {d[k]!r} vs pinned {v!r}" for k, v in pref.items()
-                       if k in d and not _same(float(d[k]), v)]
+        departures += [
+            f"{name} parameter {k} {d[k]!r} vs pinned {v!r}"
+            for k, v in pref.items()
+            if k in d and not _same(float(d[k]), v)
+        ]
         if res["fits"][name]["chi2"] != pin["chi2"][name]:
             departures.append(f"{name} chi2 {res['fits'][name]['chi2']!r} vs pinned {pin['chi2'][name]!r}")
         if [float(b) for b in res["fits"][name]["all_bic"]] != pin["all_bic"][name]:
-            departures.append(f"{name} BIC list {[float(b) for b in res['fits'][name]['all_bic']]!r} vs pinned {pin['all_bic'][name]!r}")
+            departures.append(
+                f"{name} BIC list {[float(b) for b in res['fits'][name]['all_bic']]!r} vs pinned {pin['all_bic'][name]!r}"
+            )
     conti = {k: float(v) for k, v in res["conti"].items()}
-    if set(conti) != set(pin["conti"]) or any(not _same(conti[k], v) for k, v in pin["conti"].items() if k in conti):
+    if set(conti) != set(pin["conti"]) or any(
+        not _same(conti[k], v) for k, v in pin["conti"].items() if k in conti
+    ):
         departures.append(f"continuum {conti!r} vs pinned {pin['conti']!r}")
     hi, href = res["host_info"], pin["host_info"]
     got = (bool(hi["applied"]), int(hi["n_gal"]), float(hi["host_frac_4200_5000"]), hi["reason"])
@@ -458,8 +573,9 @@ def _bit_exact_departures(res, row, pin):
     # the raw gap, now exported as ``bic_gap``. The actual selection margin
     # has its own threshold-crossing tests in test_bic_margin.py.
     additions = {"host_undetermined"}
-    additions.update(k.replace("_bic_margin", "_bic_gap")
-                     for k in pin["summary"] if k.endswith("_bic_margin"))
+    additions.update(
+        k.replace("_bic_margin", "_bic_gap") for k in pin["summary"] if k.endswith("_bic_margin")
+    )
     assert set(row) == set(pin["summary"]) | additions
     assert row["host_undetermined"] is False  # the guard is inactive on this roster
     projected = {k: row[k] for k in pin["summary"]}
@@ -478,8 +594,9 @@ def test_current_pin_reproduced(pin):
     the rest-frame arrays of the first part; bit for bit under
     BLRFIT_STRICT_PINS, the summary row included."""
     sp = _read_pinned_spectrum(pin)
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"],
-                              complexes=tuple(pin["complexes"]))
+    res = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"], complexes=tuple(pin["complexes"])
+    )
     row = blrfit.summary_row(res)
     departures = _end_point_departures(res, row, pin) + _rest_frame_departures(res, sp, pin)
     if STRICT:
@@ -515,11 +632,16 @@ def test_current_pins_provenance():
     assert desi[0]["summary"]["HA_class"] == "F" and desi[0]["summary"]["HB_class"] == "C"
     for pin in cur["pins"]:
         assert pin["summary"]["continuum_status"] == "success", pin["file"]
-        assert isinstance(pin["summary"]["conti_at_bound"], str) and isinstance(pin["summary"]["conti_feuv_fwhm_fixed"], bool)
+        assert isinstance(pin["summary"]["conti_at_bound"], str) and isinstance(
+            pin["summary"]["conti_feuv_fwhm_fixed"], bool
+        )
         for name in pin["params"]:
             p = PREFIX[name]
-            assert pin["summary"][f"{p}_fit_status"] == "success" and pin["summary"][f"{p}_converged"] is True, (pin["file"], name)
+            assert (
+                pin["summary"][f"{p}_fit_status"] == "success" and pin["summary"][f"{p}_converged"] is True
+            ), (pin["file"], name)
             assert pin["summary"][f"{p}_bic_margin"] is not None, (pin["file"], name)
+
 
 def test_penalty_terms_pinned():
     """The five penalty terms of the chi-square at hand-chosen parameter values
@@ -539,20 +661,27 @@ def test_penalty_terms_pinned():
     rel = 1e-9
     pairs = [("b1_v", "b1_sig"), ("b2_v", "b2_sig")]
     # far-broad width hinge: sigma >= 0.16987 |v|; the first component is 209.6 km/s too narrow
-    assert width_offset_penalty(dict(b1_v=-3000.0, b1_sig=300.0, b2_v=1000.0, b2_sig=1000.0), pairs) \
-        == pytest.approx([20.95930801728115, 0.0], rel=rel)
-    assert width_offset_penalty(dict(b1_v=-3000.0, b1_sig=600.0, b2_v=1000.0, b2_sig=1000.0), pairs) == [0.0, 0.0]
+    assert width_offset_penalty(
+        dict(b1_v=-3000.0, b1_sig=300.0, b2_v=1000.0, b2_sig=1000.0), pairs
+    ) == pytest.approx([20.95930801728115, 0.0], rel=rel)
+    assert width_offset_penalty(dict(b1_v=-3000.0, b1_sig=600.0, b2_v=1000.0, b2_sig=1000.0), pairs) == [
+        0.0,
+        0.0,
+    ]
     # [O III] ordering: the core 100 km/s wider than the wing, the wing twice as tall as the core
-    assert oiii_order_penalty(dict(o3_sig=400.0, w_sig=300.0, OIII5007c_A=1.0, OIII5007w_A=2.0)) \
-        == pytest.approx([10.0, 6.6666666222222215], rel=rel)
+    assert oiii_order_penalty(
+        dict(o3_sig=400.0, w_sig=300.0, OIII5007c_A=1.0, OIII5007w_A=2.0)
+    ) == pytest.approx([10.0, 6.6666666222222215], rel=rel)
     assert oiii_order_penalty(dict(o3_sig=200.0, w_sig=600.0, OIII5007c_A=3.0, OIII5007w_A=1.0)) == [0.0, 0.0]
     # Halpha wing: 50 km/s narrower than the core, 150 km/s bluewards of it, fraction 0.1
-    assert nlr_wing_penalty(dict(n_sig=200.0, nw_sig=150.0, nw_v=-100.0, n_v=50.0, nw_f=0.1)) \
-        == pytest.approx([16.666666666666668, -1.0, 0.4], rel=rel)
+    assert nlr_wing_penalty(
+        dict(n_sig=200.0, nw_sig=150.0, nw_v=-100.0, n_v=50.0, nw_f=0.1)
+    ) == pytest.approx([16.666666666666668, -1.0, 0.4], rel=rel)
     assert nlr_wing_penalty(dict(n_sig=150.0, nw_sig=400.0, nw_v=50.0, n_v=50.0, nw_f=0.0)) == [0.0, 0.0, 0.0]
     # [S II] tie: 50 km/s wider and 60 km/s redward of narrow Halpha + [N II]
-    assert sii_soft_tie_penalty(dict(s2_sig=250.0, n_sig=200.0, s2_v=80.0, n_v=20.0)) \
-        == pytest.approx([1.25, 1.0], rel=rel)
+    assert sii_soft_tie_penalty(dict(s2_sig=250.0, n_sig=200.0, s2_v=80.0, n_v=20.0)) == pytest.approx(
+        [1.25, 1.0], rel=rel
+    )
     assert sii_soft_tie_penalty(dict(s2_sig=200.0, n_sig=200.0, s2_v=20.0, n_v=20.0)) == [0.0, 0.0]
     # systemic prior: the narrow group 150 km/s from the [O III] pre-fit velocity
     assert systemic_prior_penalty(dict(n_v=100.0), (-50.0, SYS_PRIOR_KMS)) == pytest.approx([1.0], rel=rel)

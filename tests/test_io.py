@@ -1,11 +1,22 @@
 """Readers: SDSS spec files, DESI coadds (astropy and desispec paths), generic tables."""
+
 import os
 
 import numpy as np
 import pytest
 
-from blrfit.io import (read_sdss, read_desi, read_table, read_spectrum, write_table, air_to_vacuum,
-                       vacuum_to_air, is_sdss_spec, is_desi_coadd, coadd_cameras)
+from blrfit.io import (
+    read_sdss,
+    read_desi,
+    read_table,
+    read_spectrum,
+    write_table,
+    air_to_vacuum,
+    vacuum_to_air,
+    is_sdss_spec,
+    is_desi_coadd,
+    coadd_cameras,
+)
 from blrfit.io.desi import write_single_target
 from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, DESI_EXAMPLE, DESI_TARGETID, CSV_EXAMPLE, Z_J001224
 
@@ -58,18 +69,29 @@ def test_read_desi_missing_target():
 
 def test_coadd_cameras_overlap_rule():
     """Non-overlap pixels are copied; overlap pixels are the ivar-weighted mean; masks OR."""
-    w1 = np.arange(0.0, 10.0, 1.0); w2 = np.arange(8.0, 18.0, 1.0); w3 = np.arange(16.0, 24.0, 1.0)
-    f1 = np.full(10, 1.0); f2 = np.full(10, 3.0); f3 = np.full(8, 5.0)
-    i1 = np.full(10, 1.0); i2 = np.full(10, 3.0); i3 = np.full(8, 1.0)
-    m1 = np.zeros(10, int); m2 = np.zeros(10, int); m3 = np.zeros(8, int)
-    m1[8] = 4; m2[0] = 0; i2[1] = 0.0; f2[1] = 99.0   # a masked pixel and a dead pixel in the overlap
+    w1 = np.arange(0.0, 10.0, 1.0)
+    w2 = np.arange(8.0, 18.0, 1.0)
+    w3 = np.arange(16.0, 24.0, 1.0)
+    f1 = np.full(10, 1.0)
+    f2 = np.full(10, 3.0)
+    f3 = np.full(8, 5.0)
+    i1 = np.full(10, 1.0)
+    i2 = np.full(10, 3.0)
+    i3 = np.full(8, 1.0)
+    m1 = np.zeros(10, int)
+    m2 = np.zeros(10, int)
+    m3 = np.zeros(8, int)
+    m1[8] = 4
+    m2[0] = 0
+    i2[1] = 0.0
+    f2[1] = 99.0  # a masked pixel and a dead pixel in the overlap
     wave, flux, ivar, mask = coadd_cameras([w1, w2, w3], [f1, f2, f3], [i1, i2, i3], [m1, m2, m3])
     assert np.array_equal(wave, np.arange(0.0, 24.0, 1.0))
     assert flux[0] == 1.0 and flux[12] == 3.0 and flux[20] == 5.0
     assert flux[8] == pytest.approx((1.0 * 1.0 + 3.0 * 3.0) / 4.0) and ivar[8] == 4.0
-    assert flux[9] == pytest.approx(1.0) and ivar[9] == 1.0          # dead pixel in camera 2 ignored
+    assert flux[9] == pytest.approx(1.0) and ivar[9] == 1.0  # dead pixel in camera 2 ignored
     assert flux[16] == pytest.approx((3.0 * 3.0 + 5.0 * 1.0) / 4.0)
-    assert mask[8] == 0                                              # ivar > 0 clears the mask
+    assert mask[8] == 0  # ivar > 0 clears the mask
     assert np.all(ivar >= 0)
 
 
@@ -101,12 +123,21 @@ def test_air_vacuum_conversion():
 def test_read_table_conversions(tmp_path):
     """A rest-frame, air, nm table with 1-sigma errors comes back as the observed vacuum Angstrom spectrum.
     The air-to-vacuum conversion applies to the wavelengths as given (here rest frame), before the frame shift."""
-    sp = read_sdss(SDSS_EXAMPLE); z = Z_J001224
+    sp = read_sdss(SDSS_EXAMPLE)
+    z = Z_J001224
     good = sp["ivar"] > 0
     err = np.where(good, 1.0 / np.sqrt(np.where(good, sp["ivar"], 1.0)), np.nan)
     p = tmp_path / "s.csv"
-    write_table(str(p), vacuum_to_air(sp["wave"] / (1 + z)) / 10.0, sp["flux"] * 0.1, err=err * 0.1, names=("lam", "f", "e"))
-    d = read_table(str(p), wave="lam", flux="f", err="e", wave_unit="nm", frame="rest", air=True, z=z, flux_scale=10.0)
+    write_table(
+        str(p),
+        vacuum_to_air(sp["wave"] / (1 + z)) / 10.0,
+        sp["flux"] * 0.1,
+        err=err * 0.1,
+        names=("lam", "f", "e"),
+    )
+    d = read_table(
+        str(p), wave="lam", flux="f", err="e", wave_unit="nm", frame="rest", air=True, z=z, flux_scale=10.0
+    )
     assert d["kind"] == "table" and d["z"] == z
     assert np.allclose(d["wave"], sp["wave"], rtol=1e-8)
     assert np.allclose(d["flux"], sp["flux"], rtol=1e-6)
@@ -115,7 +146,8 @@ def test_read_table_conversions(tmp_path):
 
 
 def test_read_table_needs_one_error_column(tmp_path):
-    p = tmp_path / "s.csv"; p.write_text("wave,flux,err\n5000,1,0.1\n5001,1,0.1\n")
+    p = tmp_path / "s.csv"
+    p.write_text("wave,flux,err\n5000,1,0.1\n5001,1,0.1\n")
     with pytest.raises(ValueError):
         read_table(str(p), wave="wave", flux="flux")
     with pytest.raises(ValueError):
@@ -128,8 +160,10 @@ def test_read_table_needs_one_error_column(tmp_path):
 
 def test_read_table_fits_and_ecsv(tmp_path):
     from astropy.table import Table
+
     t = Table([np.linspace(4000, 9000, 50), np.ones(50), np.full(50, 0.05)], names=("WAVE", "FLUX", "IVAR"))
-    t.write(tmp_path / "s.fits", overwrite=True); t.write(tmp_path / "s.ecsv", format="ascii.ecsv", overwrite=True)
+    t.write(tmp_path / "s.fits", overwrite=True)
+    t.write(tmp_path / "s.ecsv", format="ascii.ecsv", overwrite=True)
     for fn in ("s.fits", "s.ecsv"):
         d = read_table(str(tmp_path / fn), wave="wave", flux="flux", ivar="ivar")
         assert len(d["wave"]) == 50 and np.all(d["ivar"] == 0.05)
@@ -137,7 +171,16 @@ def test_read_table_fits_and_ecsv(tmp_path):
 
 def test_csv_example_exists():
     assert os.path.exists(CSV_EXAMPLE)
-    d = read_table(CSV_EXAMPLE, wave="lambda_nm", flux="f_lambda", err="sigma", wave_unit="nm", frame="rest", air=True,
-                   z=Z_J001224, flux_scale=10.0)
+    d = read_table(
+        CSV_EXAMPLE,
+        wave="lambda_nm",
+        flux="f_lambda",
+        err="sigma",
+        wave_unit="nm",
+        frame="rest",
+        air=True,
+        z=Z_J001224,
+        flux_scale=10.0,
+    )
     sp = read_sdss(SDSS_EXAMPLE)
     assert np.allclose(d["wave"], sp["wave"], rtol=1e-8)

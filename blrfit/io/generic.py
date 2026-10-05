@@ -18,13 +18,23 @@ wavelength in Angstrom, flux in any linear unit, and inverse variance.
 * ``flux_scale`` multiplies the flux so that it is in 1e-17 erg/s/cm^2/A, the
   unit the luminosities assume; velocities do not depend on it.
 """
+
 from __future__ import annotations
 
 import os
 
 import numpy as np
 
-WAVE_UNITS = {"angstrom": 1.0, "a": 1.0, "aa": 1.0, "ang": 1.0, "nm": 10.0, "um": 1e4, "micron": 1e4, "m": 1e10}
+WAVE_UNITS = {
+    "angstrom": 1.0,
+    "a": 1.0,
+    "aa": 1.0,
+    "ang": 1.0,
+    "nm": 10.0,
+    "um": 1e4,
+    "micron": 1e4,
+    "m": 1e10,
+}
 
 
 def air_to_vacuum(wave_air_aa):
@@ -44,9 +54,11 @@ def vacuum_to_air(wave_vac_aa):
 
 def _load_table(path, hdu=1, row=None):
     """Return a mapping column name -> array (case-insensitive lookup) and the list of names."""
-    p = str(path); ext = os.path.splitext(p)[1].lower()
+    p = str(path)
+    ext = os.path.splitext(p)[1].lower()
     if ext in (".fits", ".fit", ".fts") or p.lower().endswith((".fits.gz", ".fit.gz", ".fts.gz")):
         from astropy.io import fits
+
         with fits.open(p, memmap=False) as h:
             data = h[hdu].data
             if not isinstance(h[hdu], (fits.BinTableHDU, fits.TableHDU)):
@@ -58,11 +70,13 @@ def _load_table(path, hdu=1, row=None):
                 cols = {n: np.atleast_1d(a[row]) for n, a in cols.items()}
     elif ext in (".ecsv", ".csv"):
         from astropy.io import ascii
+
         t = ascii.read(p, format="ecsv" if ext == ".ecsv" else "csv")
         cols = {n: np.asarray(t[n]) for n in t.colnames}
     else:
         try:
             from astropy.io import ascii
+
             t = ascii.read(p)
             cols = {n: np.asarray(t[n]) for n in t.colnames}
         except Exception:
@@ -86,10 +100,28 @@ def _get(cols, lower, name):
     return np.asarray(cols[key], float)
 
 
-def read_table(path, wave="wave", flux="flux", err=None, ivar=None, wave_unit="angstrom",
-               frame="obs", air=False, z=None, flux_scale=1.0, hdu=1, row=None,
-               z_column=None, z_key=None, wave_hdu=None, flux_hdu=None,
-               err_hdu=None, ivar_hdu=None, mask=None, flux_frame="obs"):
+def read_table(
+    path,
+    wave="wave",
+    flux="flux",
+    err=None,
+    ivar=None,
+    wave_unit="angstrom",
+    frame="obs",
+    air=False,
+    z=None,
+    flux_scale=1.0,
+    hdu=1,
+    row=None,
+    z_column=None,
+    z_key=None,
+    wave_hdu=None,
+    flux_hdu=None,
+    err_hdu=None,
+    ivar_hdu=None,
+    mask=None,
+    flux_frame="obs",
+):
     """Read a spectrum from a table with user-declared columns, units and frame.
 
     Returns dict(wave, flux, ivar, z, path, kind='table') with wave in
@@ -103,7 +135,9 @@ def read_table(path, wave="wave", flux="flux", err=None, ivar=None, wave_unit="a
         if err is not None or ivar is not None or mask is not None or z_column is not None:
             raise ValueError("do not mix image-HDU selectors with table-column selectors")
         from astropy.io import fits
+
         with fits.open(path, memmap=False) as hdus:
+
             def array(ext):
                 a = np.array(hdus[ext].data, dtype=float, copy=True)
                 if row is not None and a.ndim > 1:
@@ -111,8 +145,13 @@ def read_table(path, wave="wave", flux="flux", err=None, ivar=None, wave_unit="a
                         raise ValueError("image row out of range")
                     a = a[row]
                 return a
-            cols = dict(wave=array(wave_hdu), flux=array(flux_hdu), noise=array(err_hdu if err_hdu is not None else ivar_hdu))
-        lower = {k:k for k in cols}
+
+            cols = dict(
+                wave=array(wave_hdu),
+                flux=array(flux_hdu),
+                noise=array(err_hdu if err_hdu is not None else ivar_hdu),
+            )
+        lower = {k: k for k in cols}
         wave, flux = "wave", "flux"
         err, ivar = ("noise", None) if err_hdu is not None else (None, "noise")
     else:
@@ -128,6 +167,7 @@ def read_table(path, wave="wave", flux="flux", err=None, ivar=None, wave_unit="a
         z = float(zs[0])
     if z_key is not None:
         from astropy.io import fits
+
         with fits.open(path, memmap=False) as hdus:
             headers = [hdus[0].header]
             if hdu != 0:
@@ -146,12 +186,14 @@ def read_table(path, wave="wave", flux="flux", err=None, ivar=None, wave_unit="a
         if z is None:
             raise ValueError("rest-frame flux density needs a redshift")
         flux_scale /= 1 + z
+
     def vector(a):
         if a.ndim == 2 and a.shape[0] == 1:
             a = a[0]
         if a.ndim != 1:
             raise ValueError("multiple spectra in FITS table/image: select one zero-based row explicitly")
         return a
+
     w = vector(_get(cols, lower, wave))
     cols = dict(cols)
     for selector in (flux, err if err is not None else ivar, mask):
@@ -170,7 +212,7 @@ def read_table(path, wave="wave", flux="flux", err=None, ivar=None, wave_unit="a
         iv = _get(cols, lower, ivar) / float(flux_scale) ** 2
         iv = np.where(np.isfinite(iv) & (iv > 0), iv, 0.0)
     if mask is not None:
-        iv = np.where(_get(cols, lower, mask) == 0, iv, 0.)
+        iv = np.where(_get(cols, lower, mask) == 0, iv, 0.0)
     unit = str(wave_unit).lower()
     if unit not in WAVE_UNITS:
         raise ValueError(f"unknown wavelength unit {wave_unit!r}; use one of {sorted(WAVE_UNITS)}")
@@ -187,13 +229,20 @@ def read_table(path, wave="wave", flux="flux", err=None, ivar=None, wave_unit="a
     order = np.argsort(w)
     w, f, iv = w[order], f[order], iv[order]
     good = np.isfinite(w)
-    return dict(wave=w[good], flux=f[good], ivar=iv[good], z=(float(z) if z is not None else np.nan),
-                path=str(path), kind="table")
+    return dict(
+        wave=w[good],
+        flux=f[good],
+        ivar=iv[good],
+        z=(float(z) if z is not None else np.nan),
+        path=str(path),
+        kind="table",
+    )
 
 
 def write_table(path, wave, flux, ivar=None, err=None, names=("wave", "flux", "err")):
     """Write a spectrum as CSV or ECSV (by extension) with the given column names."""
     from astropy.table import Table
+
     if err is None:
         iv = np.asarray(ivar, float)
         with np.errstate(divide="ignore"):

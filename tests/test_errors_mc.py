@@ -14,6 +14,7 @@ equivalent width, narrow lines with the default equivalent width of 40 A,
 continuum S/N 12 per pixel near Halpha, 20 realisations, 30 Monte Carlo refits
 each (about 10 s per spectrum). Everything is slow.
 """
+
 import numpy as np
 import pytest
 
@@ -26,7 +27,10 @@ pytestmark = pytest.mark.slow
 Z = 0.25
 V_BROAD, FWHM = 800.0, 4000.0
 SNR, NMC, NREAL = 12.0, 30, 20
-BROAD = [dict(line="Halpha", v=V_BROAD, fwhm=FWHM, ew=150.0), dict(line="Hbeta", v=V_BROAD, fwhm=FWHM, ew=45.0)]
+BROAD = [
+    dict(line="Halpha", v=V_BROAD, fwhm=FWHM, ew=150.0),
+    dict(line="Hbeta", v=V_BROAD, fwhm=FWHM, ew=45.0),
+]
 
 
 def nmad(x):
@@ -47,8 +51,9 @@ def realisations():
     out = []
     for i in range(NREAL):
         sp = make_spectrum(z=Z, snr=SNR, broad=BROAD, seed=i)
-        res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z, complexes=("Halpha", "Hbeta"),
-                                  nmc=NMC, seed=i)
+        res = blrfit.fit_spectrum(
+            sp["wave"], sp["flux"], sp["ivar"], Z, complexes=("Halpha", "Hbeta"), nmc=NMC, seed=i
+        )
         out.append((sp, res))
     return out
 
@@ -89,13 +94,16 @@ def test_monte_carlo_pulls_of_c50_sys(realisations):
             truth = sp["truth"]["broad"][name]["c50_sys"]
             m, e = res["meas"][name], res["err"][name]
             assert res["cls"][name]["label"] == "A", res["cls"][name]
-            dev[name].append(m["c50_sys"] - truth); err[name].append(e["c50_sys"])
+            dev[name].append(m["c50_sys"] - truth)
+            err[name].append(e["c50_sys"])
             pulls[name].append((m["c50_sys"] - truth) / e["c50_sys"])
     for name in ("Halpha", "Hbeta"):
         p, d, e = np.array(pulls[name]), np.array(dev[name]), np.array(err[name])
-        print(f"MC pulls {name}: n {len(p)} NMAD {nmad(p):.2f} std {np.std(p):.2f} median |pull| {np.median(np.abs(p)):.2f} "
-              f"max |pull| {np.max(np.abs(p)):.2f}; c50_sys - truth median {np.median(d):+.1f} NMAD {nmad(d):.1f} km/s, "
-              f"err median {np.median(e):.1f} km/s")
+        print(
+            f"MC pulls {name}: n {len(p)} NMAD {nmad(p):.2f} std {np.std(p):.2f} median |pull| {np.median(np.abs(p)):.2f} "
+            f"max |pull| {np.max(np.abs(p)):.2f}; c50_sys - truth median {np.median(d):+.1f} NMAD {nmad(d):.1f} km/s, "
+            f"err median {np.median(e):.1f} km/s"
+        )
     p = np.array(pulls["Halpha"])
     lo, hi = nmad_interval_unit_pulls(NREAL)
     assert 0.6 <= nmad(p) <= 1.6, (nmad(p), lo, hi)

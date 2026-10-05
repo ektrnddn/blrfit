@@ -1,4 +1,5 @@
 """Check the declared experiment, not a fitter accuracy claim."""
+
 import importlib.util
 from pathlib import Path
 
@@ -7,7 +8,9 @@ import pytest
 
 from blrfit.model.continuum import HOST_WINDOW, host_window_statistics, pca_templates
 
-spec = importlib.util.spec_from_file_location("host_rich_weak", Path(__file__).parents[1] / "tools/host_rich_weak.py")
+spec = importlib.util.spec_from_file_location(
+    "host_rich_weak", Path(__file__).parents[1] / "tools/host_rich_weak.py"
+)
 HW = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(HW)
 
@@ -17,9 +20,9 @@ class ZeroNoise:
         return np.zeros(n)
 
 
-@pytest.mark.parametrize("host,snr", [(.3, 1), (.6, 5)])
+@pytest.mark.parametrize("host,snr", [(0.3, 1), (0.6, 5)])
 def test_sum_snr_is_the_guard_statistic_on_noiseless_expectation(host, snr):
-    wave, flux, ivar, truth = HW.make_spectrum(.1, host, snr, "sum", 600, 4000, 150, ZeroNoise())
+    wave, flux, ivar, truth = HW.make_spectrum(0.1, host, snr, "sum", 600, 4000, 150, ZeroNoise())
     wr = wave / 1.1
     templates = pca_templates()
     inhost = (wr > templates["gw"].min() + 2) & (wr < templates["gw"].max() - 2)
@@ -30,7 +33,7 @@ def test_sum_snr_is_the_guard_statistic_on_noiseless_expectation(host, snr):
 
 
 def test_simulated_noise_is_repeatable_and_has_recorded_input_identity():
-    args = (.1, .45, 3, "sum", 600, 4000, 150)
+    args = (0.1, 0.45, 3, "sum", 600, 4000, 150)
     a = HW.make_spectrum(*args, np.random.default_rng(7))
     b = HW.make_spectrum(*args, np.random.default_rng(7))
     c = HW.make_spectrum(*args, np.random.default_rng(8))
@@ -39,17 +42,35 @@ def test_simulated_noise_is_repeatable_and_has_recorded_input_identity():
 
 
 def test_blue_weak_family_keeps_declared_blue_sum_and_usable_red_noise():
-    wave,flux,ivar,truth=HW.make_spectrum(.1,.6,2,"sum",600,4000,150,ZeroNoise(),noise_profile="blue_weak")
-    wr=wave/1.1; blue=(wr>4200)&(wr<5000); red=(wr>6800)&(wr<6900)
-    assert np.sum(ivar[blue]*flux[blue])/np.sqrt(np.sum(ivar[blue]))==pytest.approx(2)
-    assert np.median(ivar[red])>np.median(ivar[blue])*100
-    assert truth['red_pixel_snr']==15 and truth['noise_profile']=='blue_weak'
+    wave, flux, ivar, truth = HW.make_spectrum(
+        0.1, 0.6, 2, "sum", 600, 4000, 150, ZeroNoise(), noise_profile="blue_weak"
+    )
+    wr = wave / 1.1
+    blue = (wr > 4200) & (wr < 5000)
+    red = (wr > 6800) & (wr < 6900)
+    assert np.sum(ivar[blue] * flux[blue]) / np.sqrt(np.sum(ivar[blue])) == pytest.approx(2)
+    assert np.median(ivar[red]) > np.median(ivar[blue]) * 100
+    assert truth["red_pixel_snr"] == 15 and truth["noise_profile"] == "blue_weak"
 
 
 def rows(errors, measurable=True):
-    return [dict(truth={"c50_sys": 600}, fits={"plfe": dict(status="returned", host_undetermined=False,
-                 lines={"Halpha": dict(c50_sys=600+v, label="A" if measurable else "W", measurable=measurable)})})
-            for v in errors]
+    return [
+        dict(
+            truth={"c50_sys": 600},
+            fits={
+                "plfe": dict(
+                    status="returned",
+                    host_undetermined=False,
+                    lines={
+                        "Halpha": dict(
+                            c50_sys=600 + v, label="A" if measurable else "W", measurable=measurable
+                        )
+                    },
+                )
+            },
+        )
+        for v in errors
+    ]
 
 
 def test_no_measurable_lines_cannot_establish_accuracy():

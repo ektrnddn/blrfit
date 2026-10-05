@@ -23,6 +23,7 @@ moves by 9e-6 km/s and c50_sys by 1e-3 km/s. The example spectrum of SDSS
 J001224.01-102226.5 has no Fe II (its norm ends on zero): its width is
 unconstrained by construction, and only the velocity is checked for it.
 """
+
 import os
 
 import pytest
@@ -40,13 +41,14 @@ from synth import make_spectrum
 Z_SYNTH = 0.2
 FE_NORM = 0.6
 EPS = 1e-13
-FE_STRONG = os.path.join(DATA, "spec-1592-52990-0139.fits")   # Fe II at 1.4 template units
+FE_STRONG = os.path.join(DATA, "spec-1592-52990-0139.fits")  # Fe II at 1.4 template units
 Z_FE_STRONG = 0.4519999921321869
 
 
 def _joint_spectrum(width, seed=3):
-    s = make_spectrum(z=Z_SYNTH, snr=20.0, seed=seed,
-                      broad=[dict(line="Hbeta", v=1000.0, fwhm=4000.0, ew=60.0)])
+    s = make_spectrum(
+        z=Z_SYNTH, snr=20.0, seed=seed, broad=[dict(line="Hbeta", v=1000.0, fwhm=4000.0, ew=60.0)]
+    )
     s["flux"] = s["flux"] + fe_templates()[0](s["wave"] / (1 + Z_SYNTH), FE_NORM, width, 0.0)
     return s
 
@@ -141,7 +143,7 @@ def test_host_attempt_kept_when_the_solver_stops_short(monkeypatch):
     # record says so
     monkeypatch.setattr(continuum, "MAX_NFEV_CONTI_HOST", 1)
     s = make_spectrum(z=0.1, snr=20.0, seed=2, host_frac=0.5)
-    wr, fr, ir = s["wave"] / 1.1, s["flux"] * 1.1, s["ivar"] / 1.1 ** 2
+    wr, fr, ir = s["wave"] / 1.1, s["flux"] * 1.1, s["ivar"] / 1.1**2
     d, total, host, info = fit_continuum_host(wr, fr, ir)
     assert info["reason"] != "joint fit failed; PL+Fe only"
     assert len(info["solver_attempts"]) == 1
@@ -153,8 +155,9 @@ def test_host_attempt_kept_when_the_solver_stops_short(monkeypatch):
 def test_rescaled_input_reproduces_width_and_velocity():
     sp = read_sdss(FE_STRONG)
     a = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z_FE_STRONG, complexes=("Hbeta",))
-    b = blrfit.fit_spectrum(sp["wave"], sp["flux"] * (1 + EPS), sp["ivar"] / (1 + EPS) ** 2,
-                            Z_FE_STRONG, complexes=("Hbeta",))
+    b = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"] * (1 + EPS), sp["ivar"] / (1 + EPS) ** 2, Z_FE_STRONG, complexes=("Hbeta",)
+    )
     assert a["conti"]["feop_norm"] > 0.5 and "feop_norm" not in a["continuum_info"]["at_bound"]
     assert abs(a["conti"]["feop_fwhm"] - b["conti"]["feop_fwhm"]) < 1.0
     ra, rb = blrfit.summary_row(a), blrfit.summary_row(b)
@@ -165,8 +168,9 @@ def test_rescaled_input_reproduces_width_and_velocity():
 def test_rescaled_input_reproduces_velocity_without_fe():
     sp = read_sdss(SDSS_EXAMPLE)
     a = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",))
-    b = blrfit.fit_spectrum(sp["wave"], sp["flux"] * (1 + EPS), sp["ivar"] / (1 + EPS) ** 2,
-                            Z_J001224, complexes=("Hbeta",))
+    b = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"] * (1 + EPS), sp["ivar"] / (1 + EPS) ** 2, Z_J001224, complexes=("Hbeta",)
+    )
     ra, rb = blrfit.summary_row(a), blrfit.summary_row(b)
     assert abs(ra["HB_c50_sys"] - rb["HB_c50_sys"]) < 0.1
     assert ra["HB_class"] == rb["HB_class"]

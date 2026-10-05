@@ -3,11 +3,13 @@
 The caller supplies an interval constructed with the appropriate independent
 units. This module does not turn a fit diagnostic into calibrated uncertainty.
 """
+
 import math
 
 
-def tolerance_decision(estimate, interval, region, *, confidence=0.95,
-                       units, n_observations, n_groups, method):
+def tolerance_decision(
+    estimate, interval, region, *, confidence=0.95, units, n_observations, n_groups, method
+):
     """Classify an interval as inside, outside, or overlapping a closed region.
 
     Exact boundary points are inside. Missing/nonfinite estimates or interval
@@ -36,9 +38,16 @@ def tolerance_decision(estimate, interval, region, *, confidence=0.95,
     bounds = [None, None] if interval is None else [finite(x) for x in interval]
     if len(bounds) != 2:
         raise ValueError("interval must have two endpoints")
-    result = dict(estimate=value, interval=bounds, confidence=float(confidence),
-                  tolerance_region=[low, high], units=units,
-                  n_observations=n_observations, n_groups=n_groups, method=method)
+    result = dict(
+        estimate=value,
+        interval=bounds,
+        confidence=float(confidence),
+        tolerance_region=[low, high],
+        units=units,
+        n_observations=n_observations,
+        n_groups=n_groups,
+        method=method,
+    )
     if value is None or None in bounds or not n_observations or not n_groups:
         outcome, reason = "inconclusive", "insufficient finite interval evidence"
     else:
@@ -59,8 +68,8 @@ def coverage_decision(estimate, interval, *, nominal, tolerance, **kwargs):
     """Apply the same decision to an inclusion fraction, not a compatibility test."""
     if not (0 < nominal < 1 and 0 <= tolerance <= min(nominal, 1 - nominal)):
         raise ValueError("coverage region must lie within [0, 1]")
-    out = tolerance_decision(estimate, interval,
-                             (nominal - tolerance, nominal + tolerance),
-                             units="fraction", **kwargs)
+    out = tolerance_decision(
+        estimate, interval, (nominal - tolerance, nominal + tolerance), units="fraction", **kwargs
+    )
     out.update(nominal=float(nominal), tolerance=float(tolerance))
     return out

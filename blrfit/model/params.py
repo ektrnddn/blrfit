@@ -9,6 +9,7 @@ that the optimiser only sees the free ones. The order in which parameters are
 added is the order of the free vector; it is part of the frozen model because
 the trust-region solver is not exactly invariant to it.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -30,7 +31,7 @@ class ParamSet:
     def __init__(self):
         self.names, self.val, self.lb, self.ub = [], [], [], []
         self.fixed, self.tie = {}, {}
-        self.derived = {}          # name -> list of factors (parameter names or floats)
+        self.derived = {}  # name -> list of factors (parameter names or floats)
 
     def derive(self, name, factors):
         self.derived[name] = list(factors)
@@ -38,8 +39,10 @@ class ParamSet:
     def add(self, name, val, lb, ub, fixed=False):
         if name in self.names:
             raise ValueError(f"duplicate parameter {name}")
-        self.names.append(name); self.val.append(float(val))
-        self.lb.append(float(lb)); self.ub.append(float(ub))
+        self.names.append(name)
+        self.val.append(float(val))
+        self.lb.append(float(lb))
+        self.ub.append(float(ub))
         if fixed:
             self.fixed[name] = float(val)
 
@@ -70,11 +73,17 @@ class ParamSet:
             eps = 1e-9 if hi - lo >= 1e-9 else 0.25 * (hi - lo)
             start = np.nan if np.isnan(x) else np.clip(x, lo + eps, hi - eps)
             if not np.isfinite(start):
-                mid = (0.5 * (lo + hi) if np.isfinite(lo) and np.isfinite(hi)
-                       else (lo if np.isfinite(lo) else (hi if np.isfinite(hi) else 0.0)))
+                mid = (
+                    0.5 * (lo + hi)
+                    if np.isfinite(lo) and np.isfinite(hi)
+                    else (lo if np.isfinite(lo) else (hi if np.isfinite(hi) else 0.0))
+                )
                 start = np.clip(mid, lo + eps, hi - eps)
-                warnings.warn(f"parameter {n}: start {x} replaced by {float(start):g}, inside its bounds [{lo}, {hi}]",
-                              RuntimeWarning, stacklevel=2)
+                warnings.warn(
+                    f"parameter {n}: start {x} replaced by {float(start):g}, inside its bounds [{lo}, {hi}]",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
             out.append(start)
         return np.array(out)
 
@@ -87,7 +96,7 @@ class ParamSet:
         d = dict(zip(self.names, self.val))
         d.update(self.fixed)
         d.update(dict(zip(self.free_names, pfree)))
-        for _ in range(3):                          # resolve chained ties
+        for _ in range(3):  # resolve chained ties
             for n, s in self.tie.items():
                 d[n] = d[s]
         for n, facs in self.derived.items():

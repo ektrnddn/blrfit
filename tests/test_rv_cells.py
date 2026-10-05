@@ -3,6 +3,7 @@ the epochs at unequal signal-to-noise, and masked or missing pixels at several
 positions of one epoch. Both are measured on synthetic Gaussian profiles on a
 30 km/s grid (DESI-like at Halpha); the data extend 3000 km/s beyond the
 comparison window so that the overlap floor does not act."""
+
 import numpy as np
 import pytest
 
@@ -16,8 +17,16 @@ def gauss(v, centre=0.0, fwhm=4000.0):
 
 
 def profile(v, flux, err, ok=None):
-    return dict(v=v, f=flux, e=np.full(v.size, err), ok=np.ones(v.size, bool) if ok is None else ok,
-                nmod=np.zeros(v.size), fwhm=4000.0, c50_sys=0.0, v_sys=0.0)
+    return dict(
+        v=v,
+        f=flux,
+        e=np.full(v.size, err),
+        ok=np.ones(v.size, bool) if ok is None else ok,
+        nmod=np.zeros(v.size),
+        fwhm=4000.0,
+        c50_sys=0.0,
+        v_sys=0.0,
+    )
 
 
 @pytest.mark.parametrize("ratio", [0.5, 2.0])
@@ -58,7 +67,7 @@ def test_masked_or_missing_pixels_do_not_shift_an_identical_profile(where, width
     t = profile(V, f.copy(), 0.01)
     k = int(np.argmin(np.abs(V - where)))
     hole = np.zeros(V.size, bool)
-    hole[k:k + width] = True
+    hole[k : k + width] = True
     if dropped:
         keep = ~hole
         p = profile(V[keep], f[keep].copy(), 0.01)

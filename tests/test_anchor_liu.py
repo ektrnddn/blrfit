@@ -54,6 +54,7 @@ gates are asserted.
     BLRFIT_ANCHOR_DIR=/path/to/lit BLRFIT_NPROC=8 BLRFIT_WRITE_DELTAS=1 \\
         pytest -m slow -s tests/test_anchor_liu.py
 """
+
 import csv
 import os
 from collections import Counter
@@ -87,12 +88,31 @@ CLASS_CHANGE_MAX = 0.10
 DELTA_NMAD_KMS = 10.0
 BROAD_CLASSES = ("A", "B", "C", "F")
 
-DELTA_COLUMNS = ["lid", "spectrum", "sample", "exact", "z",
-                 "hb_class_0.1.0", "hb_class_0.2.0", "hb_c50_sys_0.1.0", "hb_c50_sys_0.2.0", "hb_delta_c50",
-                 "hb_bic_margin_0.2.0", "hb_n_broad_0.2.0", "hb_fit_status_0.2.0",
-                 "ha_class_0.1.0", "ha_class_0.2.0", "ha_c50_sys_0.1.0", "ha_c50_sys_0.2.0", "ha_delta_c50",
-                 "ha_bic_margin_0.2.0",
-                 "conti_feop_fwhm_0.2.0", "conti_at_bound_0.2.0", "feuv_fwhm_fixed_0.2.0", "continuum_status_0.2.0"]
+DELTA_COLUMNS = [
+    "lid",
+    "spectrum",
+    "sample",
+    "exact",
+    "z",
+    "hb_class_0.1.0",
+    "hb_class_0.2.0",
+    "hb_c50_sys_0.1.0",
+    "hb_c50_sys_0.2.0",
+    "hb_delta_c50",
+    "hb_bic_margin_0.2.0",
+    "hb_n_broad_0.2.0",
+    "hb_fit_status_0.2.0",
+    "ha_class_0.1.0",
+    "ha_class_0.2.0",
+    "ha_c50_sys_0.1.0",
+    "ha_c50_sys_0.2.0",
+    "ha_delta_c50",
+    "ha_bic_margin_0.2.0",
+    "conti_feop_fwhm_0.2.0",
+    "conti_at_bound_0.2.0",
+    "feuv_fwhm_fixed_0.2.0",
+    "continuum_status_0.2.0",
+]
 
 pytestmark = pytest.mark.slow
 
@@ -101,6 +121,7 @@ def _fit_one(job):
     lid, path, z = job
     import blrfit
     from blrfit.io import read_sdss
+
     sp = read_sdss(path)
     try:
         res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z, complexes=("Halpha", "Hbeta"))
@@ -144,16 +165,31 @@ def _delta_row(lid, fn, row, s, sample, exact):
     hb_old, ha_old = str(s["OUR_HB_CLASS"]).strip(), str(s["OUR_HA_CLASS"]).strip()
     hb_c50_old, ha_c50_old = float(s["OUR_HB_C50"]), float(s["OUR_HA_C50"])
     hb_c50_new, ha_c50_new = float(row.get("HB_c50_sys", np.nan)), float(row.get("HA_c50_sys", np.nan))
-    return {"lid": lid, "spectrum": fn, "sample": sample, "exact": exact, "z": row["z_in"],
-            "hb_class_0.1.0": hb_old, "hb_class_0.2.0": row.get("HB_class", ""),
-            "hb_c50_sys_0.1.0": hb_c50_old, "hb_c50_sys_0.2.0": hb_c50_new, "hb_delta_c50": hb_c50_new - hb_c50_old,
-            "hb_bic_margin_0.2.0": row.get("HB_bic_margin", np.nan), "hb_n_broad_0.2.0": row.get("HB_n_broad", ""),
-            "hb_fit_status_0.2.0": row.get("HB_fit_status", ""),
-            "ha_class_0.1.0": ha_old, "ha_class_0.2.0": row.get("HA_class", ""),
-            "ha_c50_sys_0.1.0": ha_c50_old, "ha_c50_sys_0.2.0": ha_c50_new, "ha_delta_c50": ha_c50_new - ha_c50_old,
-            "ha_bic_margin_0.2.0": row.get("HA_bic_margin", np.nan),
-            "conti_feop_fwhm_0.2.0": row.get("conti_feop_fwhm", np.nan), "conti_at_bound_0.2.0": row.get("conti_at_bound", ""),
-            "feuv_fwhm_fixed_0.2.0": row.get("conti_feuv_fwhm_fixed", ""), "continuum_status_0.2.0": row.get("continuum_status", "")}
+    return {
+        "lid": lid,
+        "spectrum": fn,
+        "sample": sample,
+        "exact": exact,
+        "z": row["z_in"],
+        "hb_class_0.1.0": hb_old,
+        "hb_class_0.2.0": row.get("HB_class", ""),
+        "hb_c50_sys_0.1.0": hb_c50_old,
+        "hb_c50_sys_0.2.0": hb_c50_new,
+        "hb_delta_c50": hb_c50_new - hb_c50_old,
+        "hb_bic_margin_0.2.0": row.get("HB_bic_margin", np.nan),
+        "hb_n_broad_0.2.0": row.get("HB_n_broad", ""),
+        "hb_fit_status_0.2.0": row.get("HB_fit_status", ""),
+        "ha_class_0.1.0": ha_old,
+        "ha_class_0.2.0": row.get("HA_class", ""),
+        "ha_c50_sys_0.1.0": ha_c50_old,
+        "ha_c50_sys_0.2.0": ha_c50_new,
+        "ha_delta_c50": ha_c50_new - ha_c50_old,
+        "ha_bic_margin_0.2.0": row.get("HA_bic_margin", np.nan),
+        "conti_feop_fwhm_0.2.0": row.get("conti_feop_fwhm", np.nan),
+        "conti_at_bound_0.2.0": row.get("conti_at_bound", ""),
+        "feuv_fwhm_fixed_0.2.0": row.get("conti_feuv_fwhm_fixed", ""),
+        "continuum_status_0.2.0": row.get("continuum_status", ""),
+    }
 
 
 def _write_deltas(deltas, path):
@@ -168,18 +204,23 @@ def _write_deltas(deltas, path):
 @pytest.mark.skipif(not ANCHOR, reason="set BLRFIT_ANCHOR_DIR to the literature spectra")
 def test_anchor_population_and_deltas():
     from astropy.table import Table
+
     T = Table.read(os.path.join(ANCHOR, "lit_targets.fits"))
     cpath = os.path.join(ANCHOR, "compare.fits")
     C = Table.read(cpath) if os.path.exists(cpath) else None
     sample = {int(r["LID"]): str(r["SAMPLE_LIT"]).strip() for r in T}
     liu = T[np.char.startswith(np.asarray(T["SAMPLE_LIT"]).astype(str), "Liu")]
-    exact = {(int(r["LID"]), f"spec-{int(r['PLATE']):04d}-{int(r['MJD']):05d}-{int(r['FIBER']):04d}.fits")
-             for r in liu if np.isfinite(r["PLATE"])}
+    exact = {
+        (int(r["LID"]), f"spec-{int(r['PLATE']):04d}-{int(r['MJD']):05d}-{int(r['FIBER']):04d}.fits")
+        for r in liu
+        if np.isfinite(r["PLATE"])
+    }
     lit = {int(r["LID"]): float(r["VOFFP"]) for r in liu}
     jobs = _jobs(T)
     n_exact = sum((lid, os.path.basename(p)) in exact for lid, p, _ in jobs)
     assert n_exact >= 380, f"only {n_exact} of the exact Liu spectra found"
     import multiprocessing as mp
+
     with mp.Pool(NPROC) as pool:
         rows = list(pool.imap_unordered(_fit_one, jobs, chunksize=2))
     rows.sort(key=lambda t: (t[0], _plate_mjd(t[1])))
@@ -190,13 +231,25 @@ def test_anchor_population_and_deltas():
     for lid, fn, row in rows:
         if row is None or (lid, fn) not in exact:
             continue
-        if row.get("HB_class", "") in BROAD_CLASSES and np.isfinite(row["HB_v_peak_sys"]) and np.isfinite(lit[lid]):
-            x.append(lit[lid]); y.append(row["HB_v_peak_sys"])
-    x = np.array(x); y = np.array(y); d = y - x
-    n = len(x); r = np.corrcoef(x, y)[0, 1]; med = float(np.median(d)); nmad = _nmad(d)
+        if (
+            row.get("HB_class", "") in BROAD_CLASSES
+            and np.isfinite(row["HB_v_peak_sys"])
+            and np.isfinite(lit[lid])
+        ):
+            x.append(lit[lid])
+            y.append(row["HB_v_peak_sys"])
+    x = np.array(x)
+    y = np.array(y)
+    d = y - x
+    n = len(x)
+    r = np.corrcoef(x, y)[0, 1]
+    med = float(np.median(d))
+    nmad = _nmad(d)
     sign = float(np.mean(np.sign(x) == np.sign(y)))
-    print(f"\n{len(rows)} spectra fitted, {n_failed} failed; Liu et al. (2014) exact spectra: n = {n}, r = {r:.3f}, "
-          f"median {med:+.1f}, NMAD {nmad:.1f} km/s, sign agreement {100 * sign:.1f} %")
+    print(
+        f"\n{len(rows)} spectra fitted, {n_failed} failed; Liu et al. (2014) exact spectra: n = {n}, r = {r:.3f}, "
+        f"median {med:+.1f}, NMAD {nmad:.1f} km/s, sign agreement {100 * sign:.1f} %"
+    )
 
     # the stored 0.1.0 run, every fitted spectrum with a stored row
     deltas = []
@@ -213,11 +266,13 @@ def test_anchor_population_and_deltas():
         dc = np.array([dl["hb_delta_c50"] for dl in deltas], float)
         dc = dc[np.isfinite(dc)]
         nmad_dc = _nmad(dc)
-        print(f"stored 0.1.0 run: {len(deltas)} spectra compared, {len(classes)} with a stored Hbeta class, "
-              f"{sum(changed.values())} changed ({100 * frac_changed:.2f} %): {dict(changed)}; "
-              f"delta c50_sys of Hbeta: n = {dc.size}, median {np.median(dc):+.2f}, NMAD {nmad_dc:.2f} km/s, "
-              f"16-84 {np.percentile(dc, 16):+.1f} .. {np.percentile(dc, 84):+.1f}, "
-              f"|delta| > 100 km/s: {int(np.sum(np.abs(dc) > 100))}")
+        print(
+            f"stored 0.1.0 run: {len(deltas)} spectra compared, {len(classes)} with a stored Hbeta class, "
+            f"{sum(changed.values())} changed ({100 * frac_changed:.2f} %): {dict(changed)}; "
+            f"delta c50_sys of Hbeta: n = {dc.size}, median {np.median(dc):+.2f}, NMAD {nmad_dc:.2f} km/s, "
+            f"16-84 {np.percentile(dc, 16):+.1f} .. {np.percentile(dc, 84):+.1f}, "
+            f"|delta| > 100 km/s: {int(np.sum(np.abs(dc) > 100))}"
+        )
         if WRITE_DELTAS:
             _write_deltas(deltas, DELTAS_CSV)
             print(f"wrote {DELTAS_CSV}: {len(deltas)} rows")
@@ -228,5 +283,7 @@ def test_anchor_population_and_deltas():
     assert nmad <= LIT_NMAD_KMS
     assert sign >= LIT_SIGN_MIN
     if deltas:
-        assert frac_changed < CLASS_CHANGE_MAX, f"{100 * frac_changed:.2f} per cent of the Hbeta classes changed: {dict(changed)}"
+        assert frac_changed < CLASS_CHANGE_MAX, (
+            f"{100 * frac_changed:.2f} per cent of the Hbeta classes changed: {dict(changed)}"
+        )
         assert nmad_dc < DELTA_NMAD_KMS, f"NMAD of delta c50_sys {nmad_dc:.1f} km/s"

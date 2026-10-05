@@ -51,6 +51,7 @@ counts and systemic sources must agree exactly everywhere.
 row, every fitted parameter and the continuum bit for bit: the fit has no
 hidden state.
 """
+
 import numpy as np
 import pytest
 
@@ -62,8 +63,8 @@ from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, Z_J001224
 from test_pins import KMS_STATS, STRICT
 
 EPS = 1e-13
-REPRO_KMS_OTHER, REPRO_MOMENT_KMS_OTHER = 1.5, 3.0      # without BLRFIT_STRICT_PINS, see the module docstring
-REPRO_KMS = 0.1 if STRICT else REPRO_KMS_OTHER                # every velocity and width of the summary row
+REPRO_KMS_OTHER, REPRO_MOMENT_KMS_OTHER = 1.5, 3.0  # without BLRFIT_STRICT_PINS, see the module docstring
+REPRO_KMS = 0.1 if STRICT else REPRO_KMS_OTHER  # every velocity and width of the summary row
 REPRO_MOMENT_KMS = 0.5 if STRICT else REPRO_MOMENT_KMS_OTHER  # the second-moment width
 EPOCHS = {"2001": SDSS_EXAMPLE, "2013": SDSS_EXAMPLE_2}
 # the entries undefined at the end point, per epoch (see the module docstring)
@@ -72,7 +73,7 @@ UNDEFINED = {"2001": {"conti_feop_fwhm", "HA_nw_sig", "HB_nw_sig"}, "2013": set(
 
 def _fit(path, scale=1.0):
     sp = read_sdss(path)
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"] * scale, sp["ivar"] / scale ** 2, Z_J001224)
+    res = blrfit.fit_spectrum(sp["wave"], sp["flux"] * scale, sp["ivar"] / scale**2, Z_J001224)
     return res, blrfit.summary_row(res)
 
 

@@ -19,6 +19,7 @@ baseline must reproduce the 0.1.0 pins and the outcomes are those of
 docs/DELTAS.md: spec-0651 unchanged, the other two attributed to the operator
 alone, with the complement path agreeing.
 """
+
 import csv
 import json
 import os
@@ -33,7 +34,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import attribute_deltas as ad  # noqa: E402
 
 STRICT = os.environ.get("BLRFIT_STRICT_PINS", "") not in ("", "0")
-END_POINT_KMS = 100.0     # the fresh-fit tolerance of tests/test_pins.py
+END_POINT_KMS = 100.0  # the fresh-fit tolerance of tests/test_pins.py
 
 
 def rec(cls="A", c50=0.0, n=1, flags=(), margin=20.0):
@@ -83,8 +84,14 @@ def test_unchanged():
 
 def test_attributed_single():
     base, cur = rec("A", 0.0), rec("C", 30.0, 2)
-    table = {("a", None): cur, ("a+b", None): cur, ("a+c", None): cur, ("a+b+c", None): cur,
-             ("b", None): rec("A", 0.5), ("c", None): rec("A", 2.0)}
+    table = {
+        ("a", None): cur,
+        ("a+b", None): cur,
+        ("a+c", None): cur,
+        ("a+b+c", None): cur,
+        ("b", None): rec("A", 0.5),
+        ("c", None): rec("A", 2.0),
+    }
     out, search, _ = run(table, base)
     assert out["outcome"] == "attributed-single" and out["toggles"] == ["a"]
     assert out["effect"] == {"a": 30.0, "b": 0.5, "c": 2.0}
@@ -95,9 +102,15 @@ def test_attributed_single():
 
 def test_attributed_joint():
     base, cur = rec("A", 0.0), rec("A", 40.0)
-    table = {("a", None): rec("A", 10.0), ("b", None): rec("A", 12.0), ("c", None): base,
-             ("a+b", None): cur, ("a+c", None): rec("A", 10.0), ("b+c", None): rec("A", 12.0),
-             ("a+b+c", None): cur}
+    table = {
+        ("a", None): rec("A", 10.0),
+        ("b", None): rec("A", 12.0),
+        ("c", None): base,
+        ("a+b", None): cur,
+        ("a+c", None): rec("A", 10.0),
+        ("b+c", None): rec("A", 12.0),
+        ("a+b+c", None): cur,
+    }
     out, search, _ = run(table, base)
     assert out["outcome"] == "attributed-joint" and out["toggles"] == ["a", "b"]
     assert out["reproducing_pairs"] == [("a", "b")] and out["reproducing_singles"] == []
@@ -111,7 +124,7 @@ def test_numerical_by_the_edge():
     out, search, stub = run(table, base)
     assert out["outcome"] == "numerical" and out["perturbation"] == "edge" and out["edge"] is True
     assert out["toggles"] == [] and out["complement_necessary"] == ["a", "b", "c"]
-    assert not any(p for _, p in stub.calls)       # no perturbation needed
+    assert not any(p for _, p in stub.calls)  # no perturbation needed
 
 
 def test_numerical_by_a_start_perturbation():
@@ -149,6 +162,7 @@ def test_toggles_are_discovered():
     assert set(names) | set(unavailable) == {t.name for t in ad.TOGGLES}
     with ad.configured(toggles, frozenset(), perturb="start") as kw:
         from blrfit.model import broad, continuum
+
         assert broad.BROAD_STARTS_KMS[0] == ad.PERTURB_KMS
         for t in toggles:
             if t.keyword():
@@ -173,8 +187,20 @@ def _pins(name):
 def test_three_pinned_spectra(tmp_path):
     current, legacy = _pins("pins_0.2.0.json"), _pins("pins.json")
     out_csv, out_json = tmp_path / "attribution.csv", tmp_path / "attribution.json"
-    ad.main(["--pins", os.path.join(DATA, "pins_0.2.0.json"), "--legacy", os.path.join(DATA, "pins.json"),
-             "--only", *PINNED, "--out", str(out_csv), "--json", str(out_json)])
+    ad.main(
+        [
+            "--pins",
+            os.path.join(DATA, "pins_0.2.0.json"),
+            "--legacy",
+            os.path.join(DATA, "pins.json"),
+            "--only",
+            *PINNED,
+            "--out",
+            str(out_csv),
+            "--json",
+            str(out_json),
+        ]
+    )
     with open(out_csv, newline="") as fh:
         rows = list(csv.DictReader(fh))
     names = [t.name for t in ad.available_toggles()[0]]
@@ -197,7 +223,10 @@ def test_three_pinned_spectra(tmp_path):
             assert abs(float(r["c50_cur"]) - ref[f"{p}_c50_sys"]) < END_POINT_KMS
             assert r["toggles_available"] == "+".join(names) and int(r["n_fits"]) >= 2
             assert r["baseline_vs_legacy"] != ""
-            assert set(dump["spectra"][PINNED.index(fn)]["configurations"]) >= {"baseline", "+".join(sorted(names))}
+            assert set(dump["spectra"][PINNED.index(fn)]["configurations"]) >= {
+                "baseline",
+                "+".join(sorted(names)),
+            }
     if not STRICT:
         return
     # the reference stack: the baseline is the 0.1.0 fit and the deltas are the operator's (docs/DELTAS.md);

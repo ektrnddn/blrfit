@@ -17,6 +17,7 @@ continuum S/N 20, z = 0.1) is replaced by a constant flux whose weighted sum
 is a chosen multiple of its error: 1e-6 sigma is flagged, 5 sigma is not and
 leaves the fit identical to the guard-free one.
 """
+
 import numpy as np
 import pytest
 
@@ -29,8 +30,9 @@ Z = 0.1
 
 
 def _host_rich(seed=3):
-    s = make_spectrum(z=Z, snr=20.0, seed=seed, host_frac=0.5,
-                      broad=[dict(line="Halpha", v=600.0, fwhm=4000.0, ew=200.0)])
+    s = make_spectrum(
+        z=Z, snr=20.0, seed=seed, host_frac=0.5, broad=[dict(line="Halpha", v=600.0, fwhm=4000.0, ew=200.0)]
+    )
     wr = s["wave"] / (1 + Z)
     return s, wr, s["flux"] * (1 + Z), s["ivar"] / (1 + Z) ** 2
 
@@ -58,7 +60,10 @@ def test_window_statistics_are_the_weighted_sum_and_its_noise():
     assert w["weighted_sum"] == pytest.approx(np.sum(ir[win] * fr[win]))
     assert w["weighted_sigma"] == pytest.approx(np.sqrt(np.sum(ir[win])))
     assert w["snr"] == pytest.approx(w["weighted_sum"] / w["weighted_sigma"]) and w["snr"] > 100
-    assert w["min_snr"] == HOST_GUARD_MIN_SNR == 3.0 and w["max_masked_frac"] == HOST_GUARD_MAX_MASKED_FRAC == 0.5
+    assert (
+        w["min_snr"] == HOST_GUARD_MIN_SNR == 3.0
+        and w["max_masked_frac"] == HOST_GUARD_MAX_MASKED_FRAC == 0.5
+    )
     assert not w["undetermined"] and w["reasons"] == []
 
 
@@ -66,7 +71,7 @@ def test_blue_sum_at_a_millionth_of_its_error_is_flagged_and_not_subtracted():
     s, wr, fr, ir = _host_rich()
     win = _window(wr)
     fr = _blue_sum_at(fr, ir, win, 1e-6)
-    assert np.sum(fr[win]) > 0            # the plain sum is positive: the 0.2.0 rule alone would not catch it
+    assert np.sum(fr[win]) > 0  # the plain sum is positive: the 0.2.0 rule alone would not catch it
     d, total, host, info = fit_continuum_host(wr, fr, ir)
     assert info["host_undetermined"] is True and info["host_guard"] is True
     assert not info["applied"] and info["n_gal"] == 0 and np.isnan(info["host_frac_4200_5000"])
@@ -121,10 +126,13 @@ def test_masked_window(masked_frac, flagged):
     s, wr, fr, ir = _host_rich()
     win = _window(wr)
     idx = np.where(win)[0]
-    ir = ir.copy(); ir[idx[: int(masked_frac * idx.size)]] = 0.0
+    ir = ir.copy()
+    ir[idx[: int(masked_frac * idx.size)]] = 0.0
     d, total, host, info = fit_continuum_host(wr, fr, ir)
     w = info["host_window"]
-    assert w["n_masked"] == int(masked_frac * idx.size) and w["masked_frac"] == pytest.approx(masked_frac, abs=1e-3)
+    assert w["n_masked"] == int(masked_frac * idx.size) and w["masked_frac"] == pytest.approx(
+        masked_frac, abs=1e-3
+    )
     assert info["host_undetermined"] is flagged
     if flagged:
         assert w["reasons"] == [f"{w['n_masked']} of {w['n_pix']} pixels in 4200-5000 A masked"]
@@ -135,7 +143,8 @@ def test_masked_window(masked_frac, flagged):
 
 def test_fully_masked_window_is_flagged_for_both_reasons():
     s, wr, fr, ir = _host_rich()
-    ir = ir.copy(); ir[_window(wr)] = 0.0
+    ir = ir.copy()
+    ir[_window(wr)] = 0.0
     info = fit_continuum_host(wr, fr, ir)[3]
     w = info["host_window"]
     assert info["host_undetermined"] and w["n_good"] == 0 and w["masked_frac"] == 1.0 and np.isnan(w["snr"])
@@ -145,7 +154,7 @@ def test_fully_masked_window_is_flagged_for_both_reasons():
 def test_fit_spectrum_persists_the_flag_and_the_setting():
     s, wr, fr, ir = _host_rich()
     win = _window(wr)
-    flux = _blue_sum_at(s["flux"], s["ivar"], win, 1e-6)      # the same construction in the observed frame
+    flux = _blue_sum_at(s["flux"], s["ivar"], win, 1e-6)  # the same construction in the observed frame
     res = blrfit.fit_spectrum(s["wave"], flux, s["ivar"], Z, complexes=("Halpha",))
     hi = res["host_info"]
     assert hi["host_undetermined"] is True and res["settings"]["host_guard"] is True
@@ -153,7 +162,7 @@ def test_fit_spectrum_persists_the_flag_and_the_setting():
     assert res["continuum_info"]["host_undetermined"] is True and "host_window" in res["continuum_info"]
     row = blrfit.summary_row(res)
     assert row["host_applied"] is False and np.isnan(row["host_frac"])
-    assert res["meas"]["Halpha"]["host_frac"] == 0.0            # the convention of a fit without the host
+    assert res["meas"]["Halpha"]["host_frac"] == 0.0  # the convention of a fit without the host
     assert res["cls"]["Halpha"]["label"] in "ABCFWEX"
     off = blrfit.fit_spectrum(s["wave"], flux, s["ivar"], Z, complexes=("Halpha",), host_guard=False)
     assert off["settings"]["host_guard"] is False and off["host_info"]["host_undetermined"] is False

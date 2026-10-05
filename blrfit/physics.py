@@ -17,6 +17,7 @@ lambda L_lambda at a rest wavelength is 4 pi D_L^2 lam_rest f_rest(lam_rest)
 log10(1 + z) dex (0.10 dex at z = 0.25). The luminosity distance is that of the
 Planck 2018 cosmology, as for ``broad_lum`` in ``measure_complex``.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -34,6 +35,7 @@ def lumdist_cm(z):
     try:
         from astropy.cosmology import Planck18
         import astropy.units as u
+
         return np.asarray(Planck18.luminosity_distance(z).to(u.cm).value, float)
     except Exception:
         return np.full(z.shape, np.nan)

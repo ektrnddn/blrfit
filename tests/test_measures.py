@@ -10,6 +10,7 @@ W(3/4) / W(1/4) is sqrt(ln(4/3) / ln 4) = 0.4555 and the asymmetry index is
 zero. The classification thresholds are those of ``blrfit.constants.DEFAULT_THRESH``
 and the flag rules those of ``blrfit.classify``.
 """
+
 import numpy as np
 import pytest
 
@@ -18,8 +19,8 @@ from blrfit.classify import classify, is_measurable, is_strong_offset
 from blrfit.errors import empirical_error
 from blrfit.constants import S2F, DEFAULT_THRESH
 
-GRID = np.arange(-25000.0, 25000.01, 5.0)      # the 5 km/s grid of measure_complex
-KI_GAUSS = np.sqrt(np.log(4.0 / 3.0) / np.log(4.0))   # 0.4555
+GRID = np.arange(-25000.0, 25000.01, 5.0)  # the 5 km/s grid of measure_complex
+KI_GAUSS = np.sqrt(np.log(4.0 / 3.0) / np.log(4.0))  # 0.4555
 
 
 def gaussian(v0, fwhm, amp=1.0, v=GRID):
@@ -93,7 +94,7 @@ def test_asymmetric_two_component_profile_has_a_tilted_bisector():
     assert m["AI"] > 0.15
     assert tilt > 0.12
     assert m["n_peaks"] == 1
-    assert m["c25"] > m["c50"] > m["v_peak"]       # the shoulder is red: bisector drifts redward downwards
+    assert m["c25"] > m["c50"] > m["v_peak"]  # the shoulder is red: bisector drifts redward downwards
     assert m["centroid"] > m["v_peak"]
 
 
@@ -118,14 +119,38 @@ def measures(offset=0.0, **over):
     """A symmetric Gaussian-like measure dictionary of a strong broad line at
     c(1/2) - v_sys = ``offset``, with every key ``classify`` reads; ``over``
     replaces individual entries."""
-    m = dict(fwhm=4000.0, broad_flux_snr=50.0, broad_peak_snr=20.0, sys_snr=30.0,
-             narrow_peak_snr=30.0, v_sys=0.0, c50_sys=offset, c25=offset, c50=offset,
-             c75=offset, v_peak=offset, centroid=offset, v_peak_sys=offset,
-             peak_top_sys=offset, AI=0.0, KI=0.456, n_peaks=1, peak_sep=np.nan,
-             dip_frac=np.nan, chi2_red=1.0, host_frac=0.0, pl_alpha=-1.5,
-             v_cover_lo=-9000.0, v_cover_hi=9000.0, v_sii=np.nan, flux_SII6716=0.0,
-             flux_SII6731=0.0, systemic_source="own narrow group", v_o3=np.nan,
-             o3_core_snr=np.nan)
+    m = dict(
+        fwhm=4000.0,
+        broad_flux_snr=50.0,
+        broad_peak_snr=20.0,
+        sys_snr=30.0,
+        narrow_peak_snr=30.0,
+        v_sys=0.0,
+        c50_sys=offset,
+        c25=offset,
+        c50=offset,
+        c75=offset,
+        v_peak=offset,
+        centroid=offset,
+        v_peak_sys=offset,
+        peak_top_sys=offset,
+        AI=0.0,
+        KI=0.456,
+        n_peaks=1,
+        peak_sep=np.nan,
+        dip_frac=np.nan,
+        chi2_red=1.0,
+        host_frac=0.0,
+        pl_alpha=-1.5,
+        v_cover_lo=-9000.0,
+        v_cover_hi=9000.0,
+        v_sii=np.nan,
+        flux_SII6716=0.0,
+        flux_SII6731=0.0,
+        systemic_source="own narrow group",
+        v_o3=np.nan,
+        o3_core_snr=np.nan,
+    )
     m.update(over)
     return m
 
@@ -145,10 +170,10 @@ def test_class_a_is_a_significant_symmetric_offset():
 
 def test_class_a_requires_three_sigma_when_an_error_is_given():
     m = measures(1200.0)
-    assert classify(m, err={"c50_sys": 100.0})["label"] == "A"     # 12 sigma
-    assert classify(m, err={"c50_sys": 399.0})["label"] == "A"     # 3.01 sigma
-    assert classify(m, err={"c50_sys": 500.0})["label"] == "F"     # 2.4 sigma
-    assert classify(m, err={"c50_sys": np.nan})["label"] == "A"    # no usable error: threshold only
+    assert classify(m, err={"c50_sys": 100.0})["label"] == "A"  # 12 sigma
+    assert classify(m, err={"c50_sys": 399.0})["label"] == "A"  # 3.01 sigma
+    assert classify(m, err={"c50_sys": 500.0})["label"] == "F"  # 2.4 sigma
+    assert classify(m, err={"c50_sys": np.nan})["label"] == "A"  # no usable error: threshold only
     assert classify(m, err={})["label"] == "A"
 
 
@@ -204,7 +229,7 @@ def test_class_f_normal():
 
 
 def test_class_e_no_broad_line():
-    assert classify(measures(1200.0, fwhm=1100.0))["label"] == "E"        # FWHM < 1200
+    assert classify(measures(1200.0, fwhm=1100.0))["label"] == "E"  # FWHM < 1200
     assert classify(measures(1200.0, fwhm=np.nan))["label"] == "E"
     assert classify(measures(1200.0, broad_flux_snr=4.9))["label"] == "E"  # integrated S/N < 5
     assert classify(measures(1200.0, broad_peak_snr=1.4))["label"] == "E"  # peak S/N < 1.5
@@ -218,13 +243,14 @@ def test_class_x_no_systemic_reference():
     assert classify(measures(1200.0, sys_snr=2.9))["label"] == "X"
     assert classify(measures(1200.0, v_sys=np.nan))["label"] == "X"
     # sys_snr falls back to narrow_peak_snr when absent
-    m = measures(1200.0); del m["sys_snr"]
+    m = measures(1200.0)
+    del m["sys_snr"]
     assert classify(dict(m, narrow_peak_snr=2.0))["label"] == "X"
     assert classify(dict(m, narrow_peak_snr=3.0))["label"] == "A"
 
 
 def test_class_w_too_narrow_or_too_weak():
-    assert classify(measures(1200.0, fwhm=1900.0))["label"] == "W"        # 1200 <= FWHM < 2000
+    assert classify(measures(1200.0, fwhm=1900.0))["label"] == "W"  # 1200 <= FWHM < 2000
     assert classify(measures(1200.0, broad_flux_snr=7.9))["label"] == "W"  # 5 <= S/N < 8
     assert classify(measures(1200.0, fwhm=2000.0, broad_flux_snr=8.0))["label"] == "A"
 
@@ -234,60 +260,88 @@ def test_thresholds_can_be_overridden():
     assert classify(m, t={"offset_kms": 2000.0})["label"] == "F"
     assert classify(m, t={"class_fwhm": 5000.0})["label"] == "W"
     assert classify(measures(0.0, AI=0.15), t={"ai_max": 0.20})["label"] == "F"
-    assert DEFAULT_THRESH["offset_kms"] == 300.0     # the default is untouched
+    assert DEFAULT_THRESH["offset_kms"] == 300.0  # the default is untouched
 
 
-@pytest.mark.parametrize("flag, over", [
-    ("poor_fit", dict(chi2_red=2.5)),
-    ("low_snr", dict(broad_flux_snr=9.9)),
-    ("low_peak_snr", dict(broad_peak_snr=4.9)),
-    ("host_dominated", dict(host_frac=0.80)),
-    ("pl_at_bound", dict(pl_alpha=-4.95)),
-    ("pl_at_bound", dict(pl_alpha=2.95)),
-    ("narrow_at_bound", dict(v_sys=1425.0)),
-    ("narrow_at_bound", dict(v_sys=-1425.0)),
-    ("edge", dict(v_cover_hi=5999.0)),
-    ("edge", dict(v_cover_lo=-5999.0)),
-    ("sii_disagree", dict(v_sii=151.0, flux_SII6716=1.0)),
-    ("sii_disagree", dict(v_sii=-200.0, flux_SII6731=1.0)),
-    ("sys_disagree", dict(v_o3=-401.0, o3_core_snr=5.0)),
-    ("sys_disagree", dict(v_o3=np.nan, v_o3_pre=500.0, o3_pre_snr=5.0)),
-    ("peak_disagree", dict(peak_top_sys=0.26 * 4000.0)),
-    ("extreme_offset", dict(c50_sys=4001.0, c25=4001.0, c75=4001.0, v_peak=4001.0,
-                            centroid=4001.0, v_peak_sys=4001.0, peak_top_sys=4001.0)),
-])
+@pytest.mark.parametrize(
+    "flag, over",
+    [
+        ("poor_fit", dict(chi2_red=2.5)),
+        ("low_snr", dict(broad_flux_snr=9.9)),
+        ("low_peak_snr", dict(broad_peak_snr=4.9)),
+        ("host_dominated", dict(host_frac=0.80)),
+        ("pl_at_bound", dict(pl_alpha=-4.95)),
+        ("pl_at_bound", dict(pl_alpha=2.95)),
+        ("narrow_at_bound", dict(v_sys=1425.0)),
+        ("narrow_at_bound", dict(v_sys=-1425.0)),
+        ("edge", dict(v_cover_hi=5999.0)),
+        ("edge", dict(v_cover_lo=-5999.0)),
+        ("sii_disagree", dict(v_sii=151.0, flux_SII6716=1.0)),
+        ("sii_disagree", dict(v_sii=-200.0, flux_SII6731=1.0)),
+        ("sys_disagree", dict(v_o3=-401.0, o3_core_snr=5.0)),
+        ("sys_disagree", dict(v_o3=np.nan, v_o3_pre=500.0, o3_pre_snr=5.0)),
+        ("peak_disagree", dict(peak_top_sys=0.26 * 4000.0)),
+        (
+            "extreme_offset",
+            dict(
+                c50_sys=4001.0,
+                c25=4001.0,
+                c75=4001.0,
+                v_peak=4001.0,
+                centroid=4001.0,
+                v_peak_sys=4001.0,
+                peak_top_sys=4001.0,
+            ),
+        ),
+    ],
+)
 def test_flag_is_raised_at_its_threshold(flag, over):
     c = classify(measures(0.0, **over))
     assert flag in c["flags"], (flag, c)
-    assert c["label"] in ("A", "B", "C", "F")      # flags do not change the class
+    assert c["label"] in ("A", "B", "C", "F")  # flags do not change the class
 
 
-@pytest.mark.parametrize("flag, over", [
-    ("poor_fit", dict(chi2_red=2.4)),
-    ("low_snr", dict(broad_flux_snr=10.0)),
-    ("low_peak_snr", dict(broad_peak_snr=5.0)),
-    ("host_dominated", dict(host_frac=0.79)),
-    ("pl_at_bound", dict(pl_alpha=-4.8)),
-    ("pl_at_bound", dict(pl_alpha=2.8)),
-    ("narrow_at_bound", dict(v_sys=1400.0)),
-    ("edge", dict(v_cover_lo=-6000.0, v_cover_hi=6000.0)),
-    ("sii_disagree", dict(v_sii=149.0, flux_SII6716=1.0)),
-    ("sii_disagree", dict(v_sii=300.0)),                       # no [S II] flux: no flag
-    ("sys_disagree", dict(v_o3=-399.0, o3_core_snr=5.0)),
-    ("sys_disagree", dict(v_o3=-800.0, o3_core_snr=4.9)),      # [O III] too weak to judge
-    ("sys_disagree", dict(v_o3=-800.0, o3_core_snr=50.0, systemic_source="[OIII] core")),
-    ("peak_disagree", dict(peak_top_sys=0.24 * 4000.0)),
-    ("peak_disagree", dict(peak_top_sys=np.nan)),
-    ("extreme_offset", dict(c50_sys=3999.0, c25=3999.0, c75=3999.0, v_peak=3999.0,
-                            centroid=3999.0, v_peak_sys=3999.0, peak_top_sys=3999.0)),
-])
+@pytest.mark.parametrize(
+    "flag, over",
+    [
+        ("poor_fit", dict(chi2_red=2.4)),
+        ("low_snr", dict(broad_flux_snr=10.0)),
+        ("low_peak_snr", dict(broad_peak_snr=5.0)),
+        ("host_dominated", dict(host_frac=0.79)),
+        ("pl_at_bound", dict(pl_alpha=-4.8)),
+        ("pl_at_bound", dict(pl_alpha=2.8)),
+        ("narrow_at_bound", dict(v_sys=1400.0)),
+        ("edge", dict(v_cover_lo=-6000.0, v_cover_hi=6000.0)),
+        ("sii_disagree", dict(v_sii=149.0, flux_SII6716=1.0)),
+        ("sii_disagree", dict(v_sii=300.0)),  # no [S II] flux: no flag
+        ("sys_disagree", dict(v_o3=-399.0, o3_core_snr=5.0)),
+        ("sys_disagree", dict(v_o3=-800.0, o3_core_snr=4.9)),  # [O III] too weak to judge
+        ("sys_disagree", dict(v_o3=-800.0, o3_core_snr=50.0, systemic_source="[OIII] core")),
+        ("peak_disagree", dict(peak_top_sys=0.24 * 4000.0)),
+        ("peak_disagree", dict(peak_top_sys=np.nan)),
+        (
+            "extreme_offset",
+            dict(
+                c50_sys=3999.0,
+                c25=3999.0,
+                c75=3999.0,
+                v_peak=3999.0,
+                centroid=3999.0,
+                v_peak_sys=3999.0,
+                peak_top_sys=3999.0,
+            ),
+        ),
+    ],
+)
 def test_flag_is_not_raised_below_its_threshold(flag, over):
     assert flag not in classify(measures(0.0, **over))["flags"]
 
 
 def test_sii_disagree_is_measured_against_the_systemic():
     # [S II] 100 km/s from a systemic at +1000: no flag; 200 km/s away: flag
-    assert "sii_disagree" not in classify(measures(0.0, v_sys=1000.0, v_sii=1100.0, flux_SII6716=1.0))["flags"]
+    assert (
+        "sii_disagree" not in classify(measures(0.0, v_sys=1000.0, v_sii=1100.0, flux_SII6716=1.0))["flags"]
+    )
     assert "sii_disagree" in classify(measures(0.0, v_sys=1000.0, v_sii=800.0, flux_SII6716=1.0))["flags"]
 
 
@@ -303,15 +357,35 @@ def test_classify_output_structure():
     c = classify(measures(1200.0))
     assert set(c) == {"label", "reasons", "features", "flags"}
     assert isinstance(c["reasons"], list) and len(c["reasons"]) == 1
-    for k in ("offset", "e_offset", "tilt", "peak_minus_cen", "AI", "KI", "n_peaks", "peak_sep", "dip", "fwhm"):
+    for k in (
+        "offset",
+        "e_offset",
+        "tilt",
+        "peak_minus_cen",
+        "AI",
+        "KI",
+        "n_peaks",
+        "peak_sep",
+        "dip",
+        "fwhm",
+    ):
         assert k in c["features"]
 
 
 def test_classify_on_measured_gaussian_profiles():
     """The measures of an analytic Gaussian, completed with the fit-level keys,
     classify as A at +1200 km/s and F at zero offset."""
-    extra = dict(broad_flux_snr=50.0, broad_peak_snr=20.0, sys_snr=30.0, v_sys=0.0,
-                 chi2_red=1.0, host_frac=0.0, pl_alpha=-1.5, v_cover_lo=-9000.0, v_cover_hi=9000.0)
+    extra = dict(
+        broad_flux_snr=50.0,
+        broad_peak_snr=20.0,
+        sys_snr=30.0,
+        v_sys=0.0,
+        chi2_red=1.0,
+        host_frac=0.0,
+        pl_alpha=-1.5,
+        v_cover_lo=-9000.0,
+        v_cover_hi=9000.0,
+    )
     for v0, label in ((1200.0, "A"), (0.0, "F"), (-450.0, "A")):
         m = profile_measures(GRID, gaussian(v0, 3500.0))
         m.update(extra, c50_sys=m["c50"], v_peak_sys=m["v_peak"], peak_top_sys=m["v_peak"])
@@ -327,7 +401,7 @@ def test_classify_on_measured_gaussian_profiles():
 # ---------------------------------------------------------------------------
 def test_is_measurable_definition():
     assert is_measurable("A", [], 10.0, 3000.0)
-    assert is_measurable("F", ["low_snr"], 8.0, 2000.0)      # boundaries are inclusive
+    assert is_measurable("F", ["low_snr"], 8.0, 2000.0)  # boundaries are inclusive
     for label in ("B", "C"):
         assert is_measurable(label, [], 20.0, 4000.0)
     for label in ("E", "X", "W", ""):
@@ -366,7 +440,7 @@ def test_empirical_error_model():
     assert empirical_error(100.0, 1000.0) == pytest.approx(97.5)
     assert empirical_error(100.0, -1200.0) == pytest.approx(97.5)
     assert empirical_error(100.0, 999.0) == pytest.approx(65.0)
-    assert empirical_error(1e6, 2000.0) == pytest.approx(67.5)     # the floor is inflated too
+    assert empirical_error(1e6, 2000.0) == pytest.approx(67.5)  # the floor is inflated too
     # undefined S/N gives no error
     assert np.isnan(empirical_error(np.nan))
     assert np.isnan(empirical_error(0.0))

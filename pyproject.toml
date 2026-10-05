@@ -42,6 +42,14 @@ include = ["blrfit*"]
 [tool.setuptools.package-data]
 "blrfit.templates" = ["*.txt", "*.fits", "README.md"]
 
+[tool.ruff]
+line-length = 110
+# the uncertainty-study sources are pinned by SHA256 in validation/*/STUDY_IDENTITY.json
+extend-exclude = ["validation"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
