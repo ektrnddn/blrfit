@@ -223,6 +223,31 @@ def test_all_matches_in_same_coadd_do_not_overwrite(tmp_path, monkeypatch):
     assert len({c.stem for c in calls}) == 2
 
 
+def test_public_fits_are_named_after_their_products(tmp_path, monkeypatch):
+    desi = dict(
+        kind="desi",
+        release="dr1",
+        survey="main",
+        program="dark",
+        healpix=17260,
+        targetid=39627574082538900,
+        path="inputs/desi/coadd.fits",
+    )
+    sdss = dict(kind="sdss", plate=651, mjd=52141, fiberid=72, path="inputs/sdss/spec.fits")
+    # the same identity twice (never expected from the archives) still gives two outputs
+    monkeypatch.setattr(
+        input_workflow, "retrieve", lambda *a: dict(desi=[desi], sdss=[sdss, dict(sdss)], complete=True)
+    )
+    a = build_parser().parse_args(["fit", "--ra", "3.2", "--dec", "-8.8", "--out", str(tmp_path)])
+    calls = []
+    assert input_workflow.fit_public(a, lambda one: calls.append(one)) == 0
+    assert [c.stem for c in calls] == [
+        "desi-dr1-main-dark-17260-39627574082538900",
+        "spec-0651-52141-0072",
+        "spec-0651-52141-0072-2",
+    ]
+
+
 def test_single_row_inferred_but_duplicate_desi_rows_rejected(tmp_path):
     from test_fetch_identity import _coadd, TARGETID
 

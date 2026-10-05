@@ -140,7 +140,9 @@ Legacy filename-based selection is available explicitly with `--survey auto`.
 Each successful spectrum writes `*_fit.json` and `*_fit.png`; `--pickle` also saves
 its full fit. JSON includes Hα/Hβ classifications, flags, solver diagnostics,
 redshift/reader provenance and uncertainty status. A public search writes
-`inputs/fetch_manifest.json` and `fit_manifest.json`; individual failures remain
+`inputs/fetch_manifest.json` and `fit_manifest.json`, and names each fit after its
+product (`fits/desi-dr1-main-dark-17260-39627574082538900_fit.json`,
+`fits/spec-0651-52141-0072_fit.json`); individual failures remain
 listed and the command returns a nonzero exit status for incomplete work.
 
 Add `--nmc 200 --seed 0` to use the draw count evaluated in the latest conditional

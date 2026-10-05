@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import os
 import tempfile
@@ -115,6 +114,22 @@ def retrieve(a, directory):
     return report
 
 
+def public_stem(r):
+    """Output name of a public spectrum, from its identity:
+    desi-<release>-<survey>-<program>-<healpix>-<TARGETID> for a DESI healpix
+    coadd, and the archive's file name (spec-<plate>-<mjd>-<fiber>) for SDSS,
+    so that a fit of the same file downloaded by hand has the same name."""
+    keys = ("release", "survey", "program", "healpix", "targetid")
+    if r.get("kind") == "desi" and all(r.get(k) is not None for k in keys):
+        return "desi-" + "-".join(str(r[k]) for k in keys)
+    if r.get("kind") == "sdss" and all(r.get(k) is not None for k in ("plate", "mjd", "fiberid")):
+        return f"spec-{int(r['plate']):04d}-{int(r['mjd']):05d}-{int(r['fiberid']):04d}"
+    stem = Path(str(r.get("filename") or r.get("path") or "spectrum")).name.split(".")[0]
+    if r.get("kind") == "desi" and r.get("targetid") is not None and str(r["targetid"]) not in stem:
+        stem = f"{stem}-{r['targetid']}"
+    return stem
+
+
 def fit_public(a, fit_one):
     if a.stem:
         raise ValueError(
@@ -123,6 +138,7 @@ def fit_public(a, fit_one):
     directory = Path(a.out)
     report = retrieve(a, directory / "inputs")
     results = []
+    used = set()
     for r in report["desi"] + report["sdss"]:
         if not r.get("path"):
             continue
@@ -134,9 +150,12 @@ def fit_public(a, fit_one):
         one.public_source = r
         one.redrock = r.get("redrock")
         one.out = str(directory / "fits")
-        identity = json.dumps([r.get("coadd_url", r.get("url")), r.get("targetid")], separators=(",", ":"))
-        token = hashlib.sha256(identity.encode()).hexdigest()[:12]
-        one.stem = f"{one.survey}_{token}"
+        stem = base = public_stem(r)
+        n = 2
+        while stem in used:  # two products with one identity never share an output
+            stem, n = f"{base}-{n}", n + 1
+        used.add(stem)
+        one.stem = stem
         try:
             fit_one(one)
             results.append(
