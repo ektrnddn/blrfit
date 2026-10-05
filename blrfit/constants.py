@@ -428,6 +428,30 @@ FLUX_SCALE_MIN = 1e-2  # median of the positive input flux below this is refused
 FLUX_SCALE_MAX = 1e4  # ... and above this
 
 # ----------------------------------------------------------------------------
+# Unusable pixels and residuals (fit_spectrum, lines.py, measure.py)
+# ----------------------------------------------------------------------------
+# Pixels next to an unusable one are excluded as well: the pipelines mask the
+# core of a cosmic ray or a bad column but not always its edges. In the DESI
+# example coadd (a single exposure) six pixels at 6138-6142 A, between two masked
+# pairs, sit 15-20 sigma above their neighbours, 1400 km/s redward of
+# [O III] 5007; the fit absorbed them by pushing the [O III] wing to its +500 km/s
+# bound and ended with a reduced chi-square of 2.9 in Hbeta. With the mask grown
+# by two pixels it ends at 1.95 with the wing at -96 km/s.
+MASK_GROW_PIX = 2
+# A free line parameter counts as on a bound when the solver holds it there or it
+# lies within this fraction of the bound span from the bound. Amplitudes and the
+# narrow-wing fraction on their zero bound are normal (an absent line or wing).
+PARAM_BOUND_REL = 1e-6
+# Residual outliers: pixels the line model misses by more than this many sigma,
+# farther than RESIDUAL_PROTECT_KMS from every narrow-line centre (narrow cores
+# are steep and their residuals large in bright spectra); the line is flagged
+# 'residual_outliers' with at least RESIDUAL_OUTLIER_MIN_PIX of them. A flag,
+# not a mask: clipping could remove real broad-line structure.
+RESIDUAL_OUTLIER_SIGMA = 5.0
+RESIDUAL_PROTECT_KMS = 600.0
+RESIDUAL_OUTLIER_MIN_PIX = 3
+
+# ----------------------------------------------------------------------------
 # Narrow-line frame veto of an epoch pair (rv.py, frame_check)
 # ----------------------------------------------------------------------------
 # Two spectra of one object share a wavelength frame only if their narrow-line

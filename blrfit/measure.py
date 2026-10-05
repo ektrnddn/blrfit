@@ -39,6 +39,8 @@ from .constants import (
     DATA_PEAK_GUARD_HBETA_KMS,
     DATA_SMOOTH_KMS,
     DEGENERATE_DCHI2,
+    RESIDUAL_OUTLIER_SIGMA,
+    RESIDUAL_PROTECT_KMS,
 )
 from .model.params import gauss_lam
 from .model.lines import eval_components
@@ -225,6 +227,21 @@ def equivalent_end_points(r, lam0, vgrid):
     return dv, dw, int(c50.size)
 
 
+def residual_outliers(r):
+    """Pixels of fit ``r`` that the model misses by more than
+    RESIDUAL_OUTLIER_SIGMA, farther than RESIDUAL_PROTECT_KMS from the centre of
+    every narrow line (whose steep cores leave large residuals in bright
+    spectra)."""
+    x, y, w, d = r["x"], r["y"], r["w"], r["d"]
+    resid = (y - eval_components(x, d, r["comps"])) * w
+    near = np.zeros(x.size, bool)
+    for lab, l0, an, vn, sn, kind, rr in r["comps"]:
+        if kind == "narrow":
+            lc = l0 * (1.0 + d[vn] / C_KMS)
+            near |= np.abs(x / lc - 1.0) * C_KMS < RESIDUAL_PROTECT_KMS
+    return int(np.sum((np.abs(resid) > RESIDUAL_OUTLIER_SIGMA) & ~near))
+
+
 def broad_profile(r, lam0, vgrid):
     """The summed broad model of fit ``r`` on a velocity grid about lam0."""
     lam = lam0 * (1.0 + vgrid / C_KMS)
@@ -344,6 +361,8 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
         m["sys_snr"] = m["narrow_peak_snr"]
     m["chi2_red"] = r["chi2"] / max(r["npix"] - r["nfree"], 1)
     m["n_broad"] = r["n_broad"]
+    m["params_at_bound"] = list(r.get("params_at_bound", []))
+    m["n_residual_outliers"] = residual_outliers(r)
     m["bic_all"] = r.get("all_bic", [])
     # single-Gaussian centre, for comparison with single-Gaussian pipelines
     if r["n_broad"] == 1:

@@ -120,6 +120,7 @@ from blrfit.constants import (
     O3_START_MIN_SNR,
     SYS_PRIOR_KMS,
     SYS_PRIOR_MIN_SNR,
+    MASK_GROW_PIX,
 )
 from blrfit.io import read_desi, read_sdss
 from blrfit.io.desi import read_redrock, redrock_sibling
@@ -199,9 +200,13 @@ KMS_STATS = frozenset(
 )  # the Fe II broadening, a FWHM in km/s
 
 
-# summary-row columns added since the 0.1.0 pins (0.3.0: the comparison of equally good decompositions)
+# summary-row columns and flags added since the 0.1.0 pins (0.3.0: equally good decompositions,
+# parameters on a bound, residual outliers); the comparison with those pins leaves them out
+FLAGS_SINCE_0_1 = frozenset({"degenerate", "param_at_bound", "residual_outliers"})
 ROW_KEYS_SINCE_0_1 = frozenset(
-    f"{p}_{k}" for p in ("HA", "HB", "MG") for k in ("dv_spread", "fwhm_spread", "n_equivalent")
+    f"{p}_{k}"
+    for p in ("HA", "HB", "MG")
+    for k in ("dv_spread", "fwhm_spread", "n_equivalent", "n_residual_outliers", "params_at_bound")
 )
 
 
@@ -257,16 +262,24 @@ def _row_departures(row, ref, kms_abs=KMS_ABS, other_rel=OTHER_REL):
 # ----------------------------------------------------------------------------
 # first part: the model, chi-square, measures and classes at the pinned parameters
 # ----------------------------------------------------------------------------
-def rest_frame(sp, z, ebv, err_floor=ERR_FLOOR):
+def rest_frame(sp, z, ebv, err_floor=ERR_FLOOR, mask_grow=MASK_GROW_PIX):
     """The first step of ``fit_spectrum`` replicated statement by statement (bad
-    pixels zeroed, de-reddening, the error floor in quadrature, the shift to
-    the rest frame). The second part checks that the ``wave_rest``,
-    ``flux_rest`` and ``ivar_rest`` arrays of a fresh fit equal these, so a
-    change of that step, its default error floor included, is caught."""
+    pixels zeroed, the mask grown by ``mask_grow`` pixels, de-reddening, the
+    error floor in quadrature, the shift to the rest frame). The second part
+    checks that the ``wave_rest``, ``flux_rest`` and ``ivar_rest`` arrays of a
+    fresh fit equal these, so a change of that step, its default error floor
+    and mask growth included, is caught. The 0.1.0 pins predate the mask
+    growth and are evaluated with ``mask_grow=0``."""
     wave_obs = np.asarray(sp["wave"], float)
     flux = np.asarray(sp["flux"], float)
     ivar = np.asarray(sp["ivar"], float)
     bad = ~np.isfinite(flux) | ~np.isfinite(ivar) | (ivar <= 0)
+    if mask_grow > 0 and bad.any() and not bad.all():
+        grown = bad.copy()
+        for k in range(1, mask_grow + 1):
+            grown[k:] |= bad[:-k]
+            grown[:-k] |= bad[k:]
+        bad = grown
     flux = np.where(bad, 0.0, flux)
     ivar = np.where(bad, 0.0, ivar)
     flux, ivar = deredden(wave_obs, flux, ivar, ebv)
@@ -363,8 +376,9 @@ def pinned_complex(pin, name, wr, fsub, ir):
 
 def pinned_result(pin, sp):
     """A result dictionary evaluated at the pinned parameters, with the measures
-    and classes assembled as in ``fit_spectrum``."""
-    wr, fr, ir = rest_frame(sp, pin["z"], pin["ebv"])
+    and classes assembled as in ``fit_spectrum`` (the preprocessing of the
+    0.1.0 fit: no mask growth)."""
+    wr, fr, ir = rest_frame(sp, pin["z"], pin["ebv"], mask_grow=0)
     cmodel, host = pinned_continuum(pin, wr)
     fsub = fr - host - cmodel
     dl = _lumdist_cm(pin["z"])
@@ -443,10 +457,14 @@ def test_legacy_pin_evaluated_from_the_parameters(pin, monkeypatch):
             departures.append(
                 f"{name} BIC selection {select_by_bic(bics, DBIC) + 1} vs pinned n_broad {r['n_broad']}"
             )
-    # columns added to the summary row after 0.1.0 are not part of these pins
+    # columns and flags added after 0.1.0 are not part of these pins
     row = blrfit.summary_row(res)
     assert set(row) - set(pin["summary"]) <= ROW_KEYS_SINCE_0_1, set(row) - set(pin["summary"])
-    departures += _row_departures({k: row[k] for k in pin["summary"]}, pin["summary"])
+    projected = {k: row[k] for k in pin["summary"]}
+    for k in projected:
+        if k.endswith("_flags"):
+            projected[k] = ",".join(f for f in row[k].split(",") if f and f not in FLAGS_SINCE_0_1)
+    departures += _row_departures(projected, pin["summary"])
     assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
 
 

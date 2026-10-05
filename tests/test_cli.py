@@ -12,8 +12,10 @@ from test_pins import _current_pins
 # the end-point tolerance of tests/test_pins.py: the least-squares solver ends at a platform-dependent
 # point of a degenerate decomposition, which moves the primary offset by tens of km/s but not the class
 END_POINT_KMS = 100.0
-# the pinned summary row of the SDSS example (read with the IVAR-only mask, as the pins are)
-J001224_PIN = {p["file"]: p for p in _current_pins()["pins"]}["spec-0651-52141-0072.fits"]["summary"]
+# the pinned summary rows of the SDSS example (read with the IVAR-only mask, as the pins are) and of the DESI example
+_PINS = {p["file"]: p for p in _current_pins()["pins"]}
+J001224_PIN = _PINS["spec-0651-52141-0072.fits"]["summary"]
+DESI_PIN = _PINS["coadd-main-dark-17260-39627574082538900.fits"]["summary"]
 
 
 def test_fit_sdss_example(tmp_path):
@@ -116,9 +118,9 @@ def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
     ha = doc["lines"]["Halpha"]
     assert (
         ha["fitted"]
-        and ha["label"] == "F"
-        and abs(ha["dv"] + 37.0) < END_POINT_KMS
-        and ha["flags"] == []
+        and ha["label"] == DESI_PIN["HA_class"] == "F"
+        and abs(ha["dv"] - DESI_PIN["HA_c50_sys"]) < END_POINT_KMS
+        and ",".join(ha["flags"]) == DESI_PIN["HA_flags"]
         and ha["measurable"]
     )
     assert doc["input"]["z_source"] == "redrock"

@@ -8,7 +8,7 @@ import pytest
 
 import blrfit
 from blrfit import errors
-from blrfit.constants import MC_ALIAS_KMS, MC_ALIAS_MAX_FRACTION
+from blrfit.constants import MASK_GROW_PIX, MC_ALIAS_KMS, MC_ALIAS_MAX_FRACTION
 from blrfit.model import fit as fit_module
 from blrfit.model import lines
 from blrfit.model import continuum
@@ -214,7 +214,8 @@ def test_native_pixel_mask_retained(weak_narrow_spectrum):
     bad = np.abs(sp["wave"] / 1.25 - 6600.0) < 2.0
     sp["ivar"][bad] = 0
     r = fit_weak(sp)["fits"]["Halpha"]
-    assert np.count_nonzero(~r["native_mask"]) == np.count_nonzero(bad)
+    # the unusable pixels and the MASK_GROW_PIX pixels on each side of them
+    assert np.count_nonzero(~r["native_mask"]) == np.count_nonzero(fit_module.grow_mask(bad, MASK_GROW_PIX))
     assert (r["native_w"][~r["native_mask"]] == 0).all()
     np.testing.assert_array_equal(r["native_x"][r["native_mask"]], r["x"])
     assert r["data_chi2"] + sum(r["penalty_chi2"].values()) == pytest.approx(r["chi2"])

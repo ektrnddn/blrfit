@@ -78,6 +78,8 @@ LINE_KEYS = (
     "dv_spread",
     "fwhm_spread",
     "n_equivalent",
+    "n_residual_outliers",
+    "params_at_bound",
     "host_frac",
     "pl_alpha",
 )

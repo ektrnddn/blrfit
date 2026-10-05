@@ -28,6 +28,7 @@ from ..constants import (
     MAX_NFEV_COMPLEX,
     MAX_BROAD,
     DBIC,
+    PARAM_BOUND_REL,
 )
 from .params import ParamSet, gauss_lam
 from .narrow import (
@@ -122,6 +123,47 @@ def eval_components(wave, d, comps, kinds=None):
     return y
 
 
+def unconstrained_parameters(comps, d, wave):
+    """Parameters no data constrain at the end point ``d``: the amplitude of a
+    line of which every component is centred outside the fitted pixels
+    (``wave``; He II 4686 lies below the 4700 A start of the Hbeta window), and
+    the velocity and width shared only by components of zero amplitude (an
+    absent [O III] or narrow-line-region wing), which multiply nothing, as an
+    Fe II width does at zero norm."""
+    inside, amps = set(), set()
+    used, alive = set(), set()
+    lo, hi = float(np.min(wave)), float(np.max(wave))
+    for lab, l0, an, vn, sn, kind, rr in comps:
+        amps.add(an)
+        if lo <= l0 * (1.0 + d[vn] / C_KMS) <= hi:
+            inside.add(an)
+        used.update((vn, sn))
+        if d[an] * (rr[1] if rr else 1.0) > 0:
+            alive.update((vn, sn))
+    return (amps - inside) | (used - alive)
+
+
+def params_at_bound(ps, x, active, skip=()):
+    """The free parameters of an end point that lie on a bound, as 'name:lower'
+    or 'name:upper': those the solver holds active (``active``, name -> -1 or 1)
+    and those within PARAM_BOUND_REL of the bound span from a bound. Amplitudes
+    and the narrow-wing fraction on their zero bound are normal (an absent line
+    or wing) and are left out, as are the parameters in ``skip`` (those no data
+    constrain)."""
+    lb, ub = ps.bounds()
+    out = []
+    for n, v, lo, hi in zip(ps.free_names, x, lb, ub):
+        if n in skip:
+            continue
+        tol = PARAM_BOUND_REL * (hi - lo) if np.isfinite(hi - lo) else 0.0
+        if active.get(n) == -1 or v - lo <= tol:
+            if not (n.endswith("_A") or n == "nw_f"):
+                out.append(f"{n}:lower")
+        elif active.get(n) == 1 or hi - v <= tol:
+            out.append(f"{n}:upper")
+    return out
+
+
 def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
     """Fit one complex with ``n_broad`` broad Gaussians, from several starting
     velocities of the first broad component (and optionally of the narrow
@@ -140,7 +182,8 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
     against the catalogue rather than silently changing the selected model.
     ``end_points`` keeps every finite end point (chi-square, free parameter
     vector, attempt index), from which ``measure_complex`` compares equally
-    good decompositions.
+    good decompositions; ``params_at_bound`` lists the free parameters of the
+    selected end point that lie on a bound (``params_at_bound``).
 
     Keyword arguments beyond those of ``build_complex``: ``n_v_starts`` (list of
     starting velocities of the narrow group, Halpha) and ``n_v_prior``
@@ -257,6 +300,9 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
     )
     d = ps.full(pbest)
     ps.set_values(d)
+    at_bound = params_at_bound(
+        ps, pbest, diag["attempts"][selected]["active_bounds"], skip=unconstrained_parameters(comps, d, x)
+    )
     n = int(m.sum())
     k = len(ps.free_names)
     data_chi2 = float(np.sum(((y - eval_components(x, d, comps)) * w) ** 2))
@@ -301,6 +347,7 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
         native_w=np.sqrt(np.where(m[window_mask], ivar[window_mask], 0.0)),
         native_mask=m[window_mask].copy(),
         end_points=end_points,
+        params_at_bound=at_bound,
     )
 
 

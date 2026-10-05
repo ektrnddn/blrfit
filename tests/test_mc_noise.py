@@ -127,6 +127,7 @@ def test_statistical_variance_survives_units_frames_sorting_and_mask(monkeypatch
         host=False,
         fe=False,
         err_floor=0.02,
+        mask_grow=0,  # three pixels: a grown mask would cover them all; masking is tested elsewhere
     )
     expected_stat = np.array([9.0, 0.0, 4.0]) / (scale * 2.0 * 1.25) ** 2
     np.testing.assert_array_equal(res["ivar_stat_rest"], expected_stat)

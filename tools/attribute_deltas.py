@@ -30,6 +30,9 @@ keyword:
   conti_multistart    the continuum started from several points (on, since
                       0.3.0) against the single start of 0.1.0 and 0.2.0
                       (off). Keyword only.
+  mask_grow           the mask grown by two pixels around every unusable
+                      pixel (on, since 0.3.0) against the unusable pixels
+                      alone (off). Keyword only.
 
 A toggle whose keyword the tree does not have and that has no patch is
 reported as unavailable and left out of the search. The corrections without a
@@ -175,6 +178,7 @@ TOGGLES = [
     ),
     Toggle("host_guard", off=False, doc="host-fraction guard against the 0.1.0 host decision"),
     Toggle("conti_multistart", off=False, doc="continuum started from several points against one start"),
+    Toggle("mask_grow", off=0, doc="mask grown around unusable pixels against the unusable pixels alone"),
 ]
 
 
@@ -447,7 +451,7 @@ def jobs_from_list(path):
 
 # Diagnostic flags introduced in 0.3.0 without a switch: a legacy pin cannot hold them, so the
 # check of the baseline against a legacy summary leaves them out (the attribution itself keeps them)
-FLAGS_SINCE_0_3 = frozenset({"degenerate"})
+FLAGS_SINCE_0_3 = frozenset({"degenerate", "param_at_bound", "residual_outliers"})
 
 
 def _without_flags(rec, flags):

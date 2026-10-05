@@ -86,6 +86,14 @@ def config(z=0.25, snr=15.0, seed=0, broad=None, narrow=None, **more):
     return kw
 
 
+def quality_flags(c):
+    """The flags of a classification without ``param_at_bound``: in these
+    synthetic spectra, which carry no [O III] wing, the fit keeps a wing of a
+    few per cent of the core whose width ends on its lower bound, a diagnostic
+    that does not concern the broad profile (REVIEW of 2026-10-04, decision D11)."""
+    return [f for f in c["flags"] if f != "param_at_bound"]
+
+
 def measures(res, name):
     return res["meas"][name], res["cls"][name]
 
@@ -137,7 +145,7 @@ def test_bulk_shift_recovered_and_classified_a(v, snr):
         # width within 10 per cent: measured Halpha within 1 per cent, Hbeta within 5 per cent (S/N 6)
         assert abs(m["fwhm"] - tb["fwhm"]) < 0.10 * tb["fwhm"], (name, m["fwhm"], tb["fwhm"])
         # a single symmetric Gaussian: no shape flag, no bound, no edge, good fit
-        assert c["flags"] == [], (name, c["flags"])
+        assert quality_flags(c) == [], (name, c["flags"])
         assert m["n_peaks"] == 1
         assert is_measurable(c["label"], c["flags"], m["broad_flux_snr"], m["fwhm"])
 
@@ -228,7 +236,7 @@ def test_symmetric_unshifted_profile_classified_f():
         assert c["label"] == "F", (name, c)
         assert abs(m["c50_sys"]) < 100.0, (name, m["c50_sys"])
         assert abs(m["v_peak_sys"]) < 100.0
-        assert c["flags"] == []
+        assert quality_flags(c) == []
         assert abs(m["fwhm"] - 3500.0) < 350.0  # measured 3516 in both lines
         assert abs(m["AI"]) < 0.12 and abs(m["KI"] - 0.456) < 0.05
 
@@ -465,7 +473,7 @@ def test_narrow_system_displaced_880_kms_from_the_input_redshift():
         assert abs(m["c50_sys"] - 800.0) < 80.0, (name, m["c50_sys"])
         assert c["label"] == "A", (name, c)
         assert "narrow_at_bound" not in c["flags"]
-        assert c["flags"] == []
+        assert quality_flags(c) == []
     m = res["meas"]["Halpha"]
     assert abs(m["v_sii"] - 880.0) < 60.0  # [S II] follows (measured 879.5)
     assert abs(res["meas"]["Hbeta"]["v_o3"] - 880.0) < 60.0  # so does the [O III] core (measured 879.9)

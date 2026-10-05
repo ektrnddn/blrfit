@@ -70,6 +70,7 @@ from ..constants import (
     FE_UV_FWHM_FIXED_KMS,
     MC_ERROR_INVALID_FLAGS,
     MC_LINE_FLAGS,
+    MASK_GROW_PIX,
 )
 from .extinction import deredden
 from .continuum import fit_continuum, fit_continuum_host
@@ -136,8 +137,22 @@ SUMMARY_KEYS = (
     "dv_spread",
     "fwhm_spread",
     "n_equivalent",
+    "n_residual_outliers",
 )
 PREFIX = {"Halpha": "HA", "Hbeta": "HB", "MgII": "MG"}
+
+
+def grow_mask(bad, n):
+    """``bad`` extended by ``n`` pixels on each side of every flagged pixel, in
+    the order of the (sorted) spectrum; unchanged for ``n`` = 0."""
+    bad = np.asarray(bad, bool)
+    if n <= 0 or not bad.any() or bad.all():
+        return bad
+    out = bad.copy()
+    for k in range(1, int(n) + 1):
+        out[k:] |= bad[:-k]
+        out[:-k] |= bad[k:]
+    return out
 
 
 def _lumdist_cm(z):
@@ -260,6 +275,7 @@ def fit_spectrum(
     host_guard=True,
     mc_noise_policy="input",
     conti_multistart=True,
+    mask_grow=MASK_GROW_PIX,
 ):
     """Fit one spectrum end to end; see the module docstring for the result keys.
 
@@ -290,6 +306,8 @@ def fit_spectrum(
     conti_multistart : start the continuum fit from several points and keep the best
         (the default; see CONTI_START_ALPHAS in constants.py); False fits the first start
         only, as up to version 0.2; recorded in ``settings``
+    mask_grow : pixels on each side of every unusable pixel that are excluded as well
+        (MASK_GROW_PIX; 0 as up to version 0.2); recorded in ``settings``
     """
     complexes = tuple(complexes)
     if mc_noise_policy not in ("input", "effective"):
@@ -322,6 +340,7 @@ def fit_spectrum(
             "no usable pixel: every pixel has a non-finite flux or inverse variance, "
             "or an inverse variance <= 0 (a masked spectrum)"
         )
+    bad = grow_mask(bad, mask_grow)
     flux = np.where(bad, 0.0, flux)
     ivar = np.where(bad, 0.0, ivar)
     # Input-scale guard: the model is set up for fluxes of order 1-1000 in
@@ -422,6 +441,7 @@ def fit_spectrum(
         host_guard=bool(host_guard),
         mc_noise_policy=mc_noise_policy,
         conti_multistart=bool(conti_multistart),
+        mask_grow=int(mask_grow),
     )
     fsub = fr - host_model - cmodel
     res["flux_sub"] = fsub
@@ -586,6 +606,8 @@ def summary_row(res, prefix_meta=None):
         p = PREFIX[name]
         for k in SUMMARY_KEYS:
             row[f"{p}_{k}"] = m.get(k, np.nan)
+        if "params_at_bound" in m:
+            row[f"{p}_params_at_bound"] = ",".join(m["params_at_bound"])
         if "bic_margin" in res["fits"].get(name, {}):
             row[f"{p}_bic_margin"] = res["fits"][name]["bic_margin"]
         if "bic_gap" in res["fits"].get(name, {}):
