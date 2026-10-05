@@ -35,7 +35,7 @@ dependencies = [
 fetch = ["fsspec>=2023.1", "aiohttp>=3.8", "requests>=2.28"]
 desi = ["desispec"]
 dust = ["dustmaps"]
-test = ["pytest>=7", "healpy>=1.16", "requests>=2.28"]
+test = ["pytest>=7", "pytest-xdist>=3", "healpy>=1.16", "requests>=2.28"]
 
 [project.scripts]
 blrfit = "blrfit.cli:main"
