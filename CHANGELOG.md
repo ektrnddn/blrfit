@@ -3,7 +3,7 @@
 The full notes of versions up to 0.2.0 are attached to the 0.3.0 release on GitHub, and
 each version is preserved by its tag.
 
-## 0.3.0 (unreleased)
+## 0.3.0rc1 (2026-10-05)
 
 Fitted numbers change: on 823 SDSS spectra of the Liu et al. (2014) and Eracleous et al.
 (2012) objects, the Hβ class changed for 2.7 per cent and Δv moved by more than

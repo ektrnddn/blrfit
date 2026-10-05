@@ -21,7 +21,7 @@ from .io import read_spectrum, read_sdss, read_desi, read_table
 from .physics import lambda_l_lambda, continuum_luminosity
 from . import constants, rv, physics
 
-__version__ = "0.3.0.dev0"
+__version__ = "0.3.0rc1"
 
 __all__ = [
     "fit_spectrum",

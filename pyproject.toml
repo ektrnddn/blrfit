@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blrfit"
-version = "0.3.0.dev0"
+version = "0.3.0rc1"
 description = "Fit the broad Balmer lines of AGN spectra: offsets from the narrow-line reference, profile classes and quality flags"
 readme = "README.md"
 license = {text = "MIT"}
