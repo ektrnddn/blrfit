@@ -121,6 +121,12 @@ FLAG_TEXT = {
 }
 
 
+def velocities_at_bound(params_at_bound):
+    """The line velocities among the entries of ``params_at_bound`` ('name:lower'
+    or 'name:upper'); any of them gives the flag param_at_bound."""
+    return [p for p in params_at_bound or () if p.split(":")[0].endswith("_v")]
+
+
 def classify(m, err=None, t=None):
     """Class, reasons, features and flags for the output of ``measure_complex``.
 
@@ -206,7 +212,7 @@ def classify(m, err=None, t=None):
     spread = m.get("dv_spread", np.nan)
     if np.isfinite(spread) and spread > DEGENERATE_DV_KMS:
         flags.append("degenerate")
-    if any(p.split(":")[0].endswith("_v") for p in m.get("params_at_bound", [])):
+    if velocities_at_bound(m.get("params_at_bound")):
         flags.append("param_at_bound")
     if m.get("n_residual_outliers", 0) >= RESIDUAL_OUTLIER_MIN_PIX:
         flags.append("residual_outliers")

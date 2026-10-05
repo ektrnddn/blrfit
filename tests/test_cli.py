@@ -5,7 +5,8 @@ import json
 import numpy as np
 import pytest
 
-from blrfit.cli import main
+from blrfit.classify import FLAG_TEXT, velocities_at_bound
+from blrfit.cli import build_parser, main
 from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, DESI_EXAMPLE, DESI_TARGETID, CSV_EXAMPLE, Z_J001224
 from test_pins import _current_pins
 
@@ -96,7 +97,7 @@ def test_fit_writes_figure_and_pickle(tmp_path):
     assert list(doc["lines"]) == ["Hbeta"]
 
 
-def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
+def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path, capsys):
     rc = main(
         [
             "fit",
@@ -108,7 +109,6 @@ def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
             "--out",
             str(tmp_path),
             "--no-figure",
-            "--quiet",
         ]
     )
     assert rc == 0
@@ -125,6 +125,42 @@ def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path):
     )
     assert doc["input"]["z_source"] == "redrock"
     assert doc["continuum"]["host_applied"]
+    # the printed table: one error column, and every flag of the fit explained once below it
+    printed = capsys.readouterr().out
+    header = next(line for line in printed.splitlines() if line.startswith("line "))
+    assert "+/-mc" in header and "+/-mod" not in header
+    for name, rec in doc["lines"].items():
+        for flag in rec["flags"]:
+            assert printed.count(f"  {flag}: {FLAG_TEXT[flag]}") == 1
+        for velocity in velocities_at_bound(rec["params_at_bound"]):
+            assert f"{name} {velocity}" in printed
+
+
+def test_fit_help_groups_the_options_and_hides_legacy_settings(capsys):
+    with pytest.raises(SystemExit) as e:
+        main(["fit", "--help"])
+    assert e.value.code == 0
+    text = capsys.readouterr().out
+    for group in ("input:", "public search (no file given):", "model:", "uncertainties:", "output:"):
+        assert f"\n{group}\n" in text
+    for legacy in ("--sdss-mask-policy", "--mc-noise-policy", "--legacy-error-diagnostic", "generic,auto"):
+        assert legacy not in text
+    # hidden, not removed: the settings that reproduce earlier releases still parse
+    a = build_parser().parse_args(
+        [
+            "fit",
+            "spectrum.fits",
+            "--survey",
+            "auto",
+            "--sdss-mask-policy",
+            "ivar",
+            "--mc-noise-policy",
+            "effective",
+            "--legacy-error-diagnostic",
+        ]
+    )
+    assert a.survey == "auto" and a.sdss_mask_policy == "ivar" and a.mc_noise_policy == "effective"
+    assert a.legacy_error_diagnostic
 
 
 def test_fit_csv_example_matches_sdss_fit(tmp_path):

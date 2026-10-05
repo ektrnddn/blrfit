@@ -25,7 +25,7 @@ from .io import read_spectrum, is_desi_coadd, is_sdss_spec
 from .io.dust import sfd_ebv
 from .io.sdss import mjd_to_date
 from .model.fit import fit_spectrum, summary_row
-from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset
+from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset, velocities_at_bound
 from .errors import empirical_error, MC_MIN_CONTRIBUTING
 from . import rv as RV
 
@@ -114,25 +114,32 @@ def _fmt(v, w=7, d=0, plus=False):
 
 
 def _add_table_args(p):
-    g = p.add_argument_group("table input (FITS table, CSV, ECSV or text)")
-    g.add_argument("--wave", default="wave", help="wavelength column name or index (default wave)")
-    g.add_argument("--flux", default="flux", help="flux column (default flux)")
-    g.add_argument("--err", default=None, help="1-sigma error column")
-    g.add_argument("--ivar", default=None, help="inverse-variance column (instead of --err)")
-    g.add_argument("--wave-unit", default="angstrom", help="angstrom (default), nm, um or m")
-    g.add_argument("--frame", default="obs", help="obs (default) or rest; rest needs --z")
+    g = p.add_argument_group("generic table input (--survey generic: FITS table, CSV, ECSV or text)")
+    g.add_argument(
+        "--wave", default="wave", metavar="COL", help="wavelength column name or index (default wave)"
+    )
+    g.add_argument("--flux", default="flux", metavar="COL", help="flux column (default flux)")
+    g.add_argument("--err", default=None, metavar="COL", help="1-sigma error column")
+    g.add_argument("--ivar", default=None, metavar="COL", help="inverse-variance column (instead of --err)")
+    g.add_argument("--wave-unit", default="angstrom", metavar="UNIT", help="angstrom (default), nm, um or m")
+    g.add_argument(
+        "--frame", default="obs", metavar="{obs,rest}", help="obs (default) or rest; rest needs --z"
+    )
     g.add_argument("--air", action="store_true", help="wavelengths are in air (converted to vacuum)")
     g.add_argument(
         "--flux-scale",
         type=float,
         default=1.0,
+        metavar="FACTOR",
         help="multiply flux and statistical error into 1e-17 erg/s/cm^2/observed-A",
     )
-    g.add_argument("--hdu", type=int, default=1, help="extension of a FITS table (default 1)")
-    g.add_argument("--row", type=int, help="zero-based spectrum row for a vector table or 2-D image")
-    g.add_argument("--z-column", help="redshift column for a generic table")
-    g.add_argument("--z-key", help="FITS header redshift keyword (primary or --hdu)")
-    g.add_argument("--mask", help="generic table mask column; nonzero pixels excluded")
+    g.add_argument("--hdu", type=int, default=1, metavar="N", help="extension of a FITS table (default 1)")
+    g.add_argument(
+        "--row", type=int, metavar="N", help="zero-based spectrum row for a vector table or 2-D image"
+    )
+    g.add_argument("--z-column", metavar="COL", help="redshift column for a generic table")
+    g.add_argument("--z-key", metavar="KEY", help="FITS header redshift keyword (primary or --hdu)")
+    g.add_argument("--mask", metavar="COL", help="generic table mask column; nonzero pixels excluded")
     g.add_argument(
         "--flux-frame",
         choices=("obs", "rest"),
@@ -143,6 +150,7 @@ def _add_table_args(p):
         g.add_argument(
             f"--{name}-hdu",
             type=lambda s: int(s) if s.isdigit() else s,
+            metavar="HDU",
             help=f"image HDU name or number containing {name}",
         )
 
@@ -319,7 +327,7 @@ def _line_record(name, res):
 
 def _print_fit_table(lines, res, out):
     hdr = (
-        f"{'line':7} {'cls':3} {'dv=c50-sys':>12} {'+/-mc':>6} {'+/-mod':>6} {'peak':>7} {'cen':>7} {'FWHM':>6} {'nb':>2} "
+        f"{'line':7} {'cls':3} {'dv=c50-sys':>12} {'+/-mc':>6} {'peak':>7} {'cen':>7} {'FWHM':>6} {'nb':>2} "
         f"{'fS/N':>6} {'pS/N':>5} {'A.I.':>6} {'K.I.':>5} {'v_sys':>6} {'sS/N':>5} {'[SII]':>6} {'[OIII]':>7} {'oS/N':>5} flags"
     )
     out(hdr)
@@ -331,7 +339,7 @@ def _print_fit_table(lines, res, out):
             out(f"{name:7} {'-':3} {L['reasons'][0]}")
             continue
         out(
-            f"{name:7} {L['label']:3} {_fmt(L['dv'], 12, 0, True)} {_fmt(L['dv_err_mc'], 6)} {_fmt(L['dv_err_model'], 6)} "
+            f"{name:7} {L['label']:3} {_fmt(L['dv'], 12, 0, True)} {_fmt(L['dv_err_mc'], 6)} "
             f"{_fmt(L['v_peak_sys'], 7, 0, True)} {_fmt(L['centroid_sys'], 7, 0, True)} {_fmt(L['fwhm'], 6)} {L['n_broad']:>2} "
             f"{_fmt(L['broad_flux_snr'], 6, 1)} {_fmt(L['broad_peak_snr'], 5, 1)} {_fmt(L['AI'], 6, 2, True)} {_fmt(L['KI'], 5, 2)} "
             f"{_fmt(L['v_sys'], 6, 0, True)} {_fmt(L['sys_snr'], 5, 1)} {_fmt(L['v_sii_minus_sys'], 6, 0, True)} "
@@ -345,17 +353,30 @@ def _print_fit_table(lines, res, out):
                 f"systemic from {L['systemic_source']}; measurable {L['measurable']}, strong offset {L['strong_offset']}"
             )
     hi = res["host_info"]
+    n_gal = hi.get("n_gal", 0)
     out(
         f"  continuum: power-law slope {res['conti'].get('pl_alpha', np.nan):+.2f}; host "
         + (
-            f"{hi.get('host_frac_4200_5000', np.nan):.2f} of the 4200-5000 A flux ({hi.get('n_gal', 0)} eigenspectra)"
+            f"{hi.get('host_frac_4200_5000', np.nan):.2f} of the 4200-5000 A flux "
+            f"({n_gal} eigenspectr{'um' if n_gal == 1 else 'a'})"
             if hi.get("applied")
             else f"not used ({hi.get('reason', '')})"
         )
     )
+    # each flag once, with its meaning; for a velocity on a bound, which one
+    shown = {}
+    for name, L in lines.items():
+        if not L["fitted"]:
+            continue
+        for flag, text in zip(L["flags"], L["flag_text"]):
+            where = shown.setdefault(flag, (text, []))[1]
+            if flag == "param_at_bound":
+                where.append(f"{name} " + ", ".join(velocities_at_bound(L["params_at_bound"])))
+    for flag, (text, where) in shown.items():
+        out(f"  {flag}: {text}" + (f" ({'; '.join(where)})" if where else ""))
     out(
         "  velocities in km/s; dv = c50 - v_sys with c50 the half-maximum bisector c(1/2); "
-        "+/-mc from the Monte Carlo (--nmc), +/-mod from the DESI repeat-spectrum error model"
+        "+/-mc from the Monte Carlo (--nmc); columns: blrfit fit --help"
     )
 
 
@@ -756,18 +777,49 @@ def cmd_fetch(a):
 
 def _public_args(p):
     p.add_argument(
-        "--include-sdss", action="store_true", help="also find SDSS DR17 spectra within 1.5 arcsec"
+        "--include-sdss", action="store_true", help="also take the SDSS DR17 spectra within --radius"
     )
     p.add_argument(
-        "--radius", type=float, default=1.5, help="SDSS radius in arcsec, at most 1.5 (default 1.5)"
+        "--radius",
+        type=float,
+        default=1.5,
+        metavar="ARCSEC",
+        help="SDSS match radius in arcsec, at most 1.5 (default 1.5)",
     )
     p.add_argument(
-        "--desi-radius", type=float, default=1.5, help="DESI position-search radius, arcsec (default 1.5)"
+        "--desi-radius",
+        type=float,
+        default=1.5,
+        metavar="ARCSEC",
+        help="DESI search radius in arcsec (default 1.5)",
     )
-    p.add_argument("--releases", default="dr1", help="DESI public releases: dr1 (default), edr, or both")
     p.add_argument(
-        "--all-matches", action="store_true", help="fit/download all DESI IDs in a cone as separate objects"
+        "--releases",
+        default="dr1",
+        metavar="LIST",
+        help="DESI releases, comma-separated: dr1 (default), edr, or dr1,edr",
     )
+    p.add_argument(
+        "--all-matches",
+        action="store_true",
+        help="keep every DESI TARGETID within --desi-radius as a separate object (default: list them and stop)",
+    )
+
+
+FIT_TABLE_HELP = """\
+the printed table (velocities in km/s, relative to the narrow-line systemic velocity v_sys):
+  cls            class: A bulk shift, B double-peaked, C asymmetric, F normal; E no broad
+                 line, X no systemic reference, W broad component too weak or narrow to classify
+  dv=c50-sys     offset of the half-maximum bisector c(1/2) of the broad profile
+  +/-mc          its Monte Carlo error (with --nmc; withheld when the draws are unreliable)
+  peak, cen      peak and flux-weighted centroid of the broad profile
+  FWHM, nb       full width at half maximum; number of broad Gaussians
+  fS/N, pS/N     broad-line flux S/N; S/N of the broad peak per pixel
+  A.I., K.I.     asymmetry index at 1/4 maximum; kurtosis index W(3/4)/W(1/4)
+  v_sys, sS/N    systemic velocity relative to the input redshift, and its S/N
+  [SII], [OIII]  [S II] and [O III] core velocities; oS/N the S/N of the [O III] core
+  flags          quality warnings, explained below the table
+"""
 
 
 # ----------------------------------------------------------------------------
@@ -784,91 +836,113 @@ def build_parser():
     f = sub.add_parser(
         "fit",
         help="fit one spectrum",
-        description="Fit one spectrum; writes <stem>_fit.json and <stem>_fit.png.",
-    )
-    f.add_argument(
-        "spectrum", nargs="?", help="local spectrum; DESI default, --survey sdss or generic for other formats"
+        usage="%(prog)s [spectrum] [options]",
+        description="Fit one spectrum: a local file, or the public DESI or SDSS spectra of a position or a\n"
+        "DESI TARGETID. Prints a table and writes <stem>_fit.json and <stem>_fit.png.",
+        epilog=FIT_TABLE_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     from .io.public import exact_targetid
 
     f.add_argument(
+        "spectrum",
+        nargs="?",
+        help="local spectrum file; leave out to search the public archives (--ra and --dec, or --targetid)",
+    )
+    g = f.add_argument_group("input")
+    g.add_argument(
+        "--survey",
+        choices=("desi", "sdss", "generic", "auto"),
+        metavar="{desi,sdss,generic}",
+        default="desi",
+        help="format of the file: desi (default), sdss, or generic for a table (see below); "
+        "without a file, the archive to search (desi or sdss)",
+    )
+    g.add_argument(
         "--targetid",
         type=exact_targetid,
         default=None,
-        help="exact DESI TARGETID for a local file or public lookup",
+        help="DESI TARGETID: the target to take from a coadd, or to search for",
     )
-    f.add_argument(
-        "--survey",
-        choices=("desi", "sdss", "generic", "auto"),
-        default="desi",
-        help="input format; DESI default, auto restores legacy filename dispatch",
+    g.add_argument(
+        "--redrock", metavar="FILE", help="DESI redrock file (default: the redrock file next to the coadd)"
     )
-    f.add_argument("--redrock", help="explicit DESI redrock file")
-    f.add_argument(
-        "--sdss-mask-policy",
-        choices=("conservative", "ivar"),
-        default="conservative",
-        help="exclude nonzero SDSS AND_MASK (default); ivar restores the legacy reader",
-    )
-    f.add_argument(
-        "--legacy-error-diagnostic",
-        action="store_true",
-        help="retain the uncalibrated historical DESI-repeat error as a labelled diagnostic",
-    )
-    _public_args(f)
-    f.add_argument("--z", type=float, default=None, help="redshift (default: from the file when it has one)")
-    f.add_argument(
+    g.add_argument("--z", type=float, default=None, help="redshift (default: from the file, when it has one)")
+    g.add_argument(
         "--ebv",
         default=None,
-        help="Galactic E(B-V): a number, or 'sfd' for the SFD98 map (default: DESI FIBERMAP value; for other inputs the "
-        "SFD98 map when dustmaps is installed, else 0 with a warning and the flag ebv_assumed_zero)",
+        help="Galactic E(B-V): a number, or 'sfd' for the SFD98 map (default: the FIBERMAP value for DESI; "
+        "otherwise the SFD98 map if dustmaps is installed, else 0, with a warning and the flag ebv_assumed_zero)",
     )
-    f.add_argument(
+    g.add_argument(
         "--ra",
         type=float,
         default=None,
-        help="right ascension (deg); public search if no file, or coordinate for --ebv sfd",
+        metavar="DEG",
+        help="right ascension in degrees, for a public search or the SFD98 map",
     )
-    f.add_argument("--dec", type=float, default=None, help="declination (deg)")
-    f.add_argument(
+    g.add_argument("--dec", type=float, default=None, metavar="DEG", help="declination in degrees")
+    _public_args(f.add_argument_group("public search (no file given)"))
+    g = f.add_argument_group("model")
+    g.add_argument(
         "--lines",
         default="Halpha,Hbeta",
-        help="comma-separated complexes among Halpha, Hbeta, MgII (default Halpha,Hbeta; those outside the data are skipped; MgII is experimental)",
+        metavar="LIST",
+        help="comma-separated complexes among Halpha, Hbeta and MgII (default Halpha,Hbeta); "
+        "complexes outside the data are skipped; MgII is experimental",
     )
-    f.add_argument(
-        "--nmc",
-        type=int,
-        default=0,
-        help="Monte Carlo realisations for conditional statistical errors: 0 (default, no errors) or at least 25",
-    )
-    f.add_argument("--seed", type=int, default=0, help="random seed of the Monte Carlo (default 0)")
-    f.add_argument("--no-host", action="store_true", help="no host-galaxy component")
-    f.add_argument("--no-fe", action="store_true", help="no Fe II templates")
-    f.add_argument(
+    g.add_argument("--no-host", action="store_true", help="no host-galaxy component")
+    g.add_argument("--no-fe", action="store_true", help="no Fe II templates")
+    g.add_argument(
         "--max-broad",
         type=int,
         default=MAX_BROAD,
-        help=f"maximum number of broad Gaussians (default {MAX_BROAD})",
+        metavar="N",
+        help=f"largest number of broad Gaussians (default {MAX_BROAD})",
     )
-    f.add_argument(
+    g.add_argument(
         "--dbic",
         type=float,
         default=DBIC,
-        help=f"BIC improvement required for one more component (default {DBIC:.0f})",
+        help=f"BIC decrease required to add a broad Gaussian (default {DBIC:.0f})",
     )
-    f.add_argument("--err-floor", type=float, default=ERR_FLOOR, help="fractional error floor (default 0.02)")
-    f.add_argument(
-        "--mc-noise-policy",
-        choices=("input", "effective"),
-        default="input",
-        help="MC perturbations: supplied pixel noise (input, default), or historical noise including the fitting floor (effective)",
+    g.add_argument(
+        "--err-floor",
+        type=float,
+        default=ERR_FLOOR,
+        metavar="FRAC",
+        help=f"fractional error floor added to the pixel errors (default {ERR_FLOOR})",
     )
-    f.add_argument("--out", default=".", help="output directory")
-    f.add_argument("--stem", default=None, help="output file stem")
-    f.add_argument("--no-figure", action="store_true", help="do not write the diagnostic figure")
-    f.add_argument("--pickle", action="store_true", help="also write the full result as <stem>_fit.pkl")
-    f.add_argument("--quiet", action="store_true", help="print nothing")
+    g = f.add_argument_group("uncertainties")
+    g.add_argument(
+        "--nmc",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Monte Carlo realisations for statistical errors: 0 (default, no errors) or at least 25",
+    )
+    g.add_argument(
+        "--seed", type=int, default=0, metavar="N", help="random seed of the Monte Carlo (default 0)"
+    )
+    g = f.add_argument_group("output")
+    g.add_argument(
+        "--out", default=".", metavar="DIR", help="output directory (default: the current directory)"
+    )
+    g.add_argument(
+        "--stem", default=None, metavar="NAME", help="output file stem (default: from the file name)"
+    )
+    g.add_argument("--no-figure", action="store_true", help="do not write the figure")
+    g.add_argument("--pickle", action="store_true", help="also write the full result as <stem>_fit.pkl")
+    g.add_argument("--quiet", action="store_true", help="print nothing")
     _add_table_args(f)
+    # Settings that reproduce earlier releases; they work but are not listed in --help.
+    f.add_argument(
+        "--sdss-mask-policy", choices=("conservative", "ivar"), default="conservative", help=argparse.SUPPRESS
+    )
+    f.add_argument(
+        "--mc-noise-policy", choices=("input", "effective"), default="input", help=argparse.SUPPRESS
+    )
+    f.add_argument("--legacy-error-diagnostic", action="store_true", help=argparse.SUPPRESS)
     f.set_defaults(func=cmd_fit)
 
     r = sub.add_parser(
@@ -909,13 +983,20 @@ def build_parser():
     _add_table_args(r)
     r.set_defaults(func=cmd_rv)
 
-    g = sub.add_parser("fetch", help="download public spectra without fitting")
-    g.add_argument("--ra", type=float)
-    g.add_argument("--dec", type=float)
-    g.add_argument("--targetid", type=exact_targetid)
-    g.add_argument("--survey", choices=("desi", "sdss"), default="desi")
-    g.add_argument("--out", default="spectra")
-    g.add_argument("--quiet", action="store_true")
+    g = sub.add_parser(
+        "fetch",
+        help="download public spectra without fitting",
+        description="Download the public DESI or SDSS spectra of a position or a DESI TARGETID, "
+        "with a manifest of what was found.",
+    )
+    g.add_argument("--ra", type=float, metavar="DEG", help="right ascension in degrees")
+    g.add_argument("--dec", type=float, metavar="DEG", help="declination in degrees")
+    g.add_argument("--targetid", type=exact_targetid, help="DESI TARGETID, instead of a position")
+    g.add_argument(
+        "--survey", choices=("desi", "sdss"), default="desi", help="archive to search (default desi)"
+    )
+    g.add_argument("--out", default="spectra", metavar="DIR", help="download directory (default spectra)")
+    g.add_argument("--quiet", action="store_true", help="print nothing")
     _public_args(g)
     g.set_defaults(func=cmd_fetch)
     return p
