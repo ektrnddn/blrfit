@@ -371,6 +371,14 @@ MC_ALIAS_KMS = 400.0
 # error and is not flagged. The percentile error of a flagged line is not a
 # valid statistical error.
 MC_ALIAS_MAX_FRACTION = 0.1
+# Monte Carlo flags that make the percentile errors of a line invalid: the draws
+# split between separate solutions or moved away from the fit, too few draws
+# contributed to test that (the two-cluster test needs 25), or too few gave an
+# offset. The errors of such a line are withheld (NaN; the percentiles stay in
+# ``mc``), class A then uses the offset threshold alone, and the flags are shown
+# with the line's own flags together with those of MC_LINE_FLAGS.
+MC_ERROR_INVALID_FLAGS = ("mc_multimodal", "mc_basin_switch", "mc_too_few", "insufficient_offset_samples")
+MC_LINE_FLAGS = MC_ERROR_INVALID_FLAGS + ("failed_draws", "systemic_reference_changed")
 
 # ----------------------------------------------------------------------------
 # Continuum luminosity (physics.py)

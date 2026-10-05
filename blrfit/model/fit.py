@@ -68,6 +68,8 @@ from ..constants import (
     FLUX_SCALE_MAX,
     FE_UV_WIDTH_POLICY,
     FE_UV_FWHM_FIXED_KMS,
+    MC_ERROR_INVALID_FLAGS,
+    MC_LINE_FLAGS,
 )
 from .extinction import deredden
 from .continuum import fit_continuum, fit_continuum_host
@@ -466,8 +468,31 @@ def fit_spectrum(
         from ..errors import monte_carlo
 
         res["mc"], res["err"], res["mc_info"] = monte_carlo(res, nmc=nmc, seed=seed, return_diagnostics=True)
+    classify_lines(res, thresholds)
+    return res
+
+
+def classify_lines(res, thresholds=None):
+    """Classify every measured line of ``res`` with its Monte Carlo errors.
+
+    A line whose draws raised a flag of MC_ERROR_INVALID_FLAGS has its errors
+    withheld: every entry of ``res['err'][name]`` becomes NaN (the percentiles
+    stay in ``res['mc']``) and ``mc_info['lines'][name]['errors_withheld']``
+    names the flags; class A then uses the offset threshold alone. The flags
+    of MC_LINE_FLAGS are appended to the line's own flags."""
+    lines = (res.get("mc_info") or {}).get("lines", {})
     for name, m in res["meas"].items():
-        res["cls"][name] = classify(m, err=res["err"].get(name), t=thresholds)
+        info = lines.get(name, {})
+        mc_flags = list(info.get("flags", []))
+        err = res.get("err", {}).get(name)
+        withheld = [f for f in mc_flags if f in MC_ERROR_INVALID_FLAGS]
+        if err and withheld:
+            err = {k: np.nan for k in err}
+            res["err"][name] = err
+            info["errors_withheld"] = withheld
+        c = classify(m, err=err, t=thresholds)
+        c["flags"] = list(c["flags"]) + [f for f in mc_flags if f in MC_LINE_FLAGS and f not in c["flags"]]
+        res["cls"][name] = c
     return res
 
 
@@ -518,8 +543,7 @@ def remeasure(res, thresholds=None):
         res["meas"][name] = m
         if name == "Halpha" and m["narrow_peak_snr"] >= NARROW_PRIOR_MIN_SNR and np.isfinite(m["v_sys"]):
             prior_snr = m["narrow_peak_snr"]
-    for name, m in res["meas"].items():
-        res["cls"][name] = classify(m, err=res.get("err", {}).get(name), t=thresholds)
+    classify_lines(res, thresholds)
     return res
 
 

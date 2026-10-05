@@ -95,6 +95,12 @@ FLAG_TEXT = {
     "edge": "data cover < +/-6000 km/s around the line",
     "degenerate": "equally good decompositions differ in c(1/2) by > 100 km/s",
     "extreme_offset": "|c(1/2) - v_sys| > 4000 km/s",
+    "mc_multimodal": "Monte Carlo draws split between separate solutions; errors withheld",
+    "mc_basin_switch": "Monte Carlo draws moved away from the fit; errors withheld",
+    "mc_too_few": "fewer than 25 usable Monte Carlo draws; errors withheld",
+    "insufficient_offset_samples": "too few Monte Carlo draws gave an offset; errors withheld",
+    "failed_draws": "some Monte Carlo draws failed",
+    "systemic_reference_changed": "Monte Carlo draws used different narrow-line references",
 }
 
 

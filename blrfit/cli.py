@@ -25,7 +25,7 @@ from .io import read_spectrum, is_desi_coadd, is_sdss_spec
 from .io.sdss import mjd_to_date
 from .model.fit import fit_spectrum, summary_row
 from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset
-from .errors import empirical_error
+from .errors import empirical_error, MC_MIN_CONTRIBUTING
 from . import rv as RV
 
 LINE_KEYS = (
@@ -364,6 +364,11 @@ def _print_fit_table(lines, res, out):
 def cmd_fit(a):
     if a.nmc < 0:
         sys.exit("--nmc must be nonnegative")
+    if 0 < a.nmc < MC_MIN_CONTRIBUTING:
+        sys.exit(
+            f"--nmc must be 0 or at least {MC_MIN_CONTRIBUTING}: the test for draws that split between "
+            "separate solutions needs that many"
+        )
     if a.spectrum is None:
         from .input_workflow import fit_public
 
@@ -377,8 +382,6 @@ def cmd_fit(a):
     if bad:
         sys.exit(f"unknown line(s) {bad}; choose from {list(COMPLEX_WINDOW)}")
     out = (lambda *x: None) if a.quiet else print
-    if 0 < a.nmc < 10:
-        out(f"note: {a.nmc} Monte Carlo realisations give unreliable percentiles; the catalogue used 30")
     out(
         f"blrfit {__version__}: {a.spectrum}"
         + (f" TARGETID {int(a.targetid)}" if a.targetid else "")
@@ -823,7 +826,7 @@ def build_parser():
         "--nmc",
         type=int,
         default=0,
-        help="Monte Carlo realisations for conditional statistical errors (default 0 = no errors)",
+        help="Monte Carlo realisations for conditional statistical errors: 0 (default, no errors) or at least 25",
     )
     f.add_argument("--seed", type=int, default=0, help="random seed of the Monte Carlo (default 0)")
     f.add_argument("--no-host", action="store_true", help="no host-galaxy component")
