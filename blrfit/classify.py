@@ -7,7 +7,7 @@ Classes
        |A.I.| < 0.12, peak close to the centroid)
     B  double-peaked / disk-like: two resolved peaks separated by more than
        max(0.4 FWHM, 1500 km/s) with a dip deeper than 8 per cent and
-       FWHM >= 3000, or FWHM >= 7000 with A.I. >= 0.20 or K.I. >= 0.50
+       FWHM >= 3000, or FWHM >= 7000 with |A.I.| >= 0.20 or K.I. >= 0.50
     C  asymmetric single-peaked
     F  normal: symmetric, no significant offset
     E  no significant broad component (FWHM < 1200, integrated S/N < 5 or
@@ -53,9 +53,11 @@ Flags (a measurement with none of them is "clean")
     residual_outliers  at least 3 pixels more than 5 sigma off the model,
                      farther than 600 km/s from every narrow-line centre: an
                      artefact or a feature the model does not describe
-    extreme_offset   |c(1/2) - v_sys| > 4000 km/s: beyond the Roche ceiling of
-                     almost any bound binary; a disk-emitter component, an
-                     artefact or a misidentified line
+    extreme_offset   |c(1/2) - v_sys| > 4000 km/s: a quality threshold of this
+                     code, not a physical limit (the largest orbital velocity
+                     of a binary depends on its mass and broad-line region);
+                     often a disk-emitter component, an artefact or a
+                     misidentified line
 """
 
 from __future__ import annotations

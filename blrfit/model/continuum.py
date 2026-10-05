@@ -19,8 +19,9 @@ spectra that make up most of a DESI broad-line sample:
   fixed emission-line shapes, which is exactly wrong for the offset and
   double-peaked profiles this package is about, and an unconstrained
   decomposition of a noisy spectrum readily produces a negative "galaxy". The
-  number of eigenspectra is therefore stepped down (5, 3, 2, 1, 0) until the
-  host is non-negative.
+  number of eigenspectra is therefore stepped down (5, 3, 2, 1, 0) until at
+  most max(50, 2 per cent) of the host pixels are negative; those are set to
+  zero.
 * The host contributes continuum only underneath the emission lines
   (``host_continuum_only``). The eigenspectra are principal components of real
   galaxy spectra and contain emission lines of their own; fitted to line-free
@@ -100,7 +101,7 @@ FE_NORM_ZERO = 1e-6
 FE_UV_WIDTH_POLICIES = ("A", "B", "C")
 FE_WIDTH_STATES = ("not_covered", "fixed", "unconstrained", "solver_active", "near_bound", "interior")
 FE_WIDTH_NORM = {"feop_fwhm": "feop_norm", "feuv_fwhm": "feuv_norm"}
-HOST_WINDOW = (4200.0, 5000.0)  # the window that defines the host fraction (Shen et al. 2011)
+HOST_WINDOW = (4200.0, 5000.0)  # the window that defines the host fraction (this code's choice)
 
 
 # ----------------------------------------------------------------------------
@@ -1006,7 +1007,7 @@ def fit_continuum_host(
         info["feuv_refit"] = True
         info["feuv_free_fit"] = free_fit
     if ng > 0 and (not np.isfinite(frac) or frac < min_host_frac):
-        # host too weak to trust (Shen et al. 2011): refit without it
+        # host too weak to trust: refit without it
         info["reason"] = f"host fraction {frac:.2f} < {min_host_frac}; PL+Fe only"
         d2, model2, cinfo = fit_continuum(wave, flux, ivar, **conti_kw)
         _take_fallback(info, cinfo)

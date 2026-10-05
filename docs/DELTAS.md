@@ -16,7 +16,7 @@ of its fibermap, Halpha and Hbeta). It is written by
 |---|---|
 | `spectrum`, `line` | file name; `Halpha` or `Hbeta` |
 | `class_0.1.0`, `class_0.2.0` | the class of the line (A, B, C, F, W, E, X) in each version |
-| `c50_sys_0.1.0`, `c50_sys_0.2.0`, `delta_c50` | the primary offset, the velocity that halves the broad flux, relative to the systemic velocity, km/s; `delta_c50` = 0.2.0 minus 0.1.0 |
+| `c50_sys_0.1.0`, `c50_sys_0.2.0`, `delta_c50` | the primary offset c(1/2) − v_sys: the midpoint of the two half-maximum crossings of the broad profile, relative to the systemic velocity, km/s; `delta_c50` = 0.2.0 minus 0.1.0 |
 | `fwhm_0.1.0`, `fwhm_0.2.0` | FWHM of the broad profile, km/s |
 | `n_broad_0.1.0`, `n_broad_0.2.0` | number of broad Gaussian components chosen by BIC |
 | `chi2_0.1.0`, `chi2_0.2.0` | chi-square of the line complex (weighted residuals plus the penalty terms) |

@@ -296,7 +296,7 @@ def test_ccf_bias_at_peak_snr_8_to_12(fwhm, peak):
             marks=pytest.mark.xfail(
                 strict=True,
                 reason="measured pull NMAD 1.64 (1.69-1.94 per shift) for FWHM 5000 at peak S/N 25: "
-                "the Delta chi-square error undercovers by 1.6-1.9, not unity as the paper states",
+                "the Delta chi-square error undercovers by a factor 1.6-1.9 here",
             ),
         ),
         (2500, 50),
@@ -333,21 +333,21 @@ def test_ccf_error_calibration_at_peak_snr_above_20(fwhm, peak):
             4000,
             marks=pytest.mark.xfail(
                 strict=True,
-                reason="measured pull NMAD 3.02 at peak S/N 8 for FWHM 4000; the paper quotes undercoverage factors of 1.2-2 below peak S/N 10",
+                reason="measured pull NMAD 3.02 at peak S/N 8 for FWHM 4000: undercoverage beyond a factor 2",
             ),
         ),
         pytest.param(
             5000,
             marks=pytest.mark.xfail(
                 strict=True,
-                reason="measured pull NMAD 4.64 at peak S/N 8 for FWHM 5000; the paper quotes undercoverage factors of 1.2-2 below peak S/N 10",
+                reason="measured pull NMAD 4.64 at peak S/N 8 for FWHM 5000: undercoverage beyond a factor 2",
             ),
         ),
     ],
 )
 def test_ccf_undercoverage_at_peak_snr_8(fwhm):
-    """Below a peak S/N of about 10 the paper quotes undercoverage by factors of
-    1.2-2. Measured pull NMAD at peak S/N 8 (pairs with a defined error):
+    """Below a peak S/N of about 10 the Delta chi-square error is expected to
+    undercover by factors of 1.2-2. Measured pull NMAD at peak S/N 8 (pairs with a defined error):
     1.93, 3.02, 4.64 for FWHM 2500, 4000, 5000; at 12: 1.50, 2.13, 3.16. The
     factor 2 holds for FWHM 2500 only."""
     pulls = []

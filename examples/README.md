@@ -31,7 +31,8 @@ selection, explicitly use `--sdss-mask-policy ivar` on the SDSS command. Matchin
 input conventions matters when comparing results; equal catalogue values are not
 a scientific acceptance criterion.
 
-For conditional MC estimates, add `--nmc 30 --seed 0`. These retain the
+For conditional MC estimates, add `--nmc 200 --seed 0` (the draw count of the latest
+uncertainty study; at least 25 are required). These retain the
 [documented limitations](../docs/UNCERTAINTIES.md); requesting MC does not guarantee
 that every line has a finite, calibrated error. The
 [main guide](../README.md) documents generic FITS columns, rows and image HDUs,

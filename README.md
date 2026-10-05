@@ -188,7 +188,10 @@ kurtosis index K.I. = W(3/4)/W(1/4), 0.456 for a Gaussian; the number of resolve
 maxima above 20 per cent of the maximum with a prominence of 5 per cent), their separation and
 the dip between them; the broad flux, its equivalent width against the total continuum, its
 luminosity, and the integrated and peak signal-to-noise ratios. All velocities are referred to
-the systemic velocity v_n of the same fit.
+the systemic velocity v_n of the same fit, as differences of optical-convention velocities,
+v − v_n; the exact relative velocity, (v − v_n)/(1 + v_n/c), differs from it by at most 0.5 per
+cent for |v_n| ≤ 1500 km/s. Widths are as observed, not corrected for the instrumental resolution
+(a correction below 0.3 per cent for FWHM ≥ 2000 km/s at SDSS and DESI resolution).
 
 The primary offset is **Δv ≡ c(1/2) − v_n**, the displacement of the half-maximum bisector. The
 peak of a multi-component model is unstable for flat-topped or two-humped profiles, and the
@@ -220,9 +223,11 @@ built from up to five galaxy eigenspectra of Yip et al. (2004), fitted jointly b
 squares in the line-free windows of Shen et al. (2011) plus every line-free pixel inside the
 galaxy-template range (so that the 4000 Å break and the stellar absorption anchor the host).
 Pixels deviating by more than 3σ below or 5σ above the first solution are masked once and the
-fit repeated. The number of eigenspectra is stepped down (5 → 3 → 2 → 1 → 0) until the host is
-non-negative everywhere; the host is kept only if it contributes at least 10 per cent of the
-4200–5000 Å flux (Shen et al. 2011). Departure: the host contributes continuum only underneath
+fit repeated. The number of eigenspectra is stepped down (5 → 3 → 2 → 1 → 0) until at most
+max(50, 2 per cent) of the pixels in the host range are negative, and those are set to zero; the
+host is kept only if it contributes at least 10 per cent of the 4200–5000 Å flux. The 10 per cent
+rule is this code's choice: Shen et al. (2011) did not decompose individual spectra, but corrected
+L5100 for the host statistically. Departure: the host contributes continuum only underneath
 the emission lines. The eigenspectra are principal components of real galaxy spectra and contain
 emission lines whose strengths the line-free fit does not constrain; subtracting the full host
 displaced the systemic velocity by up to 450 km/s in strongly star-forming DESI hosts. The host
@@ -230,12 +235,14 @@ model within ±900 km/s of every catalogued line is therefore replaced by a line
 
 **Narrow lines.** Two complexes are fitted after continuum subtraction: Hα (rest 6400–6800 Å:
 narrow and broad Hα, [N II] λλ6548, 6584, [S II] λλ6716, 6731) and Hβ (4700–5100 Å: narrow and
-broad Hβ, He II λ4686, [O III] λλ4959, 5007). Doublet ratios are fixed, [N II] 6584/6548 = 2.96
+broad Hβ, [O III] λλ4959, 5007; the model's narrow He II λ4686 lies just blueward of the window,
+so the data do not constrain it). Doublet ratios are fixed, [N II] 6584/6548 = 2.96
 and [O III] 5007/4959 = 2.98; narrow widths are 25 ≤ σ ≤ 510 km/s (FWHM ≤ 1200). Narrow Hα and
 [N II] share one velocity v_n and one width; [S II] has its own, tied softly by Gaussian priors
 (σ within 20 per cent, v within 60 km/s), because a hard tie leaves residuals at [S II] in
 high-signal-to-noise host galaxies that the fit absorbs with a spurious broad Gaussian at
-+7000 km/s, and a free [S II] removes the anchor that defines the narrow width in quasars. A
++7000 km/s, and a free [S II] removes the anchor that defines the narrow width in quasars. The
+[S II] λ6716/λ6731 ratio is free; it is not restricted to its physical range (about 0.44–1.45). A
 narrow-line-region wing, a second Gaussian under every narrow line of the Hα complex with a
 common amplitude fraction f_w ≤ 0.5 (weak prior σ_f = 0.25 towards zero), one velocity tied to v_n by
 a Gaussian prior of width 150 km/s and one width between σ_n and 510 km/s, absorbs the non-Gaussian bases that AGN
@@ -302,7 +309,9 @@ the fitted profiles and do not establish orbital motion.
 | **F** normal | symmetric, no significant offset |
 
 B and C are descriptive shape classes. This code does not fit a disk model or
-identify a unique physical explanation for either class.
+identify a unique physical explanation for either class. The S/N values in these
+rules use the per-pixel noise with the 2 per cent error floor included, so for bright
+spectra they reach a ceiling set by the floor rather than by the photon noise.
 
 | Flag | Condition |
 |---|---|
@@ -329,7 +338,7 @@ narrow-line reference from Halpha, so the two offsets are not necessarily indepe
 
 ## Errors
 
-**Monte Carlo** (`--nmc 30`, `fit_spectrum(nmc=30)`): the spectrum is perturbed with Gaussian
+**Monte Carlo** (`--nmc 200`, `fit_spectrum(nmc=200)`; the command line requires at least 25): the spectrum is perturbed with Gaussian
 noise from its supplied pixel-error array, before the 2% fitting floor, and refitted with the host model held fixed and the number of broad
 components fixed to the selected one; the error is half the 16th–84th percentile range (as in
 Shen et al. 2013 and Liu et al. 2014). This is the conditional statistical error only.
@@ -410,7 +419,9 @@ is the diagnostic figure; `--pickle` writes the full result. A fit
 returns zero when it completes, including explicitly uncovered lines. Input/fit failures
 return nonzero; a public batch also returns nonzero when a download or individual fit fails.
 
-`conti_pl_norm` (the power law at 3000 Å rest) and `conti_feop_norm` are flux densities of the
+`conti_feop_norm` and `conti_feuv_norm` are the multipliers of the Fe II templates (the
+I Zw 1 templates scaled by 10¹⁵; the optical one peaks at 3.0), not flux densities.
+`conti_pl_norm` (the power law at 3000 Å rest) is a flux density of the
 (1+z)-scaled rest-frame spectrum the fit works on, f_rest(λ_rest) = (1+z) f_obs(λ_obs) at
 λ_rest = λ_obs/(1+z), in units of 1e-17 erg s⁻¹ cm⁻² Å⁻¹ per rest-frame ångström (the factor
 (1+z) is the wavelength Jacobian). The monochromatic continuum luminosity is therefore

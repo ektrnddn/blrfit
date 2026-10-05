@@ -10,8 +10,8 @@ before the catalogue was built; where a value was set by a test rather than
 taken from the literature, the test is described next to it and the object is
 named where it mattered. The constants are bound by name when the package is
 imported and are not meant to be changed at run time: changing any value
-invalidates the validation numbers quoted in the README (the synthetic suite,
-the Runnoe et al. 2015 and the Liu et al. 2014 same-spectrum comparisons).
+invalidates the validation results (the synthetic tests, the comparison with
+Liu et al. 2014 and the uncertainty study).
 
 Units: velocities and widths in km/s, wavelengths in vacuum Angstrom.
 """
@@ -89,8 +89,8 @@ PL_ALPHA_BLUE_LIMIT = -2.5
 FE_FWHM_MIN, FE_FWHM_MAX = 1200.0, 10000.0  # Fe II broadening range
 FE_SHIFT_MAX = 0.01  # fractional velocity shift of the Fe II templates
 FE_INTRINSIC_FWHM = 900.0  # intrinsic width of the I Zw 1 templates
-N_GAL_MAX = 5  # galaxy eigenspectra, stepped down until non-negative
-MIN_HOST_FRAC = 0.10  # host kept only above this fraction of the 4200-5000 A flux (Shen et al. 2011)
+N_GAL_MAX = 5  # galaxy eigenspectra, stepped down until at most max(50, 2%) host pixels are negative
+MIN_HOST_FRAC = 0.10  # host kept only above this fraction of the 4200-5000 A flux (this code's choice)
 # The host fraction is undetermined, and the host is not subtracted, when the
 # 4200-5000 A window that defines it carries no signal: the inverse-variance
 # weighted flux sum of the window is not positive or lies below this many
