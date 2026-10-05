@@ -14,6 +14,7 @@ and are available from Python only.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -21,11 +22,12 @@ import sys
 import numpy as np
 
 from . import __version__
+from .batch import ordered_map, read_list, scalar, summary_table, table_format, write_table
 from .constants import COMPLEX_WINDOW, MAX_BROAD, DBIC, ERR_FLOOR
 from .io import read_spectrum, is_desi_coadd, is_sdss_spec
 from .io.dust import sfd_ebv
 from .io.sdss import mjd_to_date
-from .model.fit import fit_spectrum, summary_row
+from .model.fit import PREFIX, fit_spectrum, summary_row
 from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset, velocities_at_bound
 from .errors import empirical_error, MC_MIN_CONTRIBUTING
 
@@ -235,11 +237,16 @@ def _load(path, a, targetid=None):
     return sp, z, zsrc, ebv, esrc
 
 
-def _stem(path, sp, targetid=None):
-    base = os.path.splitext(os.path.basename(path))[0]
-    if base.endswith(".fits"):
-        base = base[:-5]
-    if sp.get("kind") == "desi" and targetid is not None and str(targetid) not in base:
+def _stem(path, targetid=None):
+    """Output stem of a local spectrum: its file name without the extension,
+    and the TARGETID when one is given and the name does not contain it."""
+    base, stripped = os.path.basename(path), False
+    for suffix in (".gz", ".fits", ".fit"):
+        if base.lower().endswith(suffix):
+            base, stripped = base[: -len(suffix)], True
+    if not stripped:
+        base = os.path.splitext(base)[0]
+    if targetid is not None and str(targetid) not in base:
         base = f"{base}-{int(targetid)}"
     return base
 
@@ -383,30 +390,33 @@ def _print_fit_table(lines, res, out):
 # ----------------------------------------------------------------------------
 # fit
 # ----------------------------------------------------------------------------
-def cmd_fit(a):
-    if a.nmc < 0:
-        sys.exit("--nmc must be nonnegative")
-    if 0 < a.nmc < MC_MIN_CONTRIBUTING:
-        sys.exit(
-            f"--nmc must be 0 or at least {MC_MIN_CONTRIBUTING}: the test for draws that split between "
-            "separate solutions needs that many"
-        )
-    if a.spectrum is None:
-        from .input_workflow import fit_public
-
-        return fit_public(a, cmd_fit)
-    if a.include_sdss:
-        sys.exit("--include-sdss is for public queries without a local file")
-    sp, z, zsrc, ebv, esrc = _load(a.spectrum, a, a.targetid)
+def _parse_lines(text):
     names = {k.lower(): k for k in COMPLEX_WINDOW}
-    lines = [names.get(s.strip().lower(), s.strip()) for s in a.lines.split(",") if s.strip()]
+    lines = [names.get(s.strip().lower(), s.strip()) for s in text.split(",") if s.strip()]
     bad = [s for s in lines if s not in COMPLEX_WINDOW]
     if bad:
         sys.exit(f"unknown line(s) {bad}; choose from {list(COMPLEX_WINDOW)}")
-    out = (lambda *x: None) if a.quiet else print
+    return lines
+
+
+def _silent(*args):
+    pass
+
+
+def fit_file(a, path, targetid=None, z=None, stem=None, out=print, jobs=1):
+    """Fit one local spectrum with the command-line options ``a`` and write its
+    products. ``targetid`` and ``z`` (None: from the file or ``a.z``) and the
+    output ``stem`` are those of this spectrum; ``jobs`` processes refit its
+    Monte Carlo draws. Returns the spectrum's catalogue record (identity
+    columns and summary row)."""
+    if z is not None:
+        a = copy.copy(a)
+        a.z = z
+    sp, z, zsrc, ebv, esrc = _load(path, a, targetid)
+    lines = _parse_lines(a.lines)
     out(
-        f"blrfit {__version__}: {a.spectrum}"
-        + (f" TARGETID {int(a.targetid)}" if a.targetid else "")
+        f"blrfit {__version__}: {path}"
+        + (f" TARGETID {int(targetid)}" if targetid else "")
         + f"  z = {z:.5f} ({zsrc})  E(B-V) = {ebv:.4f} ({esrc})  lines {','.join(lines)}"
         + (f"  Monte Carlo {a.nmc}" if a.nmc else "")
     )
@@ -426,9 +436,10 @@ def cmd_fit(a):
             seed=a.seed,
             err_floor=a.err_floor,
             mc_noise_policy=a.mc_noise_policy,
+            jobs=jobs,
         )
     except ValueError as e:
-        sys.exit(f"cannot fit {a.spectrum}: {e}")
+        sys.exit(f"cannot fit {path}: {e}")
     recs = {name: _line_record(name, res) for name in lines}
     for rec in recs.values():
         # The historical DESI-repeat formula was never an SDSS calibration or
@@ -450,10 +461,16 @@ def cmd_fit(a):
                 rec["flag_text"] = list(rec["flag_text"]) + [FLAG_TEXT["ebv_assumed_zero"]]
     _print_fit_table(recs, res, out)
 
-    stem = a.stem or _stem(a.spectrum, sp, a.targetid)
+    stem = stem or _stem(path, targetid)
     os.makedirs(a.out, exist_ok=True)
     base = os.path.join(a.out, stem)
     hi = res["host_info"]
+    flux_unit = (
+        "1e-17 erg/s/cm^2/A"
+        if sp.get("kind") in ("sdss", "desi") or a.flux_scale != 1.0
+        else "as given (luminosities assume 1e-17 erg/s/cm^2/A)"
+    )
+    row = summary_row(res)
     doc = dict(
         blrfit_version=__version__,
         uncertainty=dict(
@@ -464,7 +481,7 @@ def cmd_fit(a):
             legacy_empirical_error_used=False,
         ),
         input=dict(
-            path=os.path.abspath(a.spectrum),
+            path=os.path.abspath(path),
             kind=sp.get("kind"),
             targetid=sp.get("targetid"),
             reader_policy=sp.get("mask_policy", "RC1"),
@@ -480,11 +497,7 @@ def cmd_fit(a):
             dec=sp.get("dec", np.nan),
             mjd=sp.get("mjd", np.nan),
             date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "",
-            flux_unit=(
-                "1e-17 erg/s/cm^2/A"
-                if sp.get("kind") in ("sdss", "desi") or a.flux_scale != 1.0
-                else "as given (luminosities assume 1e-17 erg/s/cm^2/A)"
-            ),
+            flux_unit=flux_unit,
             n_pixels=int(len(sp["wave"])),
             wave_min=float(np.min(sp["wave"])),
             wave_max=float(np.max(sp["wave"])),
@@ -505,7 +518,7 @@ def cmd_fit(a):
         mc_info=res.get("mc_info", {}),
         continuum_solver=res.get("continuum_info", {}),
         lines=recs,
-        summary_row=summary_row(res),
+        summary_row=row,
     )
     with open(base + "_fit.json", "w") as fh:
         json.dump(_clean(doc), fh, indent=1)
@@ -514,10 +527,12 @@ def cmd_fit(a):
         import matplotlib
 
         matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
         from .plot import plot_fit
 
         fig = plot_fit(res, title=f"{stem}  z = {z:.4f}")
         fig.savefig(base + "_fit.png", dpi=110, bbox_inches="tight")
+        plt.close(fig)
         out(f"-> {base}_fit.png")
     if a.pickle:
         import pickle
@@ -525,7 +540,138 @@ def cmd_fit(a):
         with open(base + "_fit.pkl", "wb") as fh:
             pickle.dump(res, fh)
         out(f"-> {base}_fit.pkl")
-    return 0
+    targetid = sp.get("targetid", targetid)
+    return dict(
+        spectrum=path,
+        targetid=None if targetid is None else int(targetid),
+        stem=stem,
+        status="fitted",
+        error="",
+        z_source=zsrc,
+        ebv=ebv,
+        ebv_source=esrc,
+        ebv_assumed_zero=ebv_assumed_zero,
+        flux_unit=flux_unit,
+        **{k: scalar(v) for k, v in row.items()},
+    )
+
+
+def _batch_task(task):
+    """One spectrum of a batch (in a worker process or not): its record, or a failed one."""
+    a, entry = task
+    try:
+        return fit_file(a, entry["path"], entry["targetid"], entry["z"], entry["stem"], out=_silent)
+    except (Exception, SystemExit) as exc:
+        return dict(
+            spectrum=entry["path"],
+            targetid=entry["targetid"],
+            stem=entry["stem"],
+            status="failed",
+            error=str(exc) or type(exc).__name__,
+        )
+
+
+def _batch_line(rec, lines):
+    """One printed line per spectrum of a batch: class and offset of each line, with its flags."""
+    if rec["status"] != "fitted":
+        return f"{rec['stem']}: failed: {rec['error']}"
+    parts = []
+    for name in lines:
+        p = PREFIX[name]
+        if f"{p}_class" not in rec:
+            parts.append(f"{name} not fitted")
+            continue
+        dv = rec.get(f"{p}_c50_sys")
+        text = f"{name} {rec[f'{p}_class']} " + (f"{dv:+.0f}" if dv is not None and np.isfinite(dv) else "-")
+        flags = rec.get(f"{p}_flags")
+        parts.append(text + (f" ({flags})" if flags else ""))
+    return (
+        f"{rec['stem']}: " + "; ".join(parts) + ("  [E(B-V) taken as 0]" if rec["ebv_assumed_zero"] else "")
+    )
+
+
+def cmd_fit(a):
+    if a.nmc < 0:
+        sys.exit("--nmc must be nonnegative")
+    if 0 < a.nmc < MC_MIN_CONTRIBUTING:
+        sys.exit(
+            f"--nmc must be 0 or at least {MC_MIN_CONTRIBUTING}: the test for draws that split between "
+            "separate solutions needs that many"
+        )
+    if a.jobs < 1:
+        sys.exit("--jobs must be at least 1")
+    if a.table:
+        try:
+            table_format(a.table)
+        except ValueError as e:
+            sys.exit(str(e))
+    entries = [dict(path=p, targetid=a.targetid, z=None) for p in a.spectra]
+    if a.list:
+        try:
+            listed = read_list(a.list)
+        except (ValueError, OSError) as e:
+            sys.exit(f"cannot read the list {a.list}: {e}")
+        entries += [dict(e, targetid=a.targetid if e["targetid"] is None else e["targetid"]) for e in listed]
+    if not entries:
+        from .input_workflow import fit_public
+
+        return fit_public(
+            a,
+            lambda one: fit_file(
+                one, one.spectrum, one.targetid, stem=one.stem, out=(_silent if one.quiet else print)
+            ),
+        )
+    if a.include_sdss:
+        sys.exit("--include-sdss is for public queries without a local file")
+    lines = _parse_lines(a.lines)
+    out = _silent if a.quiet else print
+    if len(entries) == 1 and not a.list:
+        rec = fit_file(a, entries[0]["path"], entries[0]["targetid"], stem=a.stem, out=out, jobs=a.jobs)
+        if a.table:
+            write_table(summary_table([rec], meta=_table_meta(a, lines)), a.table)
+            out(f"-> {a.table}")
+        return 0
+    if a.stem:
+        sys.exit("--stem names the products of one spectrum; several spectra are named after their files")
+    used = set()
+    for e in entries:
+        stem = base = _stem(e["path"], e["targetid"])
+        n = 2
+        while stem in used:  # the same file name in two directories, or a spectrum listed twice
+            stem, n = f"{base}-{n}", n + 1
+        used.add(stem)
+        e["stem"] = stem
+    table = a.table or os.path.join(a.out, "blrfit_summary.fits")
+    out(
+        f"blrfit {__version__}: {len(entries)} spectra, lines {','.join(lines)}"
+        + (f", Monte Carlo {a.nmc}" if a.nmc else "")
+        + (f", {a.jobs} processes" if a.jobs > 1 else "")
+    )
+    records = []
+    for k, rec in enumerate(ordered_map(_batch_task, ((a, e) for e in entries), a.jobs), 1):
+        records.append(rec)
+        out(f"[{k}/{len(entries)}] " + _batch_line(rec, lines))
+    write_table(summary_table(records, meta=_table_meta(a, lines)), table)
+    failed = sum(r["status"] != "fitted" for r in records)
+    zero = sum(bool(r.get("ebv_assumed_zero")) for r in records)
+    if zero:
+        out(
+            f"warning: Galactic E(B-V) taken as 0 for {zero} of the spectra; give --ebv, or install dustmaps and fetch "
+            'its SFD map (python -c "import dustmaps.sfd; dustmaps.sfd.fetch()")'
+        )
+    out(f"{len(records) - failed} fitted, {failed} failed -> {table}")
+    return 1 if failed else 0
+
+
+def _table_meta(a, lines):
+    # FITS header keywords: at most eight characters
+    return dict(
+        BLRFIT=__version__,
+        LINES=",".join(lines),
+        NMC=a.nmc,
+        SEED=a.seed,
+        FLUXUNIT="1e-17 erg/s/cm2/Angstrom as read; see the column flux_unit",
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -597,21 +743,29 @@ def build_parser():
 
     f = sub.add_parser(
         "fit",
-        help="fit one spectrum",
-        usage="%(prog)s [spectrum] [options]",
-        description="Fit one spectrum: a local file, or the public DESI or SDSS spectra of a position or a\n"
-        "DESI TARGETID. Prints a table and writes <stem>_fit.json and <stem>_fit.png.",
+        help="fit spectra",
+        usage="%(prog)s [spectrum ...] [options]",
+        description="Fit spectra: local files, the files of a list, or the public DESI or SDSS spectra of a\n"
+        "position or a DESI TARGETID. Writes <stem>_fit.json and <stem>_fit.png for every spectrum and\n"
+        "prints the table below; with several spectra, one line each and a catalogue table of all of them.",
         epilog=FIT_TABLE_HELP,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     from .io.public import exact_targetid
 
     f.add_argument(
-        "spectrum",
-        nargs="?",
-        help="local spectrum file; leave out to search the public archives (--ra and --dec, or --targetid)",
+        "spectra",
+        nargs="*",
+        metavar="spectrum",
+        help="local spectrum files; leave out to search the public archives (--ra and --dec, or --targetid)",
     )
     g = f.add_argument_group("input")
+    g.add_argument(
+        "--list",
+        metavar="FILE",
+        help="more spectra, listed in a file: one path per line, optionally followed by its TARGETID, "
+        "or a table (.fits, .ecsv, .csv) with a column path and optionally targetid and z",
+    )
     g.add_argument(
         "--survey",
         choices=("desi", "sdss", "generic", "auto"),
@@ -693,9 +847,23 @@ def build_parser():
     g.add_argument(
         "--stem", default=None, metavar="NAME", help="output file stem (default: from the file name)"
     )
+    g.add_argument(
+        "--table",
+        metavar="FILE",
+        help="catalogue table of the summary rows, FITS (.fits) or ECSV (.ecsv), with units "
+        "(default with several spectra: <out>/blrfit_summary.fits)",
+    )
     g.add_argument("--no-figure", action="store_true", help="do not write the figure")
     g.add_argument("--pickle", action="store_true", help="also write the full result as <stem>_fit.pkl")
     g.add_argument("--quiet", action="store_true", help="print nothing")
+    g.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        metavar="N",
+        help="worker processes: several spectra are fitted in parallel, or the Monte Carlo draws of one "
+        "(default 1); the results do not depend on N",
+    )
     _add_table_args(f)
     # Settings that reproduce earlier releases; they work but are not listed in --help.
     f.add_argument(

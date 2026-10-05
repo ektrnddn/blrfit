@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from astropy.table import Table
 
 from blrfit.classify import FLAG_TEXT, velocities_at_bound
 from blrfit.cli import build_parser, main
@@ -86,6 +87,8 @@ def test_fit_writes_figure_and_pickle(tmp_path):
             "--out",
             str(tmp_path),
             "--pickle",
+            "--table",
+            str(tmp_path / "tables" / "one.ecsv"),
             "--quiet",
         ]
     )
@@ -94,6 +97,10 @@ def test_fit_writes_figure_and_pickle(tmp_path):
     assert (tmp_path / "spec-0651-52141-0072_fit.pkl").exists()
     doc = json.load(open(tmp_path / "spec-0651-52141-0072_fit.json"))
     assert list(doc["lines"]) == ["Hbeta"]
+    row = Table.read(tmp_path / "tables" / "one.ecsv")
+    assert len(row) == 1 and row["stem"][0] == "spec-0651-52141-0072" and row["status"][0] == "fitted"
+    assert row["HB_c50_sys"][0] == pytest.approx(doc["lines"]["Hbeta"]["dv"], abs=1e-9)
+    assert row["ebv_assumed_zero"][0] and str(row["HB_fwhm"].unit) == "km / s"
 
 
 def test_fit_desi_example_uses_redrock_and_fibermap(tmp_path, capsys):

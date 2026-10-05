@@ -101,10 +101,28 @@ applied to these already reduced SDSS products. No SDSS-wide uncertainty or reso
 calibration is implied. Insufficient continuum support remains an unusable fit;
 it is not repaired by inventing data or changing the model.
 
-For DESI, E(B−V) defaults to the FIBERMAP value. For SDSS/general files it defaults
-to zero: supply `--ebv VALUE`, or `--ebv sfd` with installed SFD dust maps, when
-Galactic dereddening is needed. Redshifts are not remeasured automatically; `--z`
-overrides the file value. Review catalogue redshift warnings in the saved metadata.
+For DESI, E(B−V) defaults to the FIBERMAP value (SFD98). For SDSS/general files it is
+the SFD98 value at the file's coordinates (or `--ra`/`--dec`) when the `dust` extra
+and its map are installed; otherwise it is taken as zero, with a printed warning and
+the flag `ebv_assumed_zero` on every fitted line. `--ebv VALUE` overrides both.
+Redshifts are not remeasured automatically; `--z` overrides the file value. Review
+catalogue redshift warnings in the saved metadata.
+
+## Fit several spectra
+
+```bash
+# Several files, or a list: one path per line (optionally followed by a TARGETID),
+# or a FITS/ECSV/CSV table with a column path and optionally targetid and z
+blrfit fit spectra/*.fits --survey sdss --out results
+blrfit fit --list targets.csv --jobs 8 --out results
+```
+
+Each spectrum is fitted as it would be alone and writes its own `*_fit.json` and
+figure. The command prints one line per spectrum and writes the catalogue table
+`results/blrfit_summary.fits` (or `--table name.ecsv`): one row per spectrum, with
+units, and failed spectra kept with their reason. `--jobs N` fits N spectra at a
+time or, for a single spectrum, refits its Monte Carlo draws in N processes; the
+results do not depend on N.
 
 ## Fit general FITS tables or images
 

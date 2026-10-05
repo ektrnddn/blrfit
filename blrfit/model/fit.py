@@ -276,6 +276,7 @@ def fit_spectrum(
     mc_noise_policy="input",
     conti_multistart=True,
     mask_grow=MASK_GROW_PIX,
+    jobs=1,
 ):
     """Fit one spectrum end to end; see the module docstring for the result keys.
 
@@ -294,6 +295,8 @@ def fit_spectrum(
     host, fe : include the host galaxy / the Fe II templates in the continuum
     complexes : any of "Halpha", "Hbeta", "MgII"; a complex outside the data is skipped
     nmc, seed : Monte Carlo realisations for the errors (0 = none)
+    jobs : worker processes for the Monte Carlo draws; the result does not depend on it
+        (see ``errors.monte_carlo``), and it is not recorded
     mc_noise_policy : "input" uses the supplied pixel variance for perturbations;
         "effective" includes the fitting variance floor as independent noise for
         historical reproduction. Both retain the same ordinary fitting weights.
@@ -487,7 +490,9 @@ def fit_spectrum(
     if nmc and nmc > 0:
         from ..errors import monte_carlo
 
-        res["mc"], res["err"], res["mc_info"] = monte_carlo(res, nmc=nmc, seed=seed, return_diagnostics=True)
+        res["mc"], res["err"], res["mc_info"] = monte_carlo(
+            res, nmc=nmc, seed=seed, return_diagnostics=True, jobs=jobs
+        )
     classify_lines(res, thresholds)
     return res
 

@@ -190,6 +190,82 @@ def empirical_error(broad_flux_snr, dv=np.nan):
     return float(e) if np.ndim(e) == 0 else e
 
 
+_MC_CONTEXT = None
+
+
+def _mc_init(context):
+    global _MC_CONTEXT
+    _MC_CONTEXT = context
+
+
+def _mc_task(item):
+    return _mc_draw(*item, _MC_CONTEXT)
+
+
+def _mc_draw(i, deviates, context):
+    """Draw ``i`` of ``monte_carlo``: refit the spectrum perturbed by
+    ``deviates`` (standard normal, one per pixel) times the noise. Returns the
+    draw record and the MC_KEYS values of every measured line ({} when the
+    draw raised)."""
+    from .model.fit import _fit_line_sequence
+
+    wr, fr, ir, sig, host, z, complexes, counts, fe, continuum_kw, use_ha_systemic, line_kw = context
+    draw = dict(index=i, lines={})
+    values = {}
+    try:
+        f_i = fr + deviates * sig
+        fh = f_i - host
+        _, cmodel, cinfo = fit_continuum(wr, fh, ir, fit_fe=fe, **continuum_kw)
+        draw["continuum_policy"] = {
+            k: cinfo.get(k)
+            for k in (
+                "feuv_policy",
+                "feuv_fallback_kms",
+                "feuv_fwhm_fixed",
+                "feuv_refit",
+                "feuv_free_fit",
+                "fe_width_state",
+            )
+        }
+        draw["continuum_solver"] = cinfo.get("solver", {})
+        # An unconverged continuum solver keeps its draw and is counted per
+        # line (as in 0.1.0); only a non-finite model invalidates it.
+        draw["continuum_converged"] = bool(cinfo.get("solver", {}).get("success", False))
+        if not np.all(np.isfinite(cmodel)):
+            raise ValueError("non-finite continuum model")
+        draw["continuum_fallback"] = bool(cinfo.get("fallback", False))
+        _, measures, prefit, fit_status = _fit_line_sequence(
+            wr,
+            fh - cmodel,
+            ir,
+            cmodel,
+            host,
+            z,
+            complexes,
+            use_ha_systemic=use_ha_systemic,
+            fixed_n_broad=counts,
+            kw=line_kw,
+        )
+        draw["o3_prefit"] = {k: prefit[k] for k in ("status", "v_o3", "snr")}
+        for name in counts:
+            status = fit_status.get(name, dict(status="not_attempted"))
+            record = dict(status=status["status"])
+            if name in measures:
+                m = measures[name]
+                record["systemic_source"] = m["systemic_source"]
+                values[name] = {k: m.get(k, np.nan) for k in MC_KEYS}
+            if status["status"] != "success":
+                record["diagnostics"] = status
+            draw["lines"][name] = record
+    except Exception as exc:
+        draw["exception"] = f"{type(exc).__name__}: {exc}"
+        # A partially recorded draw must never enter the percentile sample.
+        values = {}
+        for name in counts:
+            draw["lines"][name] = dict(status="exception")
+    return draw, values
+
+
 def monte_carlo(
     res,
     nmc=MC_DEFAULT_N,
@@ -199,6 +275,7 @@ def monte_carlo(
     kw=None,
     return_diagnostics=False,
     noise_policy=None,
+    jobs=1,
 ):
     """Refit perturbed spectra with the same line estimator as ``fit_spectrum``.
 
@@ -214,7 +291,10 @@ def monte_carlo(
     labelled effective-noise sensitivity, not calibrated statistical uncertainty.
     The default reads the saved ``mc_noise_policy``. Old results lacking that
     setting retain the effective policy with explicit legacy metadata. An input
-    policy without its saved statistical variance refuses to run.
+    policy without its saved statistical variance refuses to run. With ``jobs``
+    > 1 the draws are refitted in that many worker processes (see
+    ``batch.ordered_map``); the deviates are drawn in the same order, so the
+    result is that of a serial run.
 
     ``err`` is the half-width of the 16th-84th percentile range over the draws
     whose line solver returned a finite solution. A draw whose continuum or
@@ -258,8 +338,6 @@ def monte_carlo(
     error cannot conceal discarded draws or aliases. Percentiles alone are not
     a coverage calibration.
     """
-    from .model.fit import _fit_line_sequence
-
     if isinstance(nmc, (bool, np.bool_)) or int(nmc) != nmc or nmc < 0:
         raise ValueError("nmc must be a non-negative integer")
     nmc = int(nmc)
@@ -355,63 +433,22 @@ def monte_carlo(
         draws=[],
         lines={},
     )
-    for i in range(nmc):
-        draw = dict(index=i, lines={})
-        try:
-            f_i = fr + rng.standard_normal(fr.size) * sig
-            fh = f_i - host
-            _, cmodel, cinfo = fit_continuum(wr, fh, ir, fit_fe=fe, **continuum_kw)
-            draw["continuum_policy"] = {
-                k: cinfo.get(k)
-                for k in (
-                    "feuv_policy",
-                    "feuv_fallback_kms",
-                    "feuv_fwhm_fixed",
-                    "feuv_refit",
-                    "feuv_free_fit",
-                    "fe_width_state",
-                )
-            }
-            draw["continuum_solver"] = cinfo.get("solver", {})
-            # An unconverged continuum solver keeps its draw and is counted per
-            # line below (as in 0.1.0); only a non-finite model invalidates it.
-            draw["continuum_converged"] = bool(cinfo.get("solver", {}).get("success", False))
-            if not draw["continuum_converged"]:
-                info["n_unconverged_continuum"] += 1
-            if not np.all(np.isfinite(cmodel)):
-                raise ValueError("non-finite continuum model")
-            draw["continuum_fallback"] = bool(cinfo.get("fallback", False))
-            _, measures, prefit, fit_status = _fit_line_sequence(
-                wr,
-                fh - cmodel,
-                ir,
-                cmodel,
-                host,
-                z,
-                complexes,
-                use_ha_systemic=use_ha_systemic,
-                fixed_n_broad=counts,
-                kw=line_kw,
-            )
-            draw["o3_prefit"] = {k: prefit[k] for k in ("status", "v_o3", "snr")}
-            for name in counts:
-                status = fit_status.get(name, dict(status="not_attempted"))
-                record = dict(status=status["status"])
-                if name in measures:
-                    m = measures[name]
-                    record["systemic_source"] = m["systemic_source"]
-                    for k in MC_KEYS:
-                        samples[name][k][i] = m.get(k, np.nan)
-                if status["status"] != "success":
-                    record["diagnostics"] = status
-                draw["lines"][name] = record
-        except Exception as exc:
-            draw["exception"] = f"{type(exc).__name__}: {exc}"
-            # A partially recorded draw must never enter the percentile sample.
-            for name in counts:
-                for values in samples[name].values():
-                    values[i] = np.nan
-                draw["lines"][name] = dict(status="exception")
+    # The deviates are drawn in the order of the draws whether the draws run
+    # here or in worker processes, so the sample does not depend on ``jobs``.
+    deviates = (rng.standard_normal(fr.size) for _ in range(nmc))
+    context = (wr, fr, ir, sig, host, z, complexes, counts, fe, continuum_kw, use_ha_systemic, line_kw)
+    if jobs > 1 and nmc > 1:
+        from .batch import ordered_map
+
+        results = ordered_map(_mc_task, enumerate(deviates), jobs, initializer=_mc_init, initargs=(context,))
+    else:
+        results = (_mc_draw(i, d, context) for i, d in enumerate(deviates))
+    for draw, values in results:
+        if draw.get("continuum_converged") is False:
+            info["n_unconverged_continuum"] += 1
+        for name, line_values in values.items():
+            for k in MC_KEYS:
+                samples[name][k][draw["index"]] = line_values[k]
         info["draws"].append(draw)
     mc, err = {}, {}
     for name, dd in samples.items():
