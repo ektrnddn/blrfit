@@ -91,7 +91,7 @@ def broad_profile_data(res, name="Halpha", mask_narrow_kms=0.0):
     ok = np.isfinite(f) & np.isfinite(e) & (w > 0)
     if "native_mask" in r:
         ok &= np.asarray(r["native_mask"], bool)
-    for lab, l0, an, vn, sn, kind, rr in comps:
+    for _lab, l0, _an, vn, _sn, kind, _rr in comps:
         if kind == "narrow":
             vline = (l0 * (1.0 + d[vn] / C_KMS) / lam0 - 1.0) * C_KMS
             ok &= np.abs(v - vline) > mask_narrow_kms
@@ -675,7 +675,7 @@ def ccf_shift(
         ns_sub = np.arange(lo_n, hi_n + 1)
         win_sub = common_set(lo_n, hi_n) if use_two else win_m
         dvs_mc = []
-        for m in range(int(n_mc)):
+        for _m in range(int(n_mc)):
             # Perturb native independent pixels BEFORE interpolation, retaining
             # the interpolation-induced covariance in these conditional draws.
             fp_native = prof["f"] + rng.normal(size=len(prof["v"])) * np.where(prof["ok"], prof["e"], 0.0)

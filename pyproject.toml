@@ -5,27 +5,34 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "blrfit"
 version = "0.3.0.dev0"
-description = "Single-spectrum broad AGN line fitting with measured offsets, profile classes and explicit quality diagnostics"
+description = "Fit the broad Balmer lines of AGN spectra: offsets from the narrow-line reference, profile classes and quality flags"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "Ekaterine Dadiani", email = "edadiani@andrew.cmu.edu"}]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["AGN", "quasar", "broad emission lines", "spectroscopy", "DESI", "SDSS", "black hole binaries"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
+# the oldest tested stack: numpy 1.26, scipy 1.13, astropy 6 (the reference stack of the pins)
 dependencies = [
-    "numpy>=1.21",
-    "scipy>=1.7",
-    "astropy>=5.0",
+    "numpy>=1.26",
+    "scipy>=1.13",
+    "astropy>=6.0",
     "matplotlib>=3.5",
 ]
 
 [project.optional-dependencies]
-fetch = ["astroquery>=0.4.6", "fsspec>=2023.1", "aiohttp>=3.8", "requests>=2.28"]
+fetch = ["fsspec>=2023.1", "aiohttp>=3.8", "requests>=2.28"]
 desi = ["desispec"]
 dust = ["dustmaps"]
 test = ["pytest>=7", "healpy>=1.16", "requests>=2.28"]
@@ -34,7 +41,10 @@ test = ["pytest>=7", "healpy>=1.16", "requests>=2.28"]
 blrfit = "blrfit.cli:main"
 
 [project.urls]
-Repository = "https://github.com/ektrnddn/blrfit"
+Homepage = "https://github.com/ektrnddn/blrfit"
+Documentation = "https://github.com/ektrnddn/blrfit#readme"
+Issues = "https://github.com/ektrnddn/blrfit/issues"
+Changelog = "https://github.com/ektrnddn/blrfit/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 include = ["blrfit*"]
@@ -49,6 +59,8 @@ extend-exclude = ["validation"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "B"]
+# zip() over sequences of equal length by construction; strict=True would add checks, not fix errors
+ignore = ["B905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

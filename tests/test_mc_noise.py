@@ -1,6 +1,5 @@
 """Separate measured pixel variance from fit weights and legacy MC policy."""
 
-import copy
 import pickle
 import numpy as np
 import pytest

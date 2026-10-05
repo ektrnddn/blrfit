@@ -135,7 +135,7 @@ def make_spectrum(
         lam_g = lam0 * (1.0 + vgrid / C_KMS)
         P["profile"] = P["profile"] + gauss_v(lam_g, lam0, comp["v"], sig, flux)
         P["flux"] += flux
-    for line, P in truth["broad"].items():
+    for _line, P in truth["broad"].items():
         m = profile_measures(vgrid, P["profile"])
         P.update(
             {k: m[k] for k in ("v_peak", "centroid", "c25", "c50", "c75", "fwhm", "AI", "KI", "n_peaks")}

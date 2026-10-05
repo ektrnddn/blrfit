@@ -3,14 +3,14 @@ Public spectra of a sky position: SDSS through the Data Lab catalogue mirror and
 archive server, DESI public releases through the DESI file server
 (data.desi.lbl.gov/public).
 
-Nothing here runs unless asked for (the ``blrfit fetch`` subcommand or a
-direct call); the fitting code never touches the network.
+Nothing here runs unless asked for (``blrfit fetch``, ``blrfit fit`` without a
+file, or a direct call); the fitting code never touches the network.
 
 SDSS: all SpecObjAll products within at most 1.5 arcsec are listed from the
 Data Lab mirror (DR17 by default) and downloaded from the corresponding SDSS
 science archive. Repeat products are retained by plate/MJD/fiber identity.
-The CLI uses io.public for indexed DESI discovery; fetch_desi below retains the
-older coordinate/file-search Python API for compatibility.
+The command line finds DESI targets through the catalogue index of io.public;
+``fetch_desi`` below is the older search by position, kept for Python use.
 
 DESI: the position gives the nside = 64 nested healpix; for each public release
 (DR1 = ``iron``, EDR = ``fuji``) and each survey/program combination, the
@@ -19,9 +19,9 @@ remotely with range requests (``astropy`` + ``fsspec``), so only the FIBERMAP
 and the rows of the matched target are transferred, not the whole 100-800 MB
 file. The matched target is written as a single-target coadd, with the
 redrock redshift file reduced alongside, in the layout ``read_desi`` expects.
-A TARGETID alone does not determine the healpix, so RA and Dec are always
-required; a TARGETID, when given, selects the row exactly instead of by
-position.
+A TARGETID alone does not determine the healpix, so ``fetch_desi`` needs RA
+and Dec; a TARGETID, when given, selects the row exactly instead of by
+position. (The command line resolves a TARGETID alone through io.public.)
 
 DESI tile epochs: a target observed on several tiles has one spectrum per
 tile, and the release keeps each as a tile-cumulative coadd (all exposures of
@@ -49,7 +49,6 @@ import numpy as np
 from .healpix import ang2pix_nest
 from .desi import write_single_target
 
-SDSS_SAS = "https://data.sdss.org/sas/dr16"
 DESI_PUBLIC = "https://data.desi.lbl.gov/public"
 DESI_RELEASES = {"dr1": "iron", "edr": "fuji"}
 DESI_SURVEY_PROGRAMS = {
@@ -520,7 +519,7 @@ def _publish_desi_bundle(h, targetid, parent, stem, url, identity, with_nights=F
             same = same and {p.name for p in destination.iterdir()} == set(files) | {"provenance.json"}
             same = same and all(_sha256(destination / name) == digest for name, digest in files.items())
             if not same:
-                raise ValueError(f"Existing DESI bundle is inconsistent: {destination}")
+                raise ValueError(f"Existing DESI bundle is inconsistent: {destination}") from None
         paths = dict(
             path=str(destination / coadd_name),
             redrock=str(destination / rr_name) if rr_tmp else None,

@@ -77,7 +77,9 @@ def plot_fit(res, title="", vwin=12000.0, figsize=(18, 9)):
         axp.plot(v, y, lw=0.7, color="0.15", label="data - continuum")
         axp.plot(v, nar, lw=0.8, color="tab:green", label="narrow + wing")
         cols = ["tab:blue", "tab:red", "tab:purple"]
-        for j, (lab, l0, an, vn, sn, kind, ratio) in enumerate([c_ for c_ in r["comps"] if c_[5] == "broad"]):
+        for j, (_lab, l0, an, vn, sn, _kind, ratio) in enumerate(
+            [c_ for c_ in r["comps"] if c_[5] == "broad"]
+        ):
             A = d[an] * (ratio[1] if ratio else 1.0)
             axp.plot(v, gauss_lam(x, A, l0, d[vn], d[sn]), lw=0.9, ls="--", color=cols[j % 3], alpha=0.9)
         axp.plot(v, tot, lw=1.1, color="tab:red", label="total")

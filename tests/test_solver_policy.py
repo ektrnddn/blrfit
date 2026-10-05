@@ -99,7 +99,7 @@ def test_unconverged_line_solution_is_kept_and_flagged(synthetic, monkeypatch):
         assert np.isfinite(res["meas"][name]["c50_sys"])
         assert res["cls"][name]["label"] in ("A", "B", "C", "F", "E", "X", "W")
     # every component count was flagged, and the selection carried the flag on
-    for nb, d in res["fit_status"]["Halpha"]["components"].items():
+    for _nb, d in res["fit_status"]["Halpha"]["components"].items():
         assert d["status"] == "success_unconverged" and d["converged"] is False
 
 

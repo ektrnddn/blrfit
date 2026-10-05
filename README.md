@@ -19,7 +19,7 @@ velocity analysis are experimental. See [validation status](docs/VALIDATION_STAT
 
 ## Install
 
-Use an isolated environment (Python 3.9 or later):
+Use an isolated environment (Python 3.10 or later):
 
 ```bash
 python -m venv .venv

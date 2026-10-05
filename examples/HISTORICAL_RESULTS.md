@@ -56,8 +56,8 @@ exposures of one tile through its last night, one file per petal of about 500 ta
 observed on three tiles has three epochs, each with its own fibre assignment and night(s) (the epoch
 key `<TILEID>-<LASTNIGHT>-<PETAL>` is the one of the long-baseline analysis). DR1 (`iron`) stops in
 June 2022 (observations through 2022-06-13); later epochs exist only in the daily and subsequent
-reductions. `tools/bench_dr1.py` builds a local bench of such objects, with their SDSS spectra, from
-the public release.
+reductions. In 0.2.0, `tools/bench_dr1.py` built a local bench of such objects, with their SDSS
+spectra, from the public release; the script is not distributed since 0.3.0.
 
 Expected results (blrfit 0.1.0 with numpy 1.26.4 and scipy 1.13.1 on macOS; on other numerical stacks the
 least-squares solver ends at another point, or another local minimum, with the same number of components, which

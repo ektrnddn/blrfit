@@ -781,7 +781,6 @@ def test_zero_point_is_antisymmetric_and_checks_its_directions():
     errors vetoes the frame."""
     v = np.arange(-1500.0, 1500.01, 69.0)
     w = np.arange(-1500.0, 1500.01, 40.0)
-    rng = np.random.default_rng(3)
 
     def narrow(grid, centre, err, seed):
         r = np.random.default_rng(seed)

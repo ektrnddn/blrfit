@@ -61,7 +61,7 @@ def realisations():
 def test_monte_carlo_output_structure(realisations):
     """res['err'][line] carries every key of MC_KEYS and res['mc'][line] the
     (p16, p50, p84) triples they derive from, with err = (p84 - p16) / 2."""
-    for sp, res in realisations:
+    for _sp, res in realisations:
         for name in ("Halpha", "Hbeta"):
             assert set(res["err"][name]) == set(MC_KEYS)
             assert set(res["mc"][name]) == set(MC_KEYS)

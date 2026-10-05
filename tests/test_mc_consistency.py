@@ -8,7 +8,7 @@ import pytest
 
 import blrfit
 from blrfit import errors
-from blrfit.constants import MASK_GROW_PIX, MC_ALIAS_KMS, MC_ALIAS_MAX_FRACTION
+from blrfit.constants import MASK_GROW_PIX, MC_ALIAS_KMS
 from blrfit.model import fit as fit_module
 from blrfit.model import lines
 from blrfit.model import continuum

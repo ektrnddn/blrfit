@@ -150,7 +150,6 @@ def test_unresolved():
 
 
 def test_line_not_fitted_in_the_current_configuration():
-    stub = Stub({("a+b+c", None): rec()}, rec())
     search = ad.Search(lambda on, p: dict(lines={}), ["a"])
     assert ad.attribute_line(search, "Hbeta") is None
 

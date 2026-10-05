@@ -29,8 +29,8 @@ population validation, and these diagnostic detections are not calibrated accept
 The historical calibration must not be transferred to `profile-eiv-v3`. No scientific acceptance
 threshold or model-complexity setting was changed to improve these results.
 
-The project audit is `nersc_validation/production_audit/v9_rv_diagnosis_20260924T221200Z/`;
-it retains source snapshots, preregistration, all comparisons, failures and integration checks.
+The project audit (source snapshots, preregistration, all comparisons, failures and integration
+checks) is kept with the project's records; it is not part of this repository.
 
 ## Synthetic pairs: the cross-correlation alone
 
@@ -83,7 +83,7 @@ dropped pixel blueward of the window).
 ## Real spectra: the DR1 bench
 
 29 objects of the catalogue with at least two DESI tile epochs in the public DR1 release (before
-June 2022) and 27 of them with SDSS spectra, built by `tools/bench_dr1.py` (103 spectra; one DESI
+June 2022) and 27 of them with SDSS spectra, built from the public release (103 spectra; one DESI
 tile epoch does not fit: the solver reports an infeasible start). Every DESI–DESI and SDSS–DESI
 pair was fitted with 0.2.0 and cross-correlated with a 5000 km/s search, the range of the
 long-baseline run of the catalogue. Measurable records only: classes A, B, C or F in both epochs

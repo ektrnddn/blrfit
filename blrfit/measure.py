@@ -151,7 +151,7 @@ def data_peak_top(
     resid = y - eval_components(x, d, r["comps"], kinds=("narrow", "wing", "nwing"))
     mask = np.zeros_like(v, bool)
     if guard_kms > 0:
-        for lab, l0, an, vn, sn, kind, ratio in r["comps"]:
+        for _lab, l0, an, vn, _sn, kind, _ratio in r["comps"]:
             if kind in ("narrow", "wing") and d[an] > 0:
                 vc = ((l0 * (1 + d[vn] / C_KMS)) / lam0 - 1.0) * C_KMS
                 mask |= np.abs(v - vc) < guard_kms
@@ -235,7 +235,7 @@ def residual_outliers(r):
     x, y, w, d = r["x"], r["y"], r["w"], r["d"]
     resid = (y - eval_components(x, d, r["comps"])) * w
     near = np.zeros(x.size, bool)
-    for lab, l0, an, vn, sn, kind, rr in r["comps"]:
+    for _lab, l0, _an, vn, _sn, kind, _rr in r["comps"]:
         if kind == "narrow":
             lc = l0 * (1.0 + d[vn] / C_KMS)
             near |= np.abs(x / lc - 1.0) * C_KMS < RESIDUAL_PROTECT_KMS
@@ -353,7 +353,7 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
         vg = np.arange(-3000.0, 3000.01, 5.0)
         lam_g = LAM["OIII5007"] * (1.0 + vg / C_KMS)
         yo3 = np.zeros_like(vg)
-        for lab, l0, an, vn, sn, kind, rr in r["comps"]:
+        for lab, l0, an, vn, sn, _kind, _rr in r["comps"]:
             if lab in ("OIII5007c", "OIII5007w"):
                 yo3 += gauss_lam(lam_g, d[an], l0, d[vn], d[sn])
         m["v_o3_peak"] = float(vg[int(np.argmax(yo3))]) if yo3.max() > 0 else np.nan

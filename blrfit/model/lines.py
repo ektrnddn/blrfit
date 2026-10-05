@@ -115,7 +115,7 @@ def eval_components(wave, d, comps, kinds=None):
     """Sum of the components of the given kinds ('broad', 'narrow', 'nwing',
     'wing'; all if ``kinds`` is None) for the parameter dictionary ``d``."""
     y = np.zeros_like(wave, dtype=float)
-    for lab, lam0, an, vn, sn, kind, ratio in comps:
+    for _lab, lam0, an, vn, sn, kind, ratio in comps:
         if kinds is not None and kind not in kinds:
             continue
         A = d[an] * (ratio[1] if ratio else 1.0)
@@ -133,7 +133,7 @@ def unconstrained_parameters(comps, d, wave):
     inside, amps = set(), set()
     used, alive = set(), set()
     lo, hi = float(np.min(wave)), float(np.max(wave))
-    for lab, l0, an, vn, sn, kind, rr in comps:
+    for _lab, l0, an, vn, sn, _kind, rr in comps:
         amps.add(an)
         if lo <= l0 * (1.0 + d[vn] / C_KMS) <= hi:
             inside.add(an)
