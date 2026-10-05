@@ -138,6 +138,9 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
     points. An unconverged selection is flagged (``status``
     'success_unconverged'), not discarded, so that the flag can be counted
     against the catalogue rather than silently changing the selected model.
+    ``end_points`` keeps every finite end point (chi-square, free parameter
+    vector, attempt index), from which ``measure_complex`` compares equally
+    good decompositions.
 
     Keyword arguments beyond those of ``build_complex``: ``n_v_starts`` (list of
     starting velocities of the narrow group, Halpha) and ``n_v_prior``
@@ -190,6 +193,7 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
     vlo_b, vhi_b = kw["v_bounds"]
     starts = first_component_starts(vlo_b, vhi_b, n_broad)
     best = None
+    end_points = []  # every finite end point, for the comparison of equally good decompositions
     for nv0 in n_v_starts:
         for v0 in starts:
             vals = {f"{prefix}_b0_v": v0}
@@ -237,6 +241,7 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
                 diag["n_converged"] += 1
             if not finite:
                 continue
+            end_points.append(dict(chi2=c2, x=sol.x.copy(), attempt=len(diag["attempts"]) - 1))
             # lowest finite chi-square wins, converged or not (see the docstring)
             if best is None or c2 < best[0]:
                 best = (c2, sol.x.copy(), len(diag["attempts"]) - 1)
@@ -295,6 +300,7 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
         native_y=np.where(m[window_mask], fsub[window_mask], 0.0),
         native_w=np.sqrt(np.where(m[window_mask], ivar[window_mask], 0.0)),
         native_mask=m[window_mask].copy(),
+        end_points=end_points,
     )
 
 

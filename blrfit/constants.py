@@ -221,6 +221,17 @@ BROAD_WIDTH_PENALTY_SCALE = 10.0  # km/s of sigma deficit per unit residual
 BROAD_STARTS_KMS = (0.0, 1500.0, -1500.0, 3000.0, -3000.0)  # first-component starts
 MAX_BROAD = 3
 DBIC = 10.0  # a more complex model must improve the BIC by this much
+# Equally good decompositions. The starts of a line complex can end at points
+# whose chi-square differ by less than the noise while their broad profiles
+# differ: on the 2001 SDSS spectrum of J001224 with the single-start continuum
+# of version 0.2, two starts of the three-component Halpha fit end 0.8 apart in
+# chi-square with c(1/2) at -1060 and -1524 km/s, and Monte Carlo draws split
+# between the two. The end points within DEGENERATE_DCHI2 x max(1, reduced
+# chi-square) of the selected one are compared; when their c(1/2), each taken
+# relative to its own narrow-line velocity, span more than DEGENERATE_DV_KMS the
+# line is flagged 'degenerate' (the span is reported as dv_spread).
+DEGENERATE_DCHI2 = 4.0
+DEGENERATE_DV_KMS = 100.0
 # Coverage: a complex is fitted only if the data extend at least CORE_COVER_KMS
 # beyond the line centre on both sides; broad-component centres are confined to
 # the covered range less EDGE_MARGIN_KMS; coverage below EDGE_FLAG_KMS on either

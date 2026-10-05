@@ -445,6 +445,15 @@ def jobs_from_list(path):
     return out
 
 
+# Diagnostic flags introduced in 0.3.0 without a switch: a legacy pin cannot hold them, so the
+# check of the baseline against a legacy summary leaves them out (the attribution itself keeps them)
+FLAGS_SINCE_0_3 = frozenset({"degenerate"})
+
+
+def _without_flags(rec, flags):
+    return None if rec is None else dict(rec, flags=tuple(f for f in rec["flags"] if f not in flags))
+
+
 def legacy_summaries(path):
     with open(path) as fh:
         return {p["file"]: p["summary"] for p in json.load(fh)["pins"]}
@@ -452,12 +461,12 @@ def legacy_summaries(path):
 
 def legacy_check(base, summary, tol=TOL_KMS):
     """Whether the baseline reproduces a legacy summary row: the same classes,
-    flags and component counts and c50_sys within ``tol``. Returns (verdict,
-    largest |delta c50_sys|)."""
+    flags (those of FLAGS_SINCE_0_3 left out) and component counts and c50_sys
+    within ``tol``. Returns (verdict, largest |delta c50_sys|)."""
     departures, dmax = [], 0.0
     for name in LINES:
         ref = line_record(summary, name)
-        got = base["lines"].get(name)
+        got = _without_flags(base["lines"].get(name), FLAGS_SINCE_0_3)
         if ref is None and got is None:
             continue
         if ref is not None and got is not None and np.isfinite(ref["c50"]) and np.isfinite(got["c50"]):

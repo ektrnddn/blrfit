@@ -38,6 +38,7 @@ from .constants import (
     DATA_PEAK_SMOOTH_KMS,
     DATA_PEAK_GUARD_HBETA_KMS,
     DATA_SMOOTH_KMS,
+    DEGENERATE_DCHI2,
 )
 from .model.params import gauss_lam
 from .model.lines import eval_components
@@ -195,6 +196,35 @@ def centroid_above(v, P, frac):
     return float(_trapz(v[m] * P[m], v[m]) / _trapz(P[m], v[m]))
 
 
+def equivalent_end_points(r, lam0, vgrid):
+    """How far apart equally good decompositions of fit ``r`` put the broad
+    profile: the end points of its starts (``r['end_points']``) whose
+    chi-square lies within DEGENERATE_DCHI2 x max(1, reduced chi-square) of
+    the selected one are measured, each c(1/2) relative to its own narrow-line
+    velocity. Returns (dv_spread, fwhm_spread, n_equivalent): the ranges of
+    c(1/2) - v_sys and of the FWHM over those end points, and their number
+    (the selected one included). NaN, NaN, 0 for a fit without end points
+    (results written before version 0.3)."""
+    ends = r.get("end_points")
+    if not ends or "ps" not in r:
+        return np.nan, np.nan, 0
+    dof = max(r["npix"] - r["nfree"], 1)
+    tol = DEGENERATE_DCHI2 * max(1.0, r["chi2"] / dof)
+    lam = lam0 * (1.0 + vgrid / C_KMS)
+    c50, fwhm = [], []
+    for e in ends:
+        if not e["chi2"] - r["chi2"] <= tol:
+            continue
+        d = r["ps"].full(e["x"])
+        pm = profile_measures(vgrid, eval_components(lam, d, r["comps"], kinds=("broad",)))
+        c50.append(pm["c50"] - d.get("n_v", np.nan))
+        fwhm.append(pm["fwhm"])
+    c50, fwhm = np.asarray(c50, float), np.asarray(fwhm, float)
+    dv = float(np.ptp(c50[np.isfinite(c50)])) if np.isfinite(c50).any() else np.nan
+    dw = float(np.ptp(fwhm[np.isfinite(fwhm)])) if np.isfinite(fwhm).any() else np.nan
+    return dv, dw, int(c50.size)
+
+
 def broad_profile(r, lam0, vgrid):
     """The summed broad model of fit ``r`` on a velocity grid about lam0."""
     lam = lam0 * (1.0 + vgrid / C_KMS)
@@ -217,6 +247,7 @@ def measure_complex(r, conti_full, wave_rest, z, dl_cm=None, vgrid=None, host_mo
         vgrid = np.arange(-PROFILE_GRID_MAX_KMS, PROFILE_GRID_MAX_KMS + 0.01, PROFILE_GRID_KMS)
     P = broad_profile(r, lam0, vgrid)
     m = profile_measures(vgrid, P)
+    m["dv_spread"], m["fwhm_spread"], m["n_equivalent"] = equivalent_end_points(r, lam0, vgrid)
 
     # systemic reference from the same fit
     v_sys = d.get("n_v", np.nan)

@@ -199,6 +199,12 @@ KMS_STATS = frozenset(
 )  # the Fe II broadening, a FWHM in km/s
 
 
+# summary-row columns added since the 0.1.0 pins (0.3.0: the comparison of equally good decompositions)
+ROW_KEYS_SINCE_0_1 = frozenset(
+    f"{p}_{k}" for p in ("HA", "HB", "MG") for k in ("dv_spread", "fwhm_spread", "n_equivalent")
+)
+
+
 def _pins():
     with open(os.path.join(DATA, "pins.json")) as fh:
         return json.load(fh)["pins"]
@@ -437,7 +443,10 @@ def test_legacy_pin_evaluated_from_the_parameters(pin, monkeypatch):
             departures.append(
                 f"{name} BIC selection {select_by_bic(bics, DBIC) + 1} vs pinned n_broad {r['n_broad']}"
             )
-    departures += _row_departures(blrfit.summary_row(res), pin["summary"])
+    # columns added to the summary row after 0.1.0 are not part of these pins
+    row = blrfit.summary_row(res)
+    assert set(row) - set(pin["summary"]) <= ROW_KEYS_SINCE_0_1, set(row) - set(pin["summary"])
+    departures += _row_departures({k: row[k] for k in pin["summary"]}, pin["summary"])
     assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
 
 

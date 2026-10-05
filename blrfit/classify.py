@@ -38,6 +38,10 @@ Flags (a measurement with none of them is "clean")
                      narrow group or a strongly offset [O III]
     narrow_at_bound  narrow group at the edge of its +/-1500 km/s window
     edge             data cover less than +/-6000 km/s around the line
+    degenerate       equally good decompositions (end points of the starts within
+                     DEGENERATE_DCHI2 x max(1, reduced chi-square) of the best)
+                     put c(1/2) more than DEGENERATE_DV_KMS apart; the span is
+                     dv_spread
     extreme_offset   |c(1/2) - v_sys| > 4000 km/s: beyond the Roche ceiling of
                      almost any bound binary; a disk-emitter component, an
                      artefact or a misidentified line
@@ -64,6 +68,7 @@ from .constants import (
     MEASURABLE_MIN_SNR,
     MEASURABLE_MIN_FWHM,
     STRONG_OFFSET_KMS,
+    DEGENERATE_DV_KMS,
 )
 
 LABEL_TEXT = {
@@ -88,6 +93,7 @@ FLAG_TEXT = {
     "sys_disagree": "systemic and [O III] core > 400 km/s apart",
     "narrow_at_bound": "narrow group at the edge of its +/-1500 km/s window",
     "edge": "data cover < +/-6000 km/s around the line",
+    "degenerate": "equally good decompositions differ in c(1/2) by > 100 km/s",
     "extreme_offset": "|c(1/2) - v_sys| > 4000 km/s",
 }
 
@@ -172,6 +178,9 @@ def classify(m, err=None, t=None):
     pt = m.get("peak_top_sys", np.nan)
     if np.isfinite(pt) and abs(pt - m["v_peak_sys"]) > PEAK_DISAGREE_FRAC * fw:
         flags.append("peak_disagree")
+    spread = m.get("dv_spread", np.nan)
+    if np.isfinite(spread) and spread > DEGENERATE_DV_KMS:
+        flags.append("degenerate")
 
     off = m["c50_sys"]
     e_off = err.get("c50_sys", np.nan)

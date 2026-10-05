@@ -131,6 +131,9 @@ SUMMARY_KEYS = (
     "data_v_peak",
     "data_c50",
     "data_centroid_win",
+    "dv_spread",
+    "fwhm_spread",
+    "n_equivalent",
 )
 PREFIX = {"Halpha": "HA", "Hbeta": "HB", "MgII": "MG"}
 
