@@ -2,12 +2,13 @@
 Command-line interface.
 
     blrfit fit   SPECTRUM [--targetid TID] [--z Z] [--ebv E] [...]   one spectrum -> table, JSON, figure
-    blrfit rv    EPOCH1 EPOCH2 --z Z --line Halpha [...]           velocity change between two spectra
-    blrfit fetch --ra RA --dec DEC [--out DIR] [...]                 public SDSS and DESI spectra of a position
+    blrfit fit   --ra RA --dec DEC [--out DIR] [...]                 the public DESI or SDSS spectra of a position
+    blrfit fetch --ra RA --dec DEC [--out DIR] [...]                 download them without fitting
 
 Successful point fits include explicit unavailable-line outcomes. Input or
 fitting exceptions return a nonzero status; public batches retain failed products
-in their manifests. Between-epoch routines are experimental.
+in their manifests. The between-epoch routines of ``blrfit.rv`` are experimental
+and are available from Python only.
 """
 
 from __future__ import annotations
@@ -27,7 +28,6 @@ from .io.sdss import mjd_to_date
 from .model.fit import fit_spectrum, summary_row
 from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset, velocities_at_bound
 from .errors import empirical_error, MC_MIN_CONTRIBUTING
-from . import rv as RV
 
 LINE_KEYS = (
     "v_peak_sys",
@@ -529,244 +529,6 @@ def cmd_fit(a):
 
 
 # ----------------------------------------------------------------------------
-# rv
-# ----------------------------------------------------------------------------
-def _rv_line(line, res1, res2, sp1, sp2, epochs_meta, a, out):
-    """Cross-correlate one line of the two fitted epochs; returns the JSON record (or a
-    'measured': False record) and the pair for the figure."""
-    epochs = []
-    for meta, sp, res in ((epochs_meta[0], sp1, res1), (epochs_meta[1], sp2, res2)):
-        m = res["meas"].get(line, {})
-        c = res["cls"].get(line, {})
-        epochs.append(
-            dict(
-                meta,
-                fitted=line in res["fits"],
-                label=c.get("label", ""),
-                flags=list(c.get("flags", [])),
-                c50_sys=m.get("c50_sys", np.nan),
-                v_peak_sys=m.get("v_peak_sys", np.nan),
-                fwhm=m.get("fwhm", np.nan),
-                broad_flux_snr=m.get("broad_flux_snr", np.nan),
-                v_sys=m.get("v_sys", np.nan),
-                line=_line_record(line, res),
-            )
-        )
-        out(
-            f"  {os.path.basename(meta['path'])}: MJD {_fmt(meta['mjd'], 8, 1)} {line} class {c.get('label', '-')} "
-            f"c50-sys {_fmt(m.get('c50_sys', np.nan), 6, 0, True)} FWHM {_fmt(m.get('fwhm', np.nan), 5)} "
-            f"flux S/N {_fmt(m.get('broad_flux_snr', np.nan), 5, 1)} flags {','.join(c.get('flags', [])) or '-'}"
-        )
-    pair = (
-        RV.pair_analysis(res2, res1, name=line, vmax=a.vmax, n_mc=a.nmc, details=True)
-        if (line in res1["fits"] and line in res2["fits"])
-        else None
-    )
-    doc = dict(line=line, epochs=epochs)
-    if pair is None:
-        doc.update(
-            measured=False, reason="the line is not fitted in both epochs or the cross-correlation failed"
-        )
-        out(f"  {line}: cross-correlation not possible: " + doc["reason"])
-        return doc, None
-    from .rv_policy import measurement_policy
-
-    policy = measurement_policy(pair, line, sp1.get("kind"), sp2.get("kind"))
-    grade = pair["profile_grade"]
-    err_total = policy["err_total"]
-    dv_corr = policy["dv_corrected"]
-    reliable = policy["reliable"]
-    cut = RV.CCF_DIR_CUT_KMS.get(line, np.nan)
-    checks = [
-        (pair["at_bound"], "at bound"),
-        (not pair.get("frame_ok", False), f"narrow-line frame: {pair.get('frame_reason', '')}"),
-        (
-            not pair.get("scale_ok", True),
-            f"implausible flux factors {pair.get('scale_ab', np.nan):.2f} / {pair.get('scale_ba', np.nan):.2f}",
-        ),
-        (bool(pair.get("ambiguous", False)), "a second cross-correlation minimum of similar depth"),
-        (
-            not (pair["profile_z"] < RV.CCF_PROFILE_Z_MAX),
-            f"profile_z {pair['profile_z']:.1f} >= {RV.CCF_PROFILE_Z_MAX:.0f}",
-        ),
-        (
-            not (pair["dir_mismatch"] < cut),
-            f"direction mismatch {pair['dir_mismatch']:.0f} >= {cut:.0f} km/s",
-        ),
-    ]
-    why = next((text for failed, text in checks if failed), "")
-    s_ab = (pair.get("details") or {}).get("s_ab") or {}
-    doc.update(
-        measured=True,
-        dv=pair["dv"],
-        err=pair["err"],
-        err_dchi2=s_ab.get("err_dchi2", np.nan),
-        err_method=pair.get("err_method", s_ab.get("err_method", "unknown")),
-        n_mc_requested=pair.get("n_mc_requested", a.nmc),
-        n_mc_success=pair.get("n_mc_success", 0),
-        bootstrap_fallback_reason=pair.get("bootstrap_fallback_reason", ""),
-        algorithm_version=pair.get("algorithm_version", "unknown"),
-        covariance_mode=pair.get("covariance_mode", "unknown"),
-        profile_grade=grade,
-        resid_frac=pair["resid_frac"],
-        err_total=err_total,
-        sigma_sys_desi=RV.systematic_floor(line, pair.get("snr_proxy", np.nan)),
-        reliable_reason=why or policy["calibration_status"],
-        consistent=pair["consistent"],
-        dir_mismatch=pair["dir_mismatch"],
-        profile_z=pair["profile_z"],
-        chi2_red=pair["chi2_red"],
-        at_bound=pair["at_bound"],
-        regridded=pair["regridded"],
-        npix=pair["npix"],
-        snr_proxy=pair["snr_proxy"],
-        zp_dv=pair["zp_dv"],
-        zp_err=pair["zp_err"],
-        zp_line=pair["zp_line"],
-        zp_source=pair.get("zp_source"),
-        frame_ok=bool(pair.get("frame_ok", False)),
-        frame_reason=pair.get("frame_reason", ""),
-        zp_applied=bool(pair.get("zp_applied", False)),
-        dv_corrected=dv_corr,
-        reliable=bool(reliable),
-        significance=float(abs(dv_corr) / err_total)
-        if (np.isfinite(err_total) and err_total > 0)
-        else np.nan,
-        c50_difference=epochs[1]["c50_sys"] - epochs[0]["c50_sys"],
-        dv_abs_epoch1=epochs[0]["c50_sys"],
-        dv_abs_epoch2=epochs[0]["c50_sys"] + dv_corr,
-    )
-    doc.update(policy)
-    out(
-        f"  {line}: shift of epoch 2 relative to epoch 1 {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s; "
-        f"corrected shift {dv_corr:+.0f} +/- {err_total:.0f} (statistical approximation, error {pair.get('err_method', 'unknown')}); "
-        f"calibration pending; directions {'agree' if pair['consistent'] else 'DISAGREE'} "
-        f"(mismatch {pair['dir_mismatch']:.0f}); "
-        f"{'regridded' if pair['regridded'] else 'same grid'}; {'at bound' if pair['at_bound'] else 'inside search range'}"
-    )
-    out(
-        f"  {line}: profile grade {grade} (z_prof {pair['profile_z']:.1f}, residual {100 * pair['resid_frac']:.1f} per cent of the peak); "
-        f"reliable tier {reliable}{(' (' + why + ')') if why else ''}"
-    )
-    out(
-        f"  {line}: narrow-line zero-point ({pair['zp_line'] or 'none'}) {_fmt(pair['zp_dv'], 5, 0, True)} +/- {_fmt(pair['zp_err'], 4)} km/s "
-        f"(frame {'ok' if doc['frame_ok'] else 'VETOED, ' + doc['frame_reason']}; {'applied' if doc['zp_applied'] else 'not applied'}) -> dv = {dv_corr:+.0f} km/s ({doc['significance']:.1f} statistical error units, uncalibrated); "
-        f"c(1/2) difference of the two fits {doc['c50_difference']:+.0f}; offset from the narrow lines "
-        f"epoch 1 {epochs[0]['c50_sys']:+.0f}, epoch 2 {doc['dv_abs_epoch2']:+.0f} km/s"
-    )
-    return doc, pair
-
-
-def cmd_rv(a):
-    tids = [t.strip() for t in (a.targetid or "").split(",") if t.strip()]
-    tid1 = int(tids[0]) if tids else None
-    tid2 = int(tids[1]) if len(tids) > 1 else tid1
-    sp1, z1, zsrc1, ebv1, esrc1 = _load(a.epoch1, a, tid1)
-    a2 = argparse.Namespace(**vars(a))
-    a2.z = z1  # both epochs at the same redshift
-    sp2, z2, zsrc2, ebv2, esrc2 = _load(a.epoch2, a2, tid2)
-    if a.ebv is not None:
-        ebv2 = ebv1
-    z = z1
-    names = {k.lower(): k for k in COMPLEX_WINDOW}
-    lines = [names.get(s.strip().lower(), s.strip()) for s in a.line.split(",") if s.strip()]
-    bad = [s for s in lines if s not in COMPLEX_WINDOW]
-    if bad:
-        sys.exit(f"unknown line(s) {bad}; choose from {list(COMPLEX_WINDOW)}")
-    if 0 < a.nmc < 10:
-        sys.exit(
-            "--nmc must be at least 10: the bootstrap error is kept only when at least 10 realisations succeed"
-        )
-    complexes = tuple(
-        c
-        for c in ("Halpha", "Hbeta", "MgII")
-        if c in lines or (c in ("Halpha", "Hbeta") and set(lines) & {"Halpha", "Hbeta"})
-    )
-    out = (lambda *x: None) if a.quiet else print
-    out(f"blrfit {__version__} rv: {','.join(lines)}, z = {z:.5f} ({zsrc1}), E(B-V) {ebv1:.4f} / {ebv2:.4f}")
-    try:
-        res1 = fit_spectrum(sp1["wave"], sp1["flux"], sp1["ivar"], z, ebv=ebv1, complexes=complexes)
-        res2 = fit_spectrum(sp2["wave"], sp2["flux"], sp2["ivar"], z, ebv=ebv2, complexes=complexes)
-    except ValueError as e:
-        sys.exit(f"cannot fit the epochs: {e}")
-    epochs_meta = [
-        dict(
-            path=os.path.abspath(path),
-            kind=sp.get("kind"),
-            targetid=tid,
-            mjd=sp.get("mjd", np.nan),
-            date=mjd_to_date(sp["mjd"]) if np.isfinite(sp.get("mjd", np.nan)) else "",
-        )
-        for path, sp, tid in ((a.epoch1, sp1, tid1), (a.epoch2, sp2, tid2))
-    ]
-    doc = dict(
-        blrfit_version=__version__, z=z, convention="dv > 0: epoch 2 redshifted relative to epoch 1", lines={}
-    )
-    mjd1, mjd2 = epochs_meta[0]["mjd"], epochs_meta[1]["mjd"]
-    if np.isfinite(mjd1) and np.isfinite(mjd2):
-        doc["baseline_days"] = float(mjd2 - mjd1)
-        doc["baseline_rest_yr"] = float((mjd2 - mjd1) / 365.25 / (1 + z))
-    pairs = {}
-    for line in lines:
-        rec, pair = _rv_line(line, res1, res2, sp1, sp2, epochs_meta, a, out)
-        doc["lines"][line] = rec
-        pairs[line] = pair
-    first = doc["lines"][lines[0]]
-    doc.update({k: v for k, v in first.items() if k != "lines"})  # the first line's record at the top level
-    if "Halpha" in pairs and "Hbeta" in pairs:
-        from .rv_policy import two_line_policy
-
-        tl = two_line_policy(doc["lines"]["Halpha"], doc["lines"]["Hbeta"])
-        doc["two_line"] = (
-            tl if tl is not None else dict(consistent=False, reason="one of the lines has no usable shift")
-        )
-        if "difference" in tl:
-            out(
-                f"  two-line criterion (Halpha vs Hbeta): {'consistent' if tl['consistent'] else 'NOT consistent'} "
-                f"(difference {tl['difference']:+.0f} km/s, {tl['sigma']:.1f} sigma{'' if tl['same_sign'] else ', opposite signs'})"
-            )
-    stem = a.stem or f"{_stem(a.epoch1, sp1, tid1)}_vs_{_stem(a.epoch2, sp2, tid2)}"
-    os.makedirs(a.out, exist_ok=True)
-    base = os.path.join(a.out, stem)
-    with open(base + "_rv.json", "w") as fh:
-        json.dump(_clean(doc), fh, indent=1)
-    out(f"-> {base}_rv.json")
-    if not a.no_figure and any(p is not None for p in pairs.values()):
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from .plot import plot_epochs_overlay, plot_ccf
-
-        shown = [l for l in lines if pairs.get(l) is not None]
-        fig, axes = plt.subplots(
-            len(shown),
-            2,
-            figsize=(13, 4.6 * len(shown)),
-            squeeze=False,
-            gridspec_kw=dict(width_ratios=[1.6, 1]),
-        )
-        for k, line in enumerate(shown):
-            pair = pairs[line]
-            plot_epochs_overlay(
-                [res1, res2],
-                [epochs_meta[0]["date"] or "epoch 1", epochs_meta[1]["date"] or "epoch 2"],
-                name=line,
-                title=f"{stem}: {line}",
-                ax=axes[k, 0],
-            )
-            plot_ccf(
-                pair,
-                title=f"{line}: dv = {pair['dv']:+.0f} +/- {pair['err']:.0f} km/s, grade {pair['profile_grade']}",
-                ax=axes[k, 1],
-            )
-        fig.tight_layout()
-        fig.savefig(base + "_rv.png", dpi=110)
-        out(f"-> {base}_rv.png")
-    return 0
-
-
-# ----------------------------------------------------------------------------
 # fetch
 # ----------------------------------------------------------------------------
 def cmd_fetch(a):
@@ -827,8 +589,8 @@ def build_parser():
     p = argparse.ArgumentParser(
         prog="blrfit",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Single-spectrum broad AGN line fitting: narrow-reference offsets, "
-        "profile classes and quality flags. Between-epoch routines are experimental.",
+        description="Fit the broad Balmer lines of AGN spectra: offsets from the narrow-line reference,\n"
+        "profile classes and quality flags.",
     )
     p.add_argument("--version", action="version", version=f"blrfit {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -945,44 +707,6 @@ def build_parser():
     f.add_argument("--legacy-error-diagnostic", action="store_true", help=argparse.SUPPRESS)
     f.set_defaults(func=cmd_fit)
 
-    r = sub.add_parser(
-        "rv",
-        help="experimental between-epoch diagnostics; not validated velocity measurements",
-        description="Cross-correlate the broad line of two epochs; writes <stem>_rv.json and <stem>_rv.png.",
-    )
-    r.add_argument("epoch1")
-    r.add_argument("epoch2")
-    r.add_argument("--targetid", default=None, help="DESI TARGETID, or two comma-separated (one per epoch)")
-    r.add_argument(
-        "--z", type=float, default=None, help="redshift used for both epochs (default: from epoch 1's file)"
-    )
-    r.add_argument(
-        "--ebv", default=None, help="Galactic E(B-V) for both epochs (default: per file as in fit)"
-    )
-    r.add_argument("--ra", type=float, default=None, help="right ascension (deg), for --ebv sfd")
-    r.add_argument("--dec", type=float, default=None, help="declination (deg)")
-    r.add_argument(
-        "--line",
-        default="Halpha",
-        help="Halpha (default), Hbeta, MgII, or a comma-separated list; "
-        "with Halpha,Hbeta the two-line criterion is evaluated",
-    )
-    r.add_argument(
-        "--vmax", type=float, default=2000.0, help="search range of the shift, km/s (default 2000)"
-    )
-    r.add_argument(
-        "--nmc",
-        type=int,
-        default=0,
-        help="bootstrap realisations for the cross-correlation error, at least 10 (default 0 = Delta chi-square error)",
-    )
-    r.add_argument("--out", default=".", help="output directory")
-    r.add_argument("--stem", default=None, help="output file stem")
-    r.add_argument("--no-figure", action="store_true", help="do not write the figure")
-    r.add_argument("--quiet", action="store_true", help="print nothing")
-    _add_table_args(r)
-    r.set_defaults(func=cmd_rv)
-
     g = sub.add_parser(
         "fetch",
         help="download public spectra without fitting",
@@ -1004,7 +728,14 @@ def build_parser():
 
 def main(argv=None):
     p = build_parser()
-    a = p.parse_args(argv)
+    args = sys.argv[1:] if argv is None else list(argv)
+    if args[:1] == ["rv"]:
+        p.exit(
+            2,
+            "blrfit: the rv command was removed in version 0.3.0; the between-epoch routines remain "
+            "available, as experimental Python functions, in blrfit.rv\n",
+        )
+    a = p.parse_args(args)
     try:
         return a.func(a)
     except (ValueError, KeyError, OSError, RuntimeError, ImportError) as exc:

@@ -1,5 +1,8 @@
 """Velocity translations of continuum/narrow-subtracted broad profiles.
 
+Experimental, and available from Python only: the shifts and errors computed
+here have no on-sky calibration and are not validated velocity measurements.
+
 The estimator follows the profile-comparison approach of Eracleous et al.
 (2012), Shen et al. (2013), Liu et al. (2014), Runnoe et al. (2017), and Guo
 et al. (2019). The corrected implementation profiles a positive flux factor

@@ -556,6 +556,34 @@ def test_bundled_sdss_pair_is_placed_not_resampled(j001224):
         assert s["npix"] == t["npix"] and s["resampling"] == t["resampling"] == "none"
 
 
+def test_bundled_sdss_pair_through_the_reporting_policy(j001224):
+    """The reporting layer on the same pair. Hbeta is 2.1 times brighter in 2013 and the
+    flux factors absorb it; an SDSS-SDSS pair inherits no error floor, calibrated or
+    legacy; no pair is 'reliable' before a calibration; the two-line criterion compares
+    the corrected shifts and their errors."""
+    from blrfit.rv_policy import measurement_policy, two_line_policy
+
+    r2001, r2013 = j001224
+    shown = {}
+    for name in ("Halpha", "Hbeta"):
+        p = rv.pair_analysis(r2013, r2001, name=name, details=True)
+        policy = measurement_policy(p, name, "sdss", "sdss")
+        assert policy["dv_corrected"] == p["dv_corrected"] and policy["err_total"] == p["err_corrected"]
+        assert policy["error_floor_kind"] == "not_calibrated" and np.isnan(policy["error_floor"])
+        assert policy["legacy_error_floor_kind"] == "unsupported_instrument_pair"
+        assert not policy["calibration_supported"] and policy["reliable"] is False
+        assert policy["diagnostic_quality_pass"] == rv.is_reliable(p)
+        if name == "Hbeta":
+            assert p["scale_ab"] > 1.5 and p["scale_ba"] < 0.7 and 0.0 < p["resid_frac"] < 0.2
+        shown[name] = dict(policy, measured=True)
+    ha, hb = shown["Halpha"], shown["Hbeta"]
+    delta = ha["dv_corrected"] - hb["dv_corrected"]
+    sigma = abs(delta) / np.hypot(ha["err_total"], hb["err_total"])
+    tl = two_line_policy(ha, hb)
+    assert tl["difference"] == pytest.approx(delta) and tl["sigma"] == pytest.approx(sigma)
+    assert tl["consistent"] == (sigma <= 2) and tl["same_sign"] and not tl["calibration_supported"]
+
+
 @pytest.mark.slow
 def test_bundled_sdss_desi_pair_is_regridded():
     """J001247: the DESI coadd (2021) against the 2001 SDSS spectrum. The

@@ -1,6 +1,7 @@
 """
 blrfit: broad AGN emission lines fitted against the narrow-line systemic
-velocity, classified, flagged, and cross-correlated between epochs.
+velocity, classified and flagged. ``blrfit.rv`` compares the broad profiles of
+two epochs; it is experimental.
 
     from blrfit import read_spectrum, fit_spectrum, summary_row, plot_fit
     sp  = read_spectrum("spec-0651-52141-0072.fits")

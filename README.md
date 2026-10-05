@@ -357,9 +357,10 @@ The CLI still defaults to point fits (`--nmc 0`). Existing catalogue/viewer
 products have not acquired new error bars through publication of this release.
 
 Between-epoch velocity routines and Mg II remain experimental. The velocity
-routines are retained for reproducibility and development; their reported
-uncertainties do not establish significant motion. Earlier numerical examples
-are preserved in [historical validation notes](docs/HISTORICAL_VALIDATION.md).
+routines (`blrfit.rv`, from Python only) are retained for reproducibility and
+development; their reported uncertainties do not establish significant motion.
+Earlier numerical examples are preserved in
+[historical validation notes](docs/HISTORICAL_VALIDATION.md).
 
 ## What the tool does not do
 
@@ -385,10 +386,7 @@ are preserved in [historical validation notes](docs/HISTORICAL_VALIDATION.md).
 c(1/2) − v_n, `dv_err_mc`, `dv_err_model`, the measures of the profile and of the narrow lines, and
 `fitted = false` with an empty label and the reason when the window is not covered) and
 `summary_row`, the flat dictionary of the catalogue (`HA_*`, `HB_*`, `conti_*`). `<stem>_fit.png`
-is the diagnostic figure; `--pickle` writes the full result. `<stem>_rv.json` holds a summary of
-each epoch's fit of the line (`epochs`, each with the line record described above), the
-experimental cross-correlation diagnostics, `err_method` and `reliable_reason`.
-Those legacy names do not establish validated between-epoch uncertainties. A fit
+is the diagnostic figure; `--pickle` writes the full result. A fit
 returns zero when it completes, including explicitly uncovered lines. Input/fit failures
 return nonzero; a public batch also returns nonzero when a download or individual fit fails.
 
