@@ -1,49 +1,39 @@
-# Single-spectrum examples
+# Examples
 
-Run these commands from this directory after installing the current package.
-The example FITS/CSV files are included in this repository. Each command uses a
-separate output directory; the default is a point fit (`nmc=0`).
+The spectra in `data/` are public SDSS and DESI spectra of two quasars. The first,
+J001224, is a candidate of Eracleous et al. (2012) whose broad Hβ Liu et al. (2014)
+measured 1952 km/s blueward of its narrow lines. Run the commands from this directory.
+
+| File | Content |
+|---|---|
+| `spec-0651-52141-0072.fits`, `spec-7169-56628-0344.fits` | SDSS J001224.01−102226.5, z = 0.2288, observed in 2001 and 2013 |
+| `J001224_rest_air_nm.csv` | the 2001 spectrum as a table: rest-frame air wavelengths in nm, flux in 10⁻¹⁶ erg s⁻¹ cm⁻² Å⁻¹, 1σ errors |
+| `coadd-main-dark-17260-39627574082538900.fits`, `redrock-...fits` | SDSS J001247.93−084700.5, z = 0.2203: its DESI DR1 coadd, reduced to this target, with the redshift file |
+| `spec-0652-52138-0326.fits`, `spec-7169-56628-0665.fits` | the same object observed by SDSS in 2001 and 2013 |
 
 ```bash
-# Local SDSS spectrum, with an explicit input redshift:
-blrfit fit data/spec-0651-52141-0072.fits --survey sdss --z 0.2288 --out output/sdss
+# an SDSS spectrum at the redshift of Liu et al. (2014)
+blrfit fit data/spec-0651-52141-0072.fits --survey sdss --z 0.2288 --out output
 
-# Local DESI coadd; the matching redrock file supplies its redshift:
-blrfit fit data/coadd-main-dark-17260-39627574082538900.fits --targetid 39627574082538900 --out output/desi
+# the DESI coadd: the redshift comes from the redrock file, E(B-V) from the FIBERMAP
+blrfit fit data/coadd-main-dark-17260-39627574082538900.fits --targetid 39627574082538900 --out output
 
-# The SDSS spectrum represented as a generic table:
-# Wavelength is rest-frame air nm; flux remains observed-frame f_lambda,
-# in units of 1e-16 erg/s/cm²/Å. Scaling by 10 also scales its statistical error.
+# the 2001 spectrum as a table, declaring its units and frame
 blrfit fit data/J001224_rest_air_nm.csv --survey generic --wave lambda_nm --flux f_lambda --err sigma \
     --wave-unit nm --frame rest --air --z 0.2288 --flux-scale 10 --out output/table
 
-# Public DESI DR1 lookup by exact TARGETID (requires the fetch extra):
-blrfit fit --targetid 39627574082538900 --out output/public_desi
+# all SDSS spectra at once, with one catalogue table
+blrfit fit data/spec-*.fits --survey sdss --out output/all
 
-# Search the public DESI/SDSS routes without fitting:
-blrfit fetch --ra 3.1997148876 --dec -8.7834904331 --include-sdss --out output/downloaded
+# Monte Carlo errors (slower)
+blrfit fit data/spec-0651-52141-0072.fits --survey sdss --z 0.2288 --nmc 200 --out output/mc
+
+# the public spectra of the DESI target, downloaded (needs the fetch extra)
+blrfit fit --targetid 39627574082538900 --include-sdss --out output/public
 ```
 
-Local SDSS input uses the conservative mask policy by default. The generic CSV
-has statistical errors but does not encode that native mask, so its usable pixels
-need not match the default SDSS reading. To reproduce the older IVAR-only input
-selection, explicitly use `--sdss-mask-policy ivar` on the SDSS command. Matching
-input conventions matters when comparing results; equal catalogue values are not
-a scientific acceptance criterion.
-
-For conditional MC estimates, add `--nmc 200 --seed 0` (the draw count of the latest
-uncertainty study; at least 25 are required). These retain the
-[documented limitations](../docs/UNCERTAINTIES.md); requesting MC does not guarantee
-that every line has a finite, calibrated error. The
-[main guide](../README.md) documents generic FITS columns, rows and image HDUs,
-units, frames, redshift, extinction and statistical-noise requirements.
-
-The public lookup returns available indexed DESI DR1/EDR coadds and SDSS DR17
-products. It does not reconstruct all observing nights or search every release.
-A coadd may span several nights; products with shared exposures must not be
-interpreted as independent temporal measurements.
-
-Between-epoch routines remain experimental and are outside these single-spectrum
-examples. The older example commands and numerical outputs are retained in
-[historical results](HISTORICAL_RESULTS.md); their reported uncertainties and
-reliability labels are not current validation claims.
+The table version of J001224 carries no pixel mask, so it keeps a few pixels that the
+SDSS reader excludes; its results differ slightly from the SDSS fit for that reason.
+The `spec-*.fits` batch runs at the redshift in each file. The same steps in Python are
+in [quickstart.ipynb](quickstart.ipynb); the model, the outputs and the validation are
+described in [docs](../docs/method.md).

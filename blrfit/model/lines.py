@@ -6,7 +6,8 @@ number of broad components.
 The model of a complex is evaluated on the continuum-subtracted rest-frame
 spectrum inside its window (``COMPLEX_WINDOW``). The weighted residual vector
 is extended by penalty terms that act as Gaussian priors or one-sided hinges
-(see ``narrow.py`` and ``broad.py``); their order is part of the frozen model.
+(see ``narrow.py`` and ``broad.py``); their order is fixed, since the solver is
+not exactly invariant to it.
 """
 
 from __future__ import annotations
@@ -176,10 +177,9 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
     Every attempt with a finite chi-square and finite parameters competes for
     the lowest chi-square, whether or not the solver reported convergence: the
     trust-region solver stops at its evaluation budget or on a flat chi-square
-    surface with a usable solution, and the production fitter kept such end
-    points. An unconverged selection is flagged (``status``
-    'success_unconverged'), not discarded, so that the flag can be counted
-    against the catalogue rather than silently changing the selected model.
+    surface with a usable solution. An unconverged selection is kept and
+    flagged (``status`` 'success_unconverged'), not discarded, so that the
+    selected model does not change silently.
     ``end_points`` keeps every finite end point (chi-square, free parameter
     vector, attempt index), from which ``measure_complex`` compares equally
     good decompositions; ``params_at_bound`` lists the free parameters of the

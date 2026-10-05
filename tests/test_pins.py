@@ -95,7 +95,7 @@ fresh fit of the 0.1.0 pins was also held to the loose tolerances; 0.3.0
 changes the end point on these spectra by design (the continuum is started
 from several points), so the 0.1.0 pins now serve the first part only, and
 the change of every pinned number between versions is tabulated in
-``docs/deltas_0.1.0_to_0.2.0.csv`` and ``docs/deltas_0.2.0_to_0.3.0.csv``.
+``tests/data/deltas_0.1.0_to_0.2.0.csv`` and ``tests/data/deltas_0.2.0_to_0.3.0.csv``.
 """
 
 import json
@@ -606,7 +606,7 @@ def test_current_pins_provenance():
     four SDSS spectra of the legacy pins at their redshifts, E(B-V) and
     complexes with the legacy classes and component counts (no class changed
     between the versions on these spectra; the changes of the numbers are in
-    docs/deltas_0.2.0_to_0.3.0.csv), and the DESI example (F for Halpha, C for
+    tests/data/deltas_0.2.0_to_0.3.0.csv), and the DESI example (F for Halpha, C for
     Hbeta); every pinned line was fitted from a converged continuum by a
     converged attempt, so the flag-and-keep rule of the solver is not
     exercised by the pins."""

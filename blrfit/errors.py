@@ -69,8 +69,7 @@ MC_CONTRIBUTING_STATUS = ("success", "success_unconverged")
 # The offsets on which the draw sample is tested for several basins.
 MC_BASIN_KEYS = ("v_sys", "c50_sys")
 
-# Multimodality of the draw sample (to move to constants.py at the
-# consolidation of the 0.2.0 constants).
+# Multimodality of the draw sample.
 # The two-cluster test is characterised for 25 to 30 contributing draws; with
 # fewer the flag 'mc_too_few' replaces it.
 MC_MIN_CONTRIBUTING = 25
@@ -229,7 +228,7 @@ def _mc_draw(i, deviates, context):
         }
         draw["continuum_solver"] = cinfo.get("solver", {})
         # An unconverged continuum solver keeps its draw and is counted per
-        # line (as in 0.1.0); only a non-finite model invalidates it.
+        # line; only a non-finite model invalidates it.
         draw["continuum_converged"] = bool(cinfo.get("solver", {}).get("success", False))
         if not np.all(np.isfinite(cmodel)):
             raise ValueError("non-finite continuum model")
@@ -298,8 +297,7 @@ def monte_carlo(
 
     ``err`` is the half-width of the 16th-84th percentile range over the draws
     whose line solver returned a finite solution. A draw whose continuum or
-    line solver stopped short of convergence is kept, as in 0.1.0, and
-    recorded: ``draw['continuum_converged']``, the line status
+    line solver stopped short of convergence is kept and recorded: ``draw['continuum_converged']``, the line status
     'success_unconverged', the per-line counts ``n_unconverged_continuum`` and
     ``n_unconverged_lines`` of such draws in the sample, and the flags
     'unconverged_continuum_draws' and 'unconverged_line_draws'. A non-finite
@@ -457,7 +455,7 @@ def monte_carlo(
         ok = np.array([s in MC_CONTRIBUTING_STATUS for s in statuses], bool)
         n_success = int(ok.sum())
         line_info = dict(n_success=n_success, n_failed=nmc - n_success, n_finite={}, flags=[], samples={})
-        # Unconverged solvers keep their draws (as in 0.1.0) and are counted here.
+        # Unconverged solvers keep their draws and are counted here.
         line_info["n_unconverged_lines"] = statuses.count("success_unconverged")
         converged = np.array([d.get("continuum_converged", True) for d in info["draws"]], bool)
         line_info["n_unconverged_continuum"] = int(np.sum(ok & ~converged))

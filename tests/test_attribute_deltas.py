@@ -15,8 +15,8 @@ F/F, host applied; both lines move by -2.5 km/s). On every platform the run
 must produce a row per fitted line with an outcome of the documented set and
 the current fit of the 0.2.0 pin within the end-point tolerance of
 tests/test_pins.py; on the reference stack (BLRFIT_STRICT_PINS=1) the
-baseline must reproduce the 0.1.0 pins and the outcomes are those of
-docs/DELTAS.md: spec-0651 unchanged, the other two attributed to the operator
+baseline must reproduce the 0.1.0 pins and the outcomes are those recorded
+for 0.2.0 (tests/data/deltas_0.1.0_to_0.2.0.csv): spec-0651 unchanged, the other two attributed to the operator
 alone, with the complement path agreeing.
 """
 
@@ -228,7 +228,7 @@ def test_three_pinned_spectra(tmp_path):
             }
     if not STRICT:
         return
-    # the reference stack: the baseline is the 0.1.0 fit and the deltas are the operator's (docs/DELTAS.md);
+    # the reference stack: the baseline is the 0.1.0 fit and the deltas are the operator's (0.2.0);
     # the CSV rounds to 1e-3 km/s, the JSON dump holds the full values
     exact = {(s["file"], r["line"]): r for s in dump["spectra"] for r in s["rows"]}
     for fn, lines in by_file.items():

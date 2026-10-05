@@ -21,8 +21,8 @@ records, per line, whether the selected solution converged (``converged``)
 and whether the continuum solver did (``continuum_converged``);
 ``continuum_status`` ('success', 'unconverged' or 'unknown') is the end state
 of the continuum solver, which does not stop the line fits: a continuum that
-stopped short of convergence is used and flagged, as the production fitter
-did. ``mc_info`` describes the conditional uncertainty model and draw
+stopped short of convergence still gives a usable pseudo-continuum, and is used
+and flagged. ``mc_info`` describes the conditional uncertainty model and draw
 diagnostics.
 
 Every velocity reported is a difference between two quantities measured in
@@ -32,7 +32,7 @@ for Mg II: a redshift wrong by more gives class X, not a shifted velocity),
 which complexes the data cover, whether the host is fitted (z < 1.2), and the
 systemic redshift and luminosity that are derived from it.
 
-``settings`` records the frozen configuration for every result. The keys
+``settings`` records the configuration of every result. The keys
 ``sii_mode`` ('soft'), ``o3_mode`` ('order') and ``o3_split`` (False) name the
 fixed choices for the [S II] tie and the [O III] core/wing ordering, whose
 alternatives were rejected during development; they are kept so that results
@@ -450,8 +450,7 @@ def fit_spectrum(
     res["flux_sub"] = fsub
     # A continuum solver that stopped short of convergence still leaves a
     # usable pseudo-continuum: the lines are fitted from it and the state is
-    # recorded, as the production fitter did, so that the effect of such
-    # continua can be counted in the catalogue rather than removed from it.
+    # recorded, so that such fits are flagged rather than lost.
     solver = cinfo.get("solver")
     if solver is None:
         res["continuum_status"] = "unknown"

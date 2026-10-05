@@ -3,7 +3,7 @@ Write the pins of the fitter as it is, and the delta table against older pins.
 
     PYTHONPATH=. python tools/make_pins.py fit --out tests/data/pins_0.3.0.json
     PYTHONPATH=. python tools/make_pins.py deltas --legacy tests/data/pins_0.2.0.json \\
-        --current tests/data/pins_0.3.0.json --out docs/deltas_0.2.0_to_0.3.0.csv
+        --current tests/data/pins_0.3.0.json --out tests/data/deltas_0.2.0_to_0.3.0.csv
 
 ``fit`` fits the SDSS spectra of a legacy pin file (``tests/data/pins.json`` by
 default) at their pinned redshift, E(B-V) and complexes, and the DESI example

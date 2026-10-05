@@ -484,7 +484,7 @@ def fit_file(a, path, targetid=None, z=None, stem=None, out=print, jobs=1):
             path=os.path.abspath(path),
             kind=sp.get("kind"),
             targetid=sp.get("targetid"),
-            reader_policy=sp.get("mask_policy", "RC1"),
+            reader_policy=sp.get("mask_policy", "default"),
             catalogue_zwarn=sp.get("zwarn"),
             product=sp.get("product", "DESI coadd" if sp.get("kind") == "desi" else "supplied spectrum"),
             public_source=getattr(a, "public_source", None),

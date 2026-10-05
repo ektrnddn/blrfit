@@ -6,8 +6,8 @@ least-squares problem on a named parameter vector. ``ParamSet`` keeps the
 names, starting values and bounds, and knows which parameters are fixed, which
 are tied to another parameter and which are derived as products of others, so
 that the optimiser only sees the free ones. The order in which parameters are
-added is the order of the free vector; it is part of the frozen model because
-the trust-region solver is not exactly invariant to it.
+added is the order of the free vector; it is fixed because the trust-region
+solver is not exactly invariant to it.
 """
 
 from __future__ import annotations

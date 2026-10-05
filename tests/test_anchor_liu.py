@@ -33,7 +33,7 @@ NMAD 111.7 km/s, sign agreement 95.7 per cent.
 
 The per-spectrum comparison with the previous release, whose results are
 stored in the repository (the 0.2.0 columns of
-``docs/deltas_anchor_0.1.0_to_0.2.0.csv``): the fraction of spectra whose
+``tests/data/deltas_anchor_0.1.0_to_0.2.0.csv``): the fraction of spectra whose
 Hbeta class changed must be below CLASS_CHANGE_MAX and the NMAD of the change
 of the Hbeta c50_sys below DELTA_NMAD_KMS. The gates sit just above the values
 measured with 0.3.0 (see the constants); the changes are those of the
@@ -42,7 +42,7 @@ continuum started from several points and of the grown bad-pixel mask.
 With BLRFIT_WRITE_DELTAS=1 the per-spectrum changes (both classes, both
 c50_sys, the difference and the flags of 0.3.0, for Hbeta and Halpha, with the
 host decision, the continuum start kept and the power-law slope) are written to
-``docs/deltas_anchor_0.2.0_to_0.3.0.csv``, sorted by LID, plate and MJD, before
+``tests/data/deltas_anchor_0.2.0_to_0.3.0.csv``, sorted by LID, plate and MJD, before
 the gates are asserted. The stored 0.2.0 file is only read.
 
     BLRFIT_ANCHOR_DIR=/path/to/lit BLRFIT_NPROC=8 BLRFIT_WRITE_DELTAS=1 \\
@@ -61,8 +61,8 @@ from conftest import ROOT
 ANCHOR = os.environ.get("BLRFIT_ANCHOR_DIR", "")
 NPROC = int(os.environ.get("BLRFIT_NPROC", "4"))
 WRITE_DELTAS = os.environ.get("BLRFIT_WRITE_DELTAS", "") not in ("", "0")
-STORED_CSV = os.path.join(ROOT, "docs", "deltas_anchor_0.1.0_to_0.2.0.csv")
-DELTAS_CSV = os.path.join(ROOT, "docs", "deltas_anchor_0.2.0_to_0.3.0.csv")
+STORED_CSV = os.path.join(ROOT, "tests", "data", "deltas_anchor_0.1.0_to_0.2.0.csv")
+DELTAS_CSV = os.path.join(ROOT, "tests", "data", "deltas_anchor_0.2.0_to_0.3.0.csv")
 
 # the literature: the 0.1.0 tolerances (measured then: r 0.91, median +6, NMAD 104 km/s, sign 96 per cent)
 LIT_N_MIN = 365

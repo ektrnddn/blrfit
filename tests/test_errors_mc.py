@@ -6,7 +6,7 @@ realisations and fitted with Monte Carlo refits. This is a historical, small
 single-configuration software/scatter check, not a survey calibration. The
 current input-noise policy perturbs the supplied statistical errors; the 2%
 floor remains in fitting weights only. The quantitative conditional coverage
-study and its unresolved tails are reported in docs/VALIDATION_STATUS.md.
+study and its unresolved tails are reported in docs/validation.md.
 
 Configuration: broad Halpha at +800 km/s, FWHM 4000, equivalent width 150 A
 (broad peak S/N 19), broad Hbeta at the same velocity with a third of the

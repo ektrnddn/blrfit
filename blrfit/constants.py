@@ -3,12 +3,10 @@ Every number that defines the model, a class, a flag or a selection, with the
 reason for its value. Tolerances of the fitting machinery (penalty scales,
 pixel-count thresholds, starting amplitudes) stay next to the code they serve.
 
-The values are those of the frozen production fitter that produced the DESI
-offset-line catalogue. They were set on synthetic spectra, on the SDSS spectra
-of the published offset-line samples and on a small number of DESI test objects
-before the catalogue was built; where a value was set by a test rather than
-taken from the literature, the test is described next to it and the object is
-named where it mattered. The constants are bound by name when the package is
+The values were set on synthetic spectra, on the SDSS spectra of the published
+offset-line samples and on a small number of DESI test objects; where a value
+was set by a test rather than taken from the literature, the test is described
+next to it and the object is named where it mattered. The constants are bound by name when the package is
 imported and are not meant to be changed at run time: changing any value
 invalidates the validation results (the synthetic tests, the comparison with
 Liu et al. 2014 and the uncertainty study).
@@ -402,10 +400,9 @@ LUM_REF_WAVE = (
 # 2200 and 3090 A; with few pixels there the width has no leverage on
 # chi-square, and a free width then runs to one end of the 1200-10000 km/s
 # range (spec-1237 at z = 0.48 ends on 10000 km/s). Below the pixel count the
-# width is held at the value the catalogue fits effectively carried.
-FE_UV_FWHM_FIXED_KMS = (
-    3000.0  # the 0.1.0 start value, at which the width effectively stayed in every catalogue fit
-)
+# width is held at the starting value of the free fit, where an unconstrained
+# width stays.
+FE_UV_FWHM_FIXED_KMS = 3000.0  # km/s
 FE_UV_FREE_MIN_PIXELS = (
     300  # below this many covered UV-window pixels the width is unconstrained and runs to a bound
 )
@@ -470,11 +467,10 @@ RESIDUAL_OUTLIER_MIN_PIX = 3
 # [O III] is not measurable) is close to zero. A zero point of hundreds of km/s
 # is a calibration, reduction or aperture difference that enters the broad
 # shifts of Halpha and Hbeta identically, which is exactly what a coincident
-# two-line change rewards: a long-baseline object of the first catalogue run
-# (-640 / -632 km/s in the two lines) carried a +613 km/s zero point on every
-# SDSS row. Pairs beyond this bound are vetoed for both lines. The value is
-# set on the zero points of 1,099 epoch pairs (docs/CCF_VALIDATION.md, Frame
-# veto): a core of NMAD 11-16 km/s, a tail that thins out above 100 km/s, and
+# two-line change rewards: one long-baseline object (-640 / -632 km/s in the
+# two lines) carried a +613 km/s zero point on every SDSS row. Pairs beyond this bound are vetoed for both lines. The value is
+# set on the zero points of 1,099 epoch pairs (CCF_VALIDATION.md of release
+# 0.2.0, Frame veto): a core of NMAD 11-16 km/s, a tail that thins out above 100 km/s, and
 # beyond 200 km/s a separate group reaching 900 km/s. A veto at 30 km/s (three
 # times the NMAD of the calibration pairs) would remove 18 per cent of the
 # pairs, most of them consistent with no offset.
