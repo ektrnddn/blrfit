@@ -149,8 +149,13 @@ def test_fit_help_groups_the_options_and_hides_legacy_settings(capsys):
     text = capsys.readouterr().out
     for group in ("input:", "public search (no file given):", "model:", "uncertainties:", "output:"):
         assert f"\n{group}\n" in text
-    for legacy in ("--sdss-mask-policy", "--mc-noise-policy", "--legacy-error-diagnostic", "generic,auto"):
+    for legacy in ("--mc-noise-policy", "--legacy-error-diagnostic", "generic,auto"):
         assert legacy not in text
+    # the SDSS mask is a visible choice, by default the inverse-variance mask of the validation
+    assert (
+        "--sdss-mask-policy" in text
+        and build_parser().parse_args(["fit", "x.fits"]).sdss_mask_policy == "ivar"
+    )
     # hidden, not removed: the settings that reproduce earlier releases still parse
     a = build_parser().parse_args(
         [
@@ -158,15 +163,12 @@ def test_fit_help_groups_the_options_and_hides_legacy_settings(capsys):
             "spectrum.fits",
             "--survey",
             "auto",
-            "--sdss-mask-policy",
-            "ivar",
             "--mc-noise-policy",
             "effective",
             "--legacy-error-diagnostic",
         ]
     )
-    assert a.survey == "auto" and a.sdss_mask_policy == "ivar" and a.mc_noise_policy == "effective"
-    assert a.legacy_error_diagnostic
+    assert a.survey == "auto" and a.mc_noise_policy == "effective" and a.legacy_error_diagnostic
 
 
 def test_fit_csv_example_matches_sdss_fit(tmp_path):

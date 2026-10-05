@@ -783,6 +783,13 @@ def build_parser():
     g.add_argument(
         "--redrock", metavar="FILE", help="DESI redrock file (default: the redrock file next to the coadd)"
     )
+    g.add_argument(
+        "--sdss-mask-policy",
+        choices=("ivar", "conservative"),
+        default="ivar",
+        help="SDSS pixels to exclude: those without inverse variance (ivar, the default and the reading of "
+        "the validation), or also every pixel with a mask bit (conservative)",
+    )
     g.add_argument("--z", type=float, default=None, help="redshift (default: from the file, when it has one)")
     g.add_argument(
         "--ebv",
@@ -866,9 +873,6 @@ def build_parser():
     )
     _add_table_args(f)
     # Settings that reproduce earlier releases; they work but are not listed in --help.
-    f.add_argument(
-        "--sdss-mask-policy", choices=("conservative", "ivar"), default="conservative", help=argparse.SUPPRESS
-    )
     f.add_argument(
         "--mc-noise-policy", choices=("input", "effective"), default="input", help=argparse.SUPPRESS
     )

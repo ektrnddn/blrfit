@@ -18,6 +18,8 @@ Fitted numbers change: on 823 SDSS spectra of the Liu et al. (2014) and Eracleou
   whose draws split between solutions are withheld.
 - Bad pixels are masked with two neighbours on each side; SDSS and generic spectra are
   dereddened with SFD98 when the `dust` extra is installed.
+- SDSS spectra are read with the inverse-variance mask by default, as in every validation;
+  `--sdss-mask-policy conservative` (the 0.2.0 default) also drops every flagged pixel.
 - Several spectra per call (`--list`, `--jobs`) with one catalogue table; readable names for
   public fits; a grouped `--help`. The `rv` command is removed (`blrfit.rv` stays, experimental).
 - Python 3.10 or later; documentation rewritten as a method, inputs, outputs and validation page.

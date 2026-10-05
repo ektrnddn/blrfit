@@ -27,10 +27,13 @@ blrfit fit spec-0651-52141-0072.fits --survey sdss --z 0.2288 --out fits
 
 The contents of the file, not its name, identify it: any table with `loglam`, `flux`,
 `ivar` and a pixel mask is read, including later SDSS products. The coadded spectrum
-(extension 1) is fitted on its native vacuum wavelength grid. Pixels with a nonzero
-`and_mask` are excluded on the command line; in Python, `read_sdss` and `read_spectrum`
-exclude them with `mask_policy="conservative"` (their default, `"ivar"`, keeps them, as
-versions before 0.2 did). The redshift comes from the file unless `--z` is given.
+(extension 1) is fitted on its native vacuum wavelength grid. Pixels without inverse
+variance are excluded, as in every validation of the code. `--sdss-mask-policy
+conservative` (in Python, `mask_policy="conservative"`) also excludes every pixel with a bit
+in `and_mask`; in early SDSS spectra the bit MANYBADCOLUMNS covers about half of the
+spectrum, whose flux and errors are normal, and with this mask 20 per cent of the Hα and
+8 per cent of the Hβ lines of the Liu et al. (2014) spectra cannot be fitted. The redshift
+comes from the file unless `--z` is given.
 
 ## Tables and FITS images
 
@@ -117,7 +120,7 @@ warning and flags every fitted line `ebv_assumed_zero`. `--ebv VALUE` overrides 
 ```python
 import blrfit
 
-sp = blrfit.read_spectrum("spec-0651-52141-0072.fits", survey="sdss", mask_policy="conservative")
+sp = blrfit.read_spectrum("spec-0651-52141-0072.fits", survey="sdss")
 res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z=0.2288, ebv=0.0)
 row = blrfit.summary_row(res)  # the flat row described in outputs.md
 fig = blrfit.plot_fit(res)

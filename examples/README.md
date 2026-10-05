@@ -32,8 +32,6 @@ blrfit fit data/spec-0651-52141-0072.fits --survey sdss --z 0.2288 --nmc 200 --o
 blrfit fit --targetid 39627574082538900 --include-sdss --out output/public
 ```
 
-The table version of J001224 carries no pixel mask, so it keeps a few pixels that the
-SDSS reader excludes; its results differ slightly from the SDSS fit for that reason.
 The `spec-*.fits` batch runs at the redshift in each file. The same steps in Python are
 in [quickstart.ipynb](quickstart.ipynb); the model, the outputs and the validation are
 described in [docs](../docs/method.md).

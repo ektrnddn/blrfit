@@ -185,7 +185,12 @@ def test_sdss_renamed_file_and_conservative_masks(tmp_path):
     sp = read_spectrum(path, survey="sdss", mask_policy="conservative")
     assert np.array_equal(sp["ivar"], [4.0, 0.0, 6.0]) and sp["z"] == 0.2
     assert np.array_equal(read_sdss(path)["ivar"], [4.0, 5.0, 6.0])
+    # the command line reads as read_sdss does unless the conservative mask is asked for
     a = build_parser().parse_args(["fit", str(path), "--survey", "sdss"])
+    assert np.array_equal(_load(str(path), a)[0]["ivar"], [4.0, 5.0, 6.0])
+    a = build_parser().parse_args(
+        ["fit", str(path), "--survey", "sdss", "--sdss-mask-policy", "conservative"]
+    )
     assert np.array_equal(_load(str(path), a)[0]["ivar"], sp["ivar"])
     with pytest.raises(ValueError, match="not a DESI"):
         read_spectrum(path, survey="desi")

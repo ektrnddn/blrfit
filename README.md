@@ -107,7 +107,7 @@ host and the number of broad components held fixed. They are statistical errors,
 conditional on the model. On 2,640 synthetic spectra the errors of Δv covered the truth
 as they should in all 16 checks, while 5 of the 32 coverage checks of widths and fluxes
 were inconclusive. Errors are withheld when the draws split between separate solutions. See
-[docs/validation.md](docs/validation.md), which also lists a slow test that fails.
+[docs/validation.md](docs/validation.md), which also describes one known failure.
 
 ## Limitations
 
