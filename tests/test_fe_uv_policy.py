@@ -230,7 +230,9 @@ def test_mc_uses_serialized_policy_and_custom_fallback(policy):
     )
     saved = pickle.loads(pickle.dumps(res))
     _, _, info = errors.monte_carlo(saved, nmc=2, seed=17, return_diagnostics=True)
-    assert info["continuum_settings"] == dict(fe_uv_width_policy=policy, fe_uv_fallback_kms=2500.0)
+    assert info["continuum_settings"] == dict(
+        fe_uv_width_policy=policy, fe_uv_fallback_kms=2500.0, multistart=True
+    )
     for draw in info["draws"]:
         assert "exception" not in draw
         actual = draw["continuum_policy"]

@@ -55,9 +55,9 @@ hinge and priors, the [S II] tie and the systemic prior) are pinned at active
 parameter values by ``test_penalty_terms_pinned``; the host is applied for
 one pin (spec-1704) and rejected below MIN_HOST_FRAC for the other three.
 
-The second part is the optimiser's end point: a fresh fit of each spectrum
-(``test_pin_reproduced``). The bounded trust-region solver ends where the
-platform's floating-point details take it, and for the degenerate
+The second part is the optimiser's end point: a fresh fit of each spectrum of
+the current pins (``test_current_pin_reproduced``, below). The bounded
+trust-region solver ends where the platform's floating-point details take it, and for the degenerate
 decompositions of a broad profile into two or three Gaussians the end point
 differs between platforms and between runs on the same platform (the BLAS
 kernels differ with the CPU). Measured on the Linux runners of the test
@@ -77,25 +77,25 @@ threshold), and a chi-square at most 10 per cent above the pin (lower is
 allowed); its rest-frame arrays must equal those of the first part. Every
 departure of a spectrum is reported in one message.
 
-The third part is the pin of the corrected fitter itself,
-``tests/data/pins_0.2.0.json``, written by ``tools/make_pins.py fit`` from this
-tree on the same four spectra and on the DESI example coadd (at its redrock
-redshift, with the E(B-V) of its fibermap), with the content of ``pins.json``
-and a ``produced_by`` block (blrfit version, git description of the tree,
-library versions, platform, date). ``test_current_pin_reproduced`` holds a
-fresh fit to the tolerances of the second part (the same constants, the same
-comparison) and, under BLRFIT_STRICT_PINS, bit for bit: the fitted parameters,
-chi-square and the BIC list of every complex, the continuum parameters, the
-host decision (eigenspectrum count, host fraction, reason string), the [O III]
-pre-fit and every entry of the summary row, the solver bookkeeping columns
-included. That is the release check of 0.2.0 on the reference stack (numpy
-1.26.4, scipy 1.13.1, macOS arm64).
+The current pins, ``tests/data/pins_0.3.0.json``, are written by
+``tools/make_pins.py fit`` from this tree on the same four spectra and on the
+DESI example coadd (at its redrock redshift, with the E(B-V) of its fibermap),
+with the content of ``pins.json`` and a ``produced_by`` block (blrfit version,
+git description of the tree, library versions, platform, date).
+``test_current_pin_reproduced`` holds a fresh fit to the tolerances above and,
+under BLRFIT_STRICT_PINS, bit for bit: the fitted parameters, chi-square and
+the BIC list of every complex, the continuum parameters, the host decision
+(eigenspectrum count, host fraction, reason string), the [O III] pre-fit and
+every entry of the summary row, the solver bookkeeping columns included. That
+is the release check on the reference stack (numpy 1.26.4 with OpenBLAS 0.3.21
+as distributed by Anaconda, scipy 1.13.1, astropy 6.1.3, macOS arm64).
 
-BLRFIT_STRICT_PINS=1 makes the first part bit-exact as well. The fresh fit of
-the legacy pins is held to the loose tolerances in both modes: the 0.2.0 model
-differs from 0.1.0 by design (the continuous Fe II operator; the ultraviolet
-Fe II width fixed where its window is short), and what that changes on the
-pinned spectra is recorded in ``docs/deltas_0.1.0_to_0.2.0.csv``.
+BLRFIT_STRICT_PINS=1 makes the first part bit-exact as well. Up to 0.2.0 a
+fresh fit of the 0.1.0 pins was also held to the loose tolerances; 0.3.0
+changes the end point on these spectra by design (the continuum is started
+from several points), so the 0.1.0 pins now serve the first part only, and
+the change of every pinned number between versions is tabulated in
+``docs/deltas_0.1.0_to_0.2.0.csv`` and ``docs/deltas_0.2.0_to_0.3.0.csv``.
 """
 
 import json
@@ -492,27 +492,10 @@ def _rest_frame_departures(res, sp, pin):
     ]
 
 
-@pytest.mark.parametrize("pin", _pins(), ids=lambda p: p["file"])
-def test_pin_reproduced(pin):
-    """A fresh fit reaches the pinned classes, flags, component counts and
-    systemic sources, the pinned c50_sys within END_POINT_KMS and a chi-square
-    not more than CHI2_WORSE above the pin, from the rest-frame arrays of the
-    first part. Not bit for bit in strict mode: the model changed since 0.1.0
-    (the third part holds the corrected fitter to its own pins)."""
-    sp = read_sdss(_spectrum_path(pin["file"]))
-    res = blrfit.fit_spectrum(
-        sp["wave"], sp["flux"], sp["ivar"], pin["z"], ebv=pin["ebv"], complexes=tuple(pin["complexes"])
-    )
-    departures = _end_point_departures(res, blrfit.summary_row(res), pin) + _rest_frame_departures(
-        res, sp, pin
-    )
-    assert not departures, pin["file"] + ":\n  " + "\n  ".join(departures)
-
-
 # ----------------------------------------------------------------------------
-# third part: the pins of the corrected fitter (tests/data/pins_0.2.0.json)
+# the current pins (tests/data/pins_0.3.0.json)
 # ----------------------------------------------------------------------------
-CURRENT_PINS = "pins_0.2.0.json"
+CURRENT_PINS = "pins_0.3.0.json"
 DESI_TARGETID = 39627574082538900
 
 
@@ -568,21 +551,8 @@ def _bit_exact_departures(res, row, pin):
     ref = (_nan(pin["o3_prefit"]["v_o3"]), _nan(pin["o3_prefit"]["snr"]))
     if not all(_same(a, b) for a, b in zip(got, ref)):
         departures.append(f"[O III] pre-fit {got!r} vs pinned {ref!r}")
-    # The September 14 pin predates the explicit raw BIC gap and the host
-    # guard flag. Preserve every numerical pin: its old ``bic_margin`` meant
-    # the raw gap, now exported as ``bic_gap``. The actual selection margin
-    # has its own threshold-crossing tests in test_bic_margin.py.
-    additions = {"host_undetermined"}
-    additions.update(
-        k.replace("_bic_margin", "_bic_gap") for k in pin["summary"] if k.endswith("_bic_margin")
-    )
-    assert set(row) == set(pin["summary"]) | additions
     assert row["host_undetermined"] is False  # the guard is inactive on this roster
-    projected = {k: row[k] for k in pin["summary"]}
-    for k in projected:
-        if k.endswith("_bic_margin"):
-            projected[k] = row[k.replace("_bic_margin", "_bic_gap")]
-    departures += _row_departures(projected, pin["summary"])
+    departures += _row_departures(row, pin["summary"])
     return departures
 
 
@@ -605,17 +575,20 @@ def test_current_pin_reproduced(pin):
 
 
 def test_current_pins_provenance():
-    """The 0.2.0 pin file names its producer, holds the four SDSS spectra of
-    the legacy pins at their redshifts, E(B-V) and complexes with the legacy
-    classes and component counts (no class changed between the versions on
-    these spectra), and the DESI example (F for Halpha, C for Hbeta); every
-    pinned line was fitted from a converged continuum by a converged attempt,
-    so the flag-and-keep rule of the solver is not exercised by the pins."""
+    """The 0.3.0 pin file names its producer (without a local path), holds the
+    four SDSS spectra of the legacy pins at their redshifts, E(B-V) and
+    complexes with the legacy classes and component counts (no class changed
+    between the versions on these spectra; the changes of the numbers are in
+    docs/deltas_0.2.0_to_0.3.0.csv), and the DESI example (F for Halpha, C for
+    Hbeta); every pinned line was fitted from a converged continuum by a
+    converged attempt, so the flag-and-keep rule of the solver is not
+    exercised by the pins."""
     cur = _current_pins()
     made = cur["produced_by"]
     for k in ("blrfit", "git", "numpy", "scipy", "astropy", "python", "platform", "date"):
         assert made[k], k
-    assert made["blrfit"].startswith("0.2.0")
+    assert made["blrfit"].startswith("0.3.0")
+    assert "source" not in made
     legacy = {p["file"]: p for p in _pins()}
     pins = {p["file"]: p for p in cur["pins"]}
     assert set(legacy) < set(pins)

@@ -268,12 +268,14 @@ def monte_carlo(
     noise_policy = settings.get("mc_noise_policy", "effective") if noise_policy is None else noise_policy
     if noise_policy not in ("input", "effective"):
         raise ValueError("MC noise policy must be 'input' or 'effective'")
-    # Results predating the selectable policy used A and a 3000 km/s fallback.
-    # Resolve those historical defaults explicitly, even if a later release
-    # changes its default; every draw refits under the recorded estimator.
+    # Results predating the selectable policy used A and a 3000 km/s fallback,
+    # and results predating 0.3 a single continuum start. Resolve those
+    # historical defaults explicitly, even if a later release changes its
+    # default; every draw refits under the recorded estimator.
     continuum_kw = dict(
         fe_uv_width_policy=settings.get("fe_uv_width_policy", "A"),
         fe_uv_fallback_kms=settings.get("fe_uv_fallback_kms", 3000.0),
+        multistart=bool(settings.get("conti_multistart", False)),
     )
     fe = settings.get("fe", True) if fe is None else bool(fe)
     use_ha_systemic = (

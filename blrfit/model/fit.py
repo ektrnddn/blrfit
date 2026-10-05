@@ -254,6 +254,7 @@ def fit_spectrum(
     fe_uv_fallback_kms=FE_UV_FWHM_FIXED_KMS,
     host_guard=True,
     mc_noise_policy="input",
+    conti_multistart=True,
 ):
     """Fit one spectrum end to end; see the module docstring for the result keys.
 
@@ -281,6 +282,9 @@ def fit_spectrum(
         held at under A and C; both recorded in ``settings``
     host_guard : skip the host when the 4200-5000 A window carries no signal
         (``host_info['host_undetermined']``; see fit_continuum_host); recorded in ``settings``
+    conti_multistart : start the continuum fit from several points and keep the best
+        (the default; see CONTI_START_ALPHAS in constants.py); False fits the first start
+        only, as up to version 0.2; recorded in ``settings``
     """
     complexes = tuple(complexes)
     if mc_noise_policy not in ("input", "effective"):
@@ -358,7 +362,12 @@ def fit_spectrum(
         err={},
         mc_info=dict(status="not_requested"),
     )
-    conti_kw = dict(fit_fe=fe, fe_uv_width_policy=fe_uv_width_policy, fe_uv_fallback_kms=fe_uv_fallback_kms)
+    conti_kw = dict(
+        fit_fe=fe,
+        fe_uv_width_policy=fe_uv_width_policy,
+        fe_uv_fallback_kms=fe_uv_fallback_kms,
+        multistart=bool(conti_multistart),
+    )
     if host and z < HOST_ZMAX:
         cd, ctotal, host_model, hinfo = fit_continuum_host(wr, fr, ir, host_guard=host_guard, **conti_kw)
         cmodel = ctotal - host_model  # power law + Fe II only
@@ -407,6 +416,7 @@ def fit_spectrum(
         fe_uv_fallback_kms=float(cinfo.get("feuv_fallback_kms", fe_uv_fallback_kms)),
         host_guard=bool(host_guard),
         mc_noise_policy=mc_noise_policy,
+        conti_multistart=bool(conti_multistart),
     )
     fsub = fr - host_model - cmodel
     res["flux_sub"] = fsub
@@ -519,8 +529,9 @@ def summary_row(res, prefix_meta=None):
     The solver bookkeeping of ``fit_spectrum`` is exported when the result
     carries it (a result evaluated from stored parameters does not):
     ``continuum_status``, ``conti_at_bound`` (continuum parameters that ended
-    at a bound, comma separated) and ``conti_feuv_fwhm_fixed`` from
-    ``continuum_info``; per line ``*_fit_status`` and ``*_converged`` from
+    at a bound, comma separated), ``conti_feuv_fwhm_fixed`` and
+    ``conti_start`` (the continuum start kept; 0 is the single start used up
+    to version 0.2) from ``continuum_info``; per line ``*_fit_status`` and ``*_converged`` from
     ``fit_status``, and ``*_bic_margin`` (the smallest single-score change
     that changes the chosen component count) from the fit. MC counts separate
     contributing, finite and solver-converged draws; flags and their scalar
@@ -539,6 +550,8 @@ def summary_row(res, prefix_meta=None):
     if cinfo is not None:
         row["conti_at_bound"] = ",".join(str(k) for k in (cinfo.get("at_bound") or []))
         row["conti_feuv_fwhm_fixed"] = bool(cinfo.get("feuv_fwhm_fixed", False))
+        if "start_selected" in cinfo:
+            row["conti_start"] = int(cinfo["start_selected"])
     for name, status in res.get("fit_status", {}).items():
         row[f"{PREFIX[name]}_fit_status"] = status["status"]
         row[f"{PREFIX[name]}_converged"] = bool(status.get("converged", False))

@@ -69,7 +69,8 @@ def test_plot_fit_renders(tmp_path):
     labels = [t.get_text() for t in fig.axes[1].get_legend().get_texts()]
     assert "c(1/2)" in labels and "total" in labels
     top = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
-    assert "power law + Fe II" in top  # the host is rejected for this spectrum
+    # since 0.3.0 the continuum of this spectrum reaches the host solution (several starts)
+    assert "host + power law + Fe II" in top and "host (Yip eigenspectra)" in top
     fig.savefig(tmp_path / "f.png", dpi=50)
     assert (tmp_path / "f.png").stat().st_size > 1000
 

@@ -185,12 +185,12 @@ def _pins(name):
 
 
 def test_three_pinned_spectra(tmp_path):
-    current, legacy = _pins("pins_0.2.0.json"), _pins("pins.json")
+    current, legacy = _pins("pins_0.3.0.json"), _pins("pins.json")
     out_csv, out_json = tmp_path / "attribution.csv", tmp_path / "attribution.json"
     ad.main(
         [
             "--pins",
-            os.path.join(DATA, "pins_0.2.0.json"),
+            os.path.join(DATA, "pins_0.3.0.json"),
             "--legacy",
             os.path.join(DATA, "pins.json"),
             "--only",
@@ -238,10 +238,24 @@ def test_three_pinned_spectra(tmp_path):
             assert r["baseline_vs_legacy"] == "reproduced" and float(r["legacy_dc50"]) == 0.0, (fn, line)
             assert exact[fn, line]["c50_base"] == legacy[fn]["summary"][f"{p}_c50_sys"]
             assert exact[fn, line]["c50_cur"] == current[fn]["summary"][f"{p}_c50_sys"]
-    assert {r["outcome"] for r in by_file[PINNED[0]].values()} == {"unchanged"}
+    # J001224: since 0.3.0 its continuum reaches the host solution from the other starts; Halpha moves
+    # by the starts alone, Hbeta needs the starts and the continuous Fe II operator together
+    ha, hb = by_file[PINNED[0]]["Halpha"], by_file[PINNED[0]]["Hbeta"]
+    assert ha["outcome"] == "attributed-single" and ha["toggles"] == "conti_multistart"
+    assert ha["complement_necessary"] == "conti_multistart" and ha["order_independent"] == "True"
+    assert abs(float(ha["dc50_conti_multistart"]) - float(ha["delta_c50"])) < ad.TOL_KMS
+    assert float(ha["delta_c50"]) == pytest.approx(-505.8, abs=0.5)
+    assert hb["outcome"] == "attributed-joint" and hb["toggles"] == "fe_operator+conti_multistart"
+    assert hb["complement_necessary"] == "fe_operator+conti_multistart" and hb["order_independent"] == "True"
+    # spec-1237 and spec-1704: the Fe II operator, as in 0.2.0 (on spec-1704 the starts alone also
+    # reach the current end point within the tolerance from the 0.1.0 configuration)
     for fn in PINNED[1:]:
         for line, r in by_file[fn].items():
-            assert r["outcome"] == "attributed-single" and r["toggles"] == "fe_operator", (fn, line)
-            assert r["complement_necessary"] == "fe_operator" and r["order_independent"] == "True"
+            assert r["outcome"] == "attributed-single" and "fe_operator" in r["toggles"].split("+"), (
+                fn,
+                line,
+            )
+            assert r["complement_necessary"] == "fe_operator", (fn, line)
             assert abs(float(r["dc50_fe_operator"]) - float(r["delta_c50"])) < ad.TOL_KMS
+    assert by_file[PINNED[1]]["Hbeta"]["toggles"] == "fe_operator"
     assert float(by_file[PINNED[1]]["Hbeta"]["delta_c50"]) == pytest.approx(-22.75, abs=0.05)

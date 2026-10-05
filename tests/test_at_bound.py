@@ -186,8 +186,11 @@ def test_near_bound_width_of_the_desi_example_is_flagged_without_the_active_set(
 
 
 def test_zero_norm_of_j001224_is_fe_norm_zero_and_unidentified():
+    # the single-start continuum of J001224 (up to 0.2; the other starts reach a host solution with Fe II)
     sp = read_sdss(SDSS_EXAMPLE)
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",))
+    res = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",), conti_multistart=False
+    )
     info = res["continuum_info"]
     assert "feop_norm" in info["at_bound"] and res["conti"]["feop_norm"] <= FE_NORM_ZERO
     s = _states(info)["feop_fwhm"]

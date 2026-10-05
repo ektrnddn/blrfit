@@ -4,9 +4,9 @@ Reproducibility of the end point of ``fit_spectrum``.
 Two properties are held. (a) A rescaling of the flux by 1 + 1e-13, with the
 inverse variance divided by its square, changes the input in its last bit and
 nothing else; the fit must come back with the same classes, flags, component
-counts and systemic sources, and with every velocity and width of the summary
-row of both lines within REPRO_KMS = 0.1 km/s (one three-thousandth of the
-300 km/s class threshold). 0.1.0 rounded the Fe II broadening width to 50 km/s
+counts and systemic sources, and with every velocity of the summary row of
+both lines within REPRO_KMS = 0.1 km/s (one three-thousandth of the 300 km/s
+class threshold) and every width within REPRO_WIDTH_KMS = 0.5 km/s. 0.1.0 rounded the Fe II broadening width to 50 km/s
 inside the continuum solver, which then saw no width derivative and ended
 where the last bit of the data took it: under this rescaling the frozen 0.1.0
 release moves c50_sys of Hbeta of the 2013 epoch of J001224
@@ -23,16 +23,19 @@ and Fe II on, the defaults).
 Two kinds of entry are excepted, and the exceptions are pinned per epoch so
 that they cannot widen unnoticed. A parameter that multiplies nothing at the
 end point is unconstrained by the data: the Fe II width where the Fe II norm
-ended on its zero bound (``continuum_info['at_bound']`` lists ``feop_norm``;
-the 2001 epoch) and the narrow-line-region wing width where the wing fraction
-ended on its zero bound (the active bounds of the selected solver attempt;
-the 2001 epoch, whose Hbeta takes the Halpha wing as a fixed prior). Both are
-compared only when defined. The second-moment width ``sigma_line`` weights
-the far wings with the velocity squared, where the flattest directions of a
-three-component decomposition lie, and is held to REPRO_MOMENT_KMS = 0.5
-km/s: on the 2001 epoch it moves by 0.11 km/s while every offset moves by less
-than 0.02 km/s (between platforms it is the least stable statistic of all,
-see ``tests/test_pins.py``).
+ended on its zero bound (``continuum_info['at_bound']`` lists ``feop_norm``)
+and the narrow-line-region wing width where the wing fraction ended on its
+zero bound (the active bounds of the selected solver attempt). Both are
+compared only when defined. Up to 0.2 both applied to the 2001 epoch, whose
+single-start continuum stopped without a host; since 0.3.0 its continuum
+reaches the host solution (several starts, see ``model/continuum.py``) and no
+entry is undefined on either epoch. The widths are held to REPRO_WIDTH_KMS =
+0.5 km/s: the second-moment width ``sigma_line`` weights the far wings with
+the velocity squared, where the flattest directions of a three-component
+decomposition lie (between platforms it is the least stable statistic of all,
+see ``tests/test_pins.py``), and with the host in the continuum the FWHM of
+Hbeta of the 2001 epoch moves by 0.13 km/s under the rescaling while every
+offset stays within 0.1 km/s.
 
 The 0.1 km/s holds on the reference machine (macOS arm64, numpy 1.26.4,
 scipy 1.13.1) and is checked under BLRFIT_STRICT_PINS=1, the release check of
@@ -43,7 +46,7 @@ W25 by up to 0.32 km/s on two runners, one with numpy 1.26 / scipy 1.13 and one
 with current releases, and by less than 0.1 km/s on a third. The
 host-decomposed end point is reproducible to about 1 km/s there (CHANGELOG,
 known open items), and the default tolerance is REPRO_KMS_OTHER = 1.5 km/s
-(REPRO_MOMENT_KMS_OTHER = 3 km/s for sigma_line), twenty times below the
+(REPRO_WIDTH_KMS_OTHER = 3 km/s for the widths), ten times below the
 30 km/s that the 0.1.0 width rounding produced. Classes, flags, component
 counts and systemic sources must agree exactly everywhere.
 
@@ -63,12 +66,13 @@ from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, Z_J001224
 from test_pins import KMS_STATS, STRICT
 
 EPS = 1e-13
-REPRO_KMS_OTHER, REPRO_MOMENT_KMS_OTHER = 1.5, 3.0  # without BLRFIT_STRICT_PINS, see the module docstring
-REPRO_KMS = 0.1 if STRICT else REPRO_KMS_OTHER  # every velocity and width of the summary row
-REPRO_MOMENT_KMS = 0.5 if STRICT else REPRO_MOMENT_KMS_OTHER  # the second-moment width
+REPRO_KMS_OTHER, REPRO_WIDTH_KMS_OTHER = 1.5, 3.0  # without BLRFIT_STRICT_PINS, see the module docstring
+REPRO_KMS = 0.1 if STRICT else REPRO_KMS_OTHER  # every velocity of the summary row
+REPRO_WIDTH_KMS = 0.5 if STRICT else REPRO_WIDTH_KMS_OTHER  # the widths, the second moment included
+WIDTH_STATS = {"fwhm", "W25", "W75", "W90", "sigma_line"}
 EPOCHS = {"2001": SDSS_EXAMPLE, "2013": SDSS_EXAMPLE_2}
 # the entries undefined at the end point, per epoch (see the module docstring)
-UNDEFINED = {"2001": {"conti_feop_fwhm", "HA_nw_sig", "HB_nw_sig"}, "2013": set()}
+UNDEFINED = {"2001": set(), "2013": set()}
 
 
 def _fit(path, scale=1.0):
@@ -113,7 +117,7 @@ def _velocity_departures(ra, rb, skip):
         if np.isnan(va) and np.isnan(vb):
             continue
         d = abs(va - vb) * (C_KMS if stat == "z_sys" else 1.0)
-        tol = REPRO_MOMENT_KMS if stat == "sigma_line" else REPRO_KMS
+        tol = REPRO_WIDTH_KMS if stat in WIDTH_STATS else REPRO_KMS
         if not d <= tol:
             out.append(f"{k} {va!r} vs {vb!r}: {d:.4f} km/s (tolerance {tol})")
     return out

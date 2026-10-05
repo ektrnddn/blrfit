@@ -82,8 +82,11 @@ def test_at_bound_and_fixed_width_recorded_for_desi_example():
 
 
 def test_fe_norm_at_zero_is_listed():
+    # the single-start continuum of J001224 (up to 0.2; the other starts reach a host solution with Fe II)
     sp = read_sdss(SDSS_EXAMPLE)
-    res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",))
+    res = blrfit.fit_spectrum(
+        sp["wave"], sp["flux"], sp["ivar"], Z_J001224, complexes=("Hbeta",), conti_multistart=False
+    )
     info = res["continuum_info"]
     assert "feop_norm" in info["at_bound"]
     assert res["conti"]["feop_norm"] < 1e-6

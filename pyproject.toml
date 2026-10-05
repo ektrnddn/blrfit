@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blrfit"
-version = "0.2.0"
+version = "0.3.0.dev0"
 description = "Single-spectrum broad AGN line fitting with measured offsets, profile classes and explicit quality diagnostics"
 readme = "README.md"
 license = {text = "MIT"}

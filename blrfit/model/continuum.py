@@ -29,6 +29,14 @@ spectra that make up most of a DESI broad-line sample:
   displaced the systemic velocity by up to 450 km/s in strongly star-forming
   hosts.
 
+Each continuum fit is started from several points (``CONTI_START_ALPHAS`` and,
+with a host, ``CONTI_START_HOST_SCALES``), because the power-law slope and the
+host amplitude are degenerate in host-rich spectra and one start can stop in a
+local minimum. The starts are compared on the same pixels before the outlier
+clip and the lowest chi-square is kept; ``continuum_info['starts']`` records
+every start and ``start_selected`` the one kept (0 is the start used up to
+version 0.2).
+
 Two guards of the continuum fit are recorded with every result. The host
 fraction is undetermined, and the host is not fitted, when the 4200-5000 A
 window that defines it carries no signal (``host_window_statistics``;
@@ -73,6 +81,9 @@ from ..constants import (
     FE_UV_WIDTH_POLICY,
     HOST_GUARD_MIN_SNR,
     HOST_GUARD_MAX_MASKED_FRAC,
+    CONTI_START_ALPHAS,
+    CONTI_START_HOST_SCALES,
+    CONTI_START_DCHI2,
 )
 from .params import ParamSet
 
@@ -252,6 +263,8 @@ FALLBACK_KEYS = (
     "feuv_refit",
     "feuv_free_fit",
     "n_pix_uv",
+    "starts",
+    "start_selected",
 )
 
 
@@ -474,7 +487,15 @@ def conti_model(wave, d, fe_op, fe_uv):
 
 
 def _add_pl_fe(
-    ps, fref, fit_fe, cov_op, cov_uv, pl_start, feuv_fixed=False, feuv_fixed_kms=FE_UV_FWHM_FIXED_KMS
+    ps,
+    fref,
+    fit_fe,
+    cov_op,
+    cov_uv,
+    pl_start,
+    feuv_fixed=False,
+    feuv_fixed_kms=FE_UV_FWHM_FIXED_KMS,
+    alpha_start=CONTI_START_ALPHAS[0],
 ):
     """Power-law and Fe II parameters in the frozen order.
 
@@ -482,10 +503,10 @@ def _add_pl_fe(
     (FE_UV_FWHM_FIXED_KMS unless a fallback width is given) instead of being
     fitted: where the spectrum covers fewer than FE_UV_FREE_MIN_PIXELS pixels
     of the ultraviolet windows the width has no leverage and a free one runs
-    to a bound.
+    to a bound. ``alpha_start`` is the starting power-law slope.
     """
     ps.add("pl_norm", pl_start, 0.0, 1e4 * fref)
-    ps.add("pl_alpha", -1.5, PL_ALPHA_MIN, PL_ALPHA_MAX)
+    ps.add("pl_alpha", alpha_start, PL_ALPHA_MIN, PL_ALPHA_MAX)
     if fit_fe and cov_op:
         ps.add("feop_norm", 0.1 * fref, 0.0, 1e3 * fref)
         ps.add("feop_fwhm", 3000.0, FE_FWHM_MIN, FE_FWHM_MAX)
@@ -497,6 +518,17 @@ def _add_pl_fe(
         else:
             ps.add("feuv_fwhm", 3000.0, FE_FWHM_MIN, FE_FWHM_MAX)
         ps.add("feuv_shift", 0.0, -FE_SHIFT_MAX, FE_SHIFT_MAX)
+
+
+def _select_start(fits):
+    """The kept start among ``(chi2, index, ps, sol)`` fits: the earliest whose
+    chi-square lies within CONTI_START_DCHI2 of the lowest finite one, or the
+    first start that ran when no chi-square is finite (as with a single start)."""
+    finite = [f for f in fits if np.isfinite(f[0])]
+    if not finite:
+        return fits[0]
+    lowest = min(f[0] for f in finite)
+    return min((f for f in finite if f[0] <= lowest + CONTI_START_DCHI2), key=lambda f: f[1])
 
 
 def _uv_fixed_first(policy, fit_fe, cov_uv, n_uv):
@@ -514,6 +546,7 @@ def fit_continuum(
     clip=True,
     fe_uv_width_policy=FE_UV_WIDTH_POLICY,
     fe_uv_fallback_kms=FE_UV_FWHM_FIXED_KMS,
+    multistart=True,
 ):
     """Power law + Fe II in the line-free windows, no host.
 
@@ -530,9 +563,13 @@ def fit_continuum(
     covered ultraviolet pixels (``n_pix_uv``), the parameters at a bound by the
     solver's criterion (``at_bound``) and the state of each Fe II width
     (``fe_width_state``, ``fe_norm_zero``, ``at_bound_widths``; see
-    ``fe_width_states``).
+    ``fe_width_states``). With ``multistart`` (the default) the fit is
+    started from every slope of CONTI_START_ALPHAS and ``info['starts']``
+    records each start; without it only the first start is fitted, as up to
+    version 0.2.
     """
     policy, fallback = _check_uv_policy(fe_uv_width_policy, fe_uv_fallback_kms)
+    alphas = CONTI_START_ALPHAS if multistart else CONTI_START_ALPHAS[:1]
     fe_op, fe_uv = fe_templates()
     good = np.isfinite(flux) & (ivar > 0)
     if not good.any():
@@ -552,24 +589,37 @@ def fit_continuum(
     def solve(feuv_fixed):
         m = m0
         info = dict(n_pix=int(m.sum()), fe_op=False, fe_uv=False, fallback=False)
-        ps = ParamSet()
-        _add_pl_fe(
-            ps, fref, fit_fe, cov_op, cov_uv, pl_start=fref, feuv_fixed=feuv_fixed, feuv_fixed_kms=fallback
-        )
-        info["fe_op"] = bool(fit_fe and cov_op)
-        info["fe_uv"] = bool(fit_fe and cov_uv)
-        _uv_policy_record(info, policy, fallback, n_uv, feuv_fixed)
-        if m.sum() < 40:
+        pl_only = m.sum() < 40
+        if pl_only:
             # too few window pixels: a power law to everything outside the complexes
             info["fallback"] = True
             m = good.copy()
             for lo, hi in COMPLEX_WINDOW.values():
                 m &= ~((wave > lo) & (wave < hi))
-            for k in list(ps.names):
-                if k.startswith("fe"):
-                    ps.fixed[k] = 0.0 if k.endswith("norm") else ps.val[ps.names.index(k)]
 
-        n_free = len(ps.free_names)
+        def build(alpha0):
+            ps = ParamSet()
+            _add_pl_fe(
+                ps,
+                fref,
+                fit_fe,
+                cov_op,
+                cov_uv,
+                pl_start=fref,
+                feuv_fixed=feuv_fixed,
+                feuv_fixed_kms=fallback,
+                alpha_start=alpha0,
+            )
+            if pl_only:
+                for k in list(ps.names):
+                    if k.startswith("fe"):
+                        ps.fixed[k] = 0.0 if k.endswith("norm") else ps.val[ps.names.index(k)]
+            return ps
+
+        info["fe_op"] = bool(fit_fe and cov_op)
+        info["fe_uv"] = bool(fit_fe and cov_uv)
+        _uv_policy_record(info, policy, fallback, n_uv, feuv_fixed)
+        n_free = len(build(CONTI_START_ALPHAS[0]).free_names)
         if m.sum() <= n_free:
             # every usable pixel lies inside the line complexes: least squares on
             # no residual would return the starting values as a solution
@@ -581,21 +631,49 @@ def fit_continuum(
         x = wave[m]
         y = flux[m]
 
-        def resid(p):
-            return (y - conti_model(x, ps.full(p), fe_op, fe_uv)) * w
+        def residual(ps, x, y, w):
+            def resid(p):
+                return (y - conti_model(x, ps.full(p), fe_op, fe_uv)) * w
 
-        sol = least_squares(resid, ps.p0(), bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI)
+            return resid
+
+        # every start on the same pixels; the lowest chi-square is kept
+        starts, fits, first_error = [], [], None
+        for k, alpha0 in enumerate(alphas):
+            ps_k = build(alpha0)
+            rec = dict(index=k, alpha_start=float(alpha0), selected=False)
+            try:
+                sol_k = least_squares(
+                    residual(ps_k, x, y, w),
+                    ps_k.p0(),
+                    bounds=ps_k.bounds(),
+                    x_scale="jac",
+                    max_nfev=MAX_NFEV_CONTI,
+                )
+            except Exception as exc:
+                first_error = first_error or exc
+                rec.update(chi2=np.nan, pl_alpha=np.nan, success=False, error=f"{type(exc).__name__}: {exc}")
+                starts.append(rec)
+                continue
+            chi2 = float(np.sum(sol_k.fun**2))
+            rec.update(chi2=chi2, pl_alpha=float(ps_k.full(sol_k.x)["pl_alpha"]), success=bool(sol_k.success))
+            starts.append(rec)
+            fits.append((chi2, k, ps_k, sol_k))
+        if not fits:
+            raise first_error
+        _, k_best, ps, sol = _select_start(fits)
+        for rec in starts:
+            rec["selected"] = rec["index"] == k_best
+
         if clip and m.sum() > 60:
             # one round of outlier clipping (absorption features, residual lines), as Shen et al. 2011
-            r = resid(sol.x)
+            r = residual(ps, x, y, w)(sol.x)
             keep = (r > CLIP_LO) & (r < CLIP_HI)
             if keep.sum() > 40 and keep.sum() < len(r):
                 x, y, w = x[keep], y[keep], w[keep]
-
-                def resid2(p):
-                    return (y - conti_model(x, ps.full(p), fe_op, fe_uv)) * w
-
-                sol = least_squares(resid2, sol.x, bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI)
+                sol = least_squares(
+                    residual(ps, x, y, w), sol.x, bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI
+                )
                 info["n_pix"] = int(keep.sum())
         d = ps.full(sol.x)
         ps.set_values(d)
@@ -604,6 +682,8 @@ def fit_continuum(
         info["ps"] = ps
         info["solver"] = _solver_record(sol)
         info["at_bound"] = _at_bound(sol, ps)
+        info["starts"] = starts
+        info["start_selected"] = int(k_best)
         _width_bookkeeping(info, ps, d, sol)
         return d, model, info
 
@@ -642,6 +722,7 @@ def fit_continuum_host(
     fe_uv_width_policy=FE_UV_WIDTH_POLICY,
     fe_uv_fallback_kms=FE_UV_FWHM_FIXED_KMS,
     host_guard=True,
+    multistart=True,
 ):
     """One coherent pseudo-continuum: sum_i g_i E_i(lambda) + power law + Fe II.
 
@@ -663,12 +744,19 @@ def fit_continuum_host(
     ``fe_uv_width_policy`` and ``fe_uv_fallback_kms`` are those of
     ``fit_continuum``; under policy C the joint fit is repeated with the
     ultraviolet width held at the fallback when the free width ends on a
-    bound (``feuv_refit``).
+    bound (``feuv_refit``). With ``multistart`` (the default) every count of
+    eigenspectra is started from each pair of CONTI_START_ALPHAS and
+    CONTI_START_HOST_SCALES (slopes alone without a host); without it only the
+    first pair, as up to version 0.2.
 
     Returns (parameter dict, total continuum incl. host, host model, info).
     """
     policy, fallback = _check_uv_policy(fe_uv_width_policy, fe_uv_fallback_kms)
-    conti_kw = dict(fit_fe=fit_fe, fe_uv_width_policy=policy, fe_uv_fallback_kms=fallback)
+    conti_kw = dict(
+        fit_fe=fit_fe, fe_uv_width_policy=policy, fe_uv_fallback_kms=fallback, multistart=multistart
+    )
+    alphas = CONTI_START_ALPHAS if multistart else CONTI_START_ALPHAS[:1]
+    scales = CONTI_START_HOST_SCALES if multistart else CONTI_START_HOST_SCALES[:1]
     fe_op, fe_uv = fe_templates()
     P = pca_templates()
     good = np.isfinite(flux) & (ivar > 0)
@@ -719,7 +807,7 @@ def fit_continuum_host(
     n_uv = _uv_window_pixels(wave, good, inwin)
     gscale = fref / max(float(np.nanmedian(Gfull[0][inhost])) if inhost.sum() else 1.0, 1e-6)
 
-    def make_ps(ng, feuv_fixed):
+    def make_ps(ng, feuv_fixed, alpha0=CONTI_START_ALPHAS[0], host_scale=CONTI_START_HOST_SCALES[0]):
         ps = ParamSet()
         _add_pl_fe(
             ps,
@@ -730,11 +818,15 @@ def fit_continuum_host(
             pl_start=0.7 * fref,
             feuv_fixed=feuv_fixed,
             feuv_fixed_kms=fallback,
+            alpha_start=alpha0,
         )
         for i in range(ng):
             # eigenspectrum 0 is the mean galaxy: its coefficient must be non-negative
             ps.add(
-                f"gal{i}", 0.3 * gscale if i == 0 else 0.0, 0.0 if i == 0 else -50.0 * gscale, 50.0 * gscale
+                f"gal{i}",
+                host_scale * gscale if i == 0 else 0.0,
+                0.0 if i == 0 else -50.0 * gscale,
+                50.0 * gscale,
             )
         return ps
 
@@ -744,41 +836,93 @@ def fit_continuum_host(
             h += d[f"gal{i}"] * Gfull[i]
         return h
 
+    # the window that defines the host fraction; a flux sum that is not positive
+    # leaves the fraction undefined (NaN), and the host is then not subtracted
+    sel_frac = inhost & (wave > 4200) & (wave < 5000) & good
+    fsum = float(np.sum(flux[sel_frac]))
+
+    def host_fraction(host):
+        return float(np.sum(host[sel_frac]) / fsum) if sel_frac.sum() > 20 and fsum > 0 else np.nan
+
+    def residual(ps, ng, idx, y, w):
+        def resid(p):
+            d = ps.full(p)
+            m = conti_model(wave[idx], d, fe_op, fe_uv)
+            for i in range(ng):
+                m = m + d[f"gal{i}"] * Gfull[i][idx]
+            return (y - m) * w
+
+        return resid
+
+    def starts_for(ng):
+        """(slope, host amplitude) starts; without a host the slopes alone."""
+        if ng == 0:
+            return [(a, None) for a in alphas]
+        return [(a, s) for a in alphas for s in scales]
+
     def attempt(feuv_fixed):
         """The first non-negative host over the stepped-down eigenspectrum
-        counts, or None when every attempt failed."""
+        counts, or None when every attempt failed. For each count every start
+        is fitted on the same pixels and the lowest chi-square is clipped and
+        refitted."""
         for ng in [n for n in (n_gal_max, 3, 2, 1, 0) if n <= n_gal_max]:
-            ps = make_ps(ng, feuv_fixed)
             use = use0 if ng > 0 else (good & inwin if (good & inwin).sum() >= 40 else use0)
             y = flux[use]
             w = np.sqrt(ivar[use])
             idx = np.where(use)[0]
-
-            def resid(p, idx=idx, y=y, w=w, ng=ng):
-                d = ps.full(p)
-                m = conti_model(wave[idx], d, fe_op, fe_uv)
-                for i in range(ng):
-                    m = m + d[f"gal{i}"] * Gfull[i][idx]
-                return (y - m) * w
-
-            try:
-                sol = least_squares(
-                    resid, ps.p0(), bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI_HOST
+            starts, fits, first_error = [], [], None
+            for k, (alpha0, scale) in enumerate(starts_for(ng)):
+                ps_k = make_ps(ng, feuv_fixed, alpha0, CONTI_START_HOST_SCALES[0] if scale is None else scale)
+                rec = dict(
+                    index=k,
+                    alpha_start=float(alpha0),
+                    host_start=None if scale is None else float(scale),
+                    selected=False,
                 )
-                r = resid(sol.x)
+                try:
+                    sol_k = least_squares(
+                        residual(ps_k, ng, idx, y, w),
+                        ps_k.p0(),
+                        bounds=ps_k.bounds(),
+                        x_scale="jac",
+                        max_nfev=MAX_NFEV_CONTI_HOST,
+                    )
+                except Exception as exc:
+                    first_error = first_error or exc
+                    rec.update(
+                        chi2=np.nan,
+                        pl_alpha=np.nan,
+                        host_frac=np.nan,
+                        success=False,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                    starts.append(rec)
+                    continue
+                d_k = ps_k.full(sol_k.x)
+                chi2 = float(np.sum(sol_k.fun**2))
+                rec.update(
+                    chi2=chi2,
+                    pl_alpha=float(d_k["pl_alpha"]),
+                    host_frac=host_fraction(host_of(d_k, ng)),
+                    success=bool(sol_k.success),
+                )
+                starts.append(rec)
+                fits.append((chi2, k, ps_k, sol_k))
+            try:
+                if not fits:
+                    raise first_error
+                _, k_best, ps, sol = _select_start(fits)
+                for rec in starts:
+                    rec["selected"] = rec["index"] == k_best
+                r = residual(ps, ng, idx, y, w)(sol.x)
                 keep = (r > CLIP_LO) & (r < CLIP_HI)
                 if keep.sum() > 40 and keep.sum() < len(r):
-                    idx2, y2, w2 = idx[keep], y[keep], w[keep]
-
-                    def resid2(p, idx=idx2, y=y2, w=w2, ng=ng):
-                        d = ps.full(p)
-                        m = conti_model(wave[idx], d, fe_op, fe_uv)
-                        for i in range(ng):
-                            m = m + d[f"gal{i}"] * Gfull[i][idx]
-                        return (y - m) * w
-
                     sol = least_squares(
-                        resid2, sol.x, bounds=ps.bounds(), x_scale="jac", max_nfev=MAX_NFEV_CONTI_HOST
+                        residual(ps, ng, idx[keep], y[keep], w[keep]),
+                        sol.x,
+                        bounds=ps.bounds(),
+                        x_scale="jac",
+                        max_nfev=MAX_NFEV_CONTI_HOST,
                     )
             except Exception as exc:
                 info["solver_attempts"].append(
@@ -788,22 +932,21 @@ def fit_continuum_host(
                         status="exception",
                         message=f"{type(exc).__name__}: {exc}",
                         feuv_fixed=feuv_fixed,
+                        starts=starts,
                     )
                 )
                 continue
             # an attempt that stopped short of convergence is recorded, not
             # discarded: the solver record and the at-bound list say so
             solver = _solver_record(sol)
-            info["solver_attempts"].append(dict(n_gal=ng, feuv_fixed=feuv_fixed, **solver))
+            info["solver_attempts"].append(
+                dict(n_gal=ng, feuv_fixed=feuv_fixed, start_selected=int(k_best), starts=starts, **solver)
+            )
             d = ps.full(sol.x)
             ps.set_values(d)
             host = host_of(d, ng)
             n_neg = int(np.sum(host[inhost] < -1e-3 * max(np.nanmax(np.abs(host)), 1e-9)))
-            sel = inhost & (wave > 4200) & (wave < 5000) & good
-            # a flux sum that is not positive leaves the fraction undefined (NaN), and
-            # the host is then not subtracted
-            fsum = float(np.sum(flux[sel]))
-            frac = float(np.sum(host[sel]) / fsum) if sel.sum() > 20 and fsum > 0 else np.nan
+            frac = host_fraction(host)
             cand = dict(
                 d=d,
                 ps=ps,
@@ -816,6 +959,8 @@ def fit_continuum_host(
                 at_bound=_at_bound(sol, ps),
                 sol=sol,
                 feuv_fixed=feuv_fixed,
+                starts=starts,
+                start=int(k_best),
             )
             if ng == 0 or n_neg <= max(50, 0.02 * inhost.sum()):
                 return cand
@@ -831,6 +976,8 @@ def fit_continuum_host(
             chi2=cand["chi2"],
             solver=cand["solver"],
             at_bound=cand["at_bound"],
+            starts=cand["starts"],
+            start_selected=cand["start"],
         )
         _uv_policy_record(info, policy, fallback, n_uv, cand["feuv_fixed"])
         _width_bookkeeping(info, cand["ps"], cand["d"], cand["sol"])

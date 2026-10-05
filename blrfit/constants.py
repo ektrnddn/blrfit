@@ -98,6 +98,20 @@ HOST_CONTINUUM_ONLY = True  # host contributes continuum only under the emission
 HOST_LINE_HALFWIDTH_KMS = 900.0  # +/- window interpolated over in the host model
 HOST_ZMAX = 1.2  # no host decomposition above this redshift (an adopted limit of the production run)
 CLIP_LO, CLIP_HI = -3.0, 5.0  # outlier clipping of the continuum fit, one iteration
+# Starting points of the continuum fits. In host-rich spectra the power-law
+# slope and the host amplitude are degenerate, and a fit started once can stop
+# in a local minimum: at E(B-V) = 0 the SDSS spectrum spec-0651-52141-0072
+# (J001224) ends at host fraction 0.00 and chi-square 7913 from the first start
+# below, and at host fraction 0.39 and chi-square 5333 from the third, on the
+# same pixels. Every start is fitted on the same pixels before the outlier clip,
+# and the earliest start whose chi-square lies within CONTI_START_DCHI2 of the
+# lowest is kept: starts that reach the same minimum differ in the last digits
+# of chi-square, and such differences must not move the result away from the
+# first start, the single start used up to version 0.2. Fits without a host use
+# the slopes alone.
+CONTI_START_ALPHAS = (-1.5, -3.0)
+CONTI_START_HOST_SCALES = (0.3, 0.9)  # mean-galaxy eigenspectrum coefficient, in units of the template scale
+CONTI_START_DCHI2 = 1.0
 
 # ----------------------------------------------------------------------------
 # Narrow lines

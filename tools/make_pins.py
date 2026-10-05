@@ -1,9 +1,9 @@
 """
 Write the pins of the fitter as it is, and the delta table against older pins.
 
-    PYTHONPATH=. python tools/make_pins.py fit --out tests/data/pins_0.2.0.json
-    PYTHONPATH=. python tools/make_pins.py deltas --legacy tests/data/pins.json \\
-        --current tests/data/pins_0.2.0.json --out docs/deltas_0.1.0_to_0.2.0.csv
+    PYTHONPATH=. python tools/make_pins.py fit --out tests/data/pins_0.3.0.json
+    PYTHONPATH=. python tools/make_pins.py deltas --legacy tests/data/pins_0.2.0.json \\
+        --current tests/data/pins_0.3.0.json --out docs/deltas_0.2.0_to_0.3.0.csv
 
 ``fit`` fits the SDSS spectra of a legacy pin file (``tests/data/pins.json`` by
 default) at their pinned redshift, E(B-V) and complexes, and the DESI example
@@ -32,6 +32,7 @@ import datetime
 import json
 import os
 import platform
+import re
 import subprocess
 
 import numpy as np
@@ -96,7 +97,6 @@ def produced_by():
         code=f"blrfit {blrfit.__version__} (tools/make_pins.py)",
         blrfit=blrfit.__version__,
         git=git_describe(source),
-        source=source,
         numpy=np.__version__,
         scipy=scipy.__version__,
         astropy=astropy.__version__,
@@ -160,27 +160,36 @@ def cmd_fit(a):
     print(f"wrote {a.out}: {len(pins)} pins")
 
 
-DELTA_COLUMNS = [
-    "spectrum",
-    "line",
-    "class_0.1.0",
-    "class_0.2.0",
-    "c50_sys_0.1.0",
-    "c50_sys_0.2.0",
-    "delta_c50",
-    "fwhm_0.1.0",
-    "fwhm_0.2.0",
-    "n_broad_0.1.0",
-    "n_broad_0.2.0",
-    "chi2_0.1.0",
-    "chi2_0.2.0",
-    "bic_margin_0.2.0",
-    "conti_feop_fwhm_0.1.0",
-    "conti_feop_fwhm_0.2.0",
-    "conti_at_bound",
-    "feuv_fwhm_fixed",
-    "source_0.1.0",
-]
+def _version_label(pin_file, fallback):
+    """The blrfit version that wrote a pin file, without a development or
+    release-candidate suffix (the column label of the delta table)."""
+    made = pin_file.get("produced_by") or {}
+    v = str(made.get("blrfit") or fallback)
+    return re.sub(r"(\.dev\d+|rc\d+)$", "", v)
+
+
+def delta_columns(old, new):
+    return [
+        "spectrum",
+        "line",
+        f"class_{old}",
+        f"class_{new}",
+        f"c50_sys_{old}",
+        f"c50_sys_{new}",
+        "delta_c50",
+        f"fwhm_{old}",
+        f"fwhm_{new}",
+        f"n_broad_{old}",
+        f"n_broad_{new}",
+        f"chi2_{old}",
+        f"chi2_{new}",
+        f"bic_margin_{new}",
+        f"conti_feop_fwhm_{old}",
+        f"conti_feop_fwhm_{new}",
+        "conti_at_bound",
+        "feuv_fwhm_fixed",
+        f"source_{old}",
+    ]
 
 
 def _num(v, fmt="{:.3f}"):
@@ -188,48 +197,54 @@ def _num(v, fmt="{:.3f}"):
 
 
 def cmd_deltas(a):
-    legacy = {}
+    legacy, old_label = {}, a.old_label
     for path in a.legacy:
         with open(path) as fh:
-            for pin in json.load(fh)["pins"]:
-                legacy.setdefault(pin["file"], (pin, os.path.basename(path)))
+            content = json.load(fh)
+        if old_label is None:
+            old_label = _version_label(content, "old")
+        for pin in content["pins"]:
+            legacy.setdefault(pin["file"], (pin, os.path.basename(path)))
     with open(a.current) as fh:
-        current = json.load(fh)["pins"]
+        content = json.load(fh)
+    current = content["pins"]
+    new_label = a.new_label or _version_label(content, "new")
+    old, new = old_label, new_label
     rows = []
     for pin in current:
-        old, src = legacy.get(pin["file"], (None, ""))
+        prev, src = legacy.get(pin["file"], (None, ""))
         s = pin["summary"]
         for name in [n for n in ("Halpha", "Hbeta", "MgII") if n in pin["params"]]:
             p = PREFIX[name]
-            o = old["summary"] if old is not None and name in old["params"] else {}
+            o = prev["summary"] if prev is not None and name in prev["params"] else {}
             c50_old, c50_new = o.get(f"{p}_c50_sys"), s.get(f"{p}_c50_sys")
             delta = c50_new - c50_old if c50_old is not None and c50_new is not None else None
             rows.append(
                 {
                     "spectrum": pin["file"],
                     "line": name,
-                    "class_0.1.0": o.get(f"{p}_class", ""),
-                    "class_0.2.0": s.get(f"{p}_class", ""),
-                    "c50_sys_0.1.0": _num(c50_old),
-                    "c50_sys_0.2.0": _num(c50_new),
+                    f"class_{old}": o.get(f"{p}_class", ""),
+                    f"class_{new}": s.get(f"{p}_class", ""),
+                    f"c50_sys_{old}": _num(c50_old),
+                    f"c50_sys_{new}": _num(c50_new),
                     "delta_c50": _num(delta),
-                    "fwhm_0.1.0": _num(o.get(f"{p}_fwhm")),
-                    "fwhm_0.2.0": _num(s.get(f"{p}_fwhm")),
-                    "n_broad_0.1.0": "" if o.get(f"{p}_n_broad") is None else int(o[f"{p}_n_broad"]),
-                    "n_broad_0.2.0": "" if s.get(f"{p}_n_broad") is None else int(s[f"{p}_n_broad"]),
-                    "chi2_0.1.0": _num((old or {}).get("chi2", {}).get(name)),
-                    "chi2_0.2.0": _num(pin["chi2"].get(name)),
-                    "bic_margin_0.2.0": _num(s.get(f"{p}_bic_margin")),
-                    "conti_feop_fwhm_0.1.0": _num(o.get("conti_feop_fwhm"), "{:.2f}"),
-                    "conti_feop_fwhm_0.2.0": _num(s.get("conti_feop_fwhm"), "{:.2f}"),
+                    f"fwhm_{old}": _num(o.get(f"{p}_fwhm")),
+                    f"fwhm_{new}": _num(s.get(f"{p}_fwhm")),
+                    f"n_broad_{old}": "" if o.get(f"{p}_n_broad") is None else int(o[f"{p}_n_broad"]),
+                    f"n_broad_{new}": "" if s.get(f"{p}_n_broad") is None else int(s[f"{p}_n_broad"]),
+                    f"chi2_{old}": _num((prev or {}).get("chi2", {}).get(name)),
+                    f"chi2_{new}": _num(pin["chi2"].get(name)),
+                    f"bic_margin_{new}": _num(s.get(f"{p}_bic_margin")),
+                    f"conti_feop_fwhm_{old}": _num(o.get("conti_feop_fwhm"), "{:.2f}"),
+                    f"conti_feop_fwhm_{new}": _num(s.get("conti_feop_fwhm"), "{:.2f}"),
                     "conti_at_bound": s.get("conti_at_bound", ""),
                     "feuv_fwhm_fixed": s.get("conti_feuv_fwhm_fixed", ""),
-                    "source_0.1.0": src if old is not None else "",
+                    f"source_{old}": src if prev is not None else "",
                 }
             )
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     with open(a.out, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=DELTA_COLUMNS)
+        w = csv.DictWriter(fh, fieldnames=delta_columns(old, new))
         w.writeheader()
         w.writerows(rows)
     print(f"wrote {a.out}: {len(rows)} rows")
@@ -253,6 +268,8 @@ def main(argv=None):
     d.add_argument("--legacy", action="append", required=True, help="old pin file(s), first match wins")
     d.add_argument("--current", required=True)
     d.add_argument("--out", required=True)
+    d.add_argument("--old-label", help="column label of the old pins (default: their blrfit version)")
+    d.add_argument("--new-label", help="column label of the current pins (default: their blrfit version)")
     d.set_defaults(func=cmd_deltas)
     a = ap.parse_args(argv)
     a.func(a)

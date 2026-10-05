@@ -2,7 +2,7 @@
 Attribute the change of a fit between the 0.1.0 configuration and the current
 tree to the corrections, by controlled refits.
 
-    PYTHONPATH=. python tools/attribute_deltas.py --pins tests/data/pins_0.2.0.json \\
+    PYTHONPATH=. python tools/attribute_deltas.py --pins tests/data/pins_0.3.0.json \\
         --legacy tests/data/pins.json --out docs/attribution_pins.csv
 
 Baseline and toggles. The baseline is the 0.1.0 configuration reproduced
@@ -27,6 +27,9 @@ keyword:
   host_guard          the host-fraction guard (on) against the 0.1.0 host
                       decision (off). Keyword only; it changes degenerate
                       spectra only.
+  conti_multistart    the continuum started from several points (on, since
+                      0.3.0) against the single start of 0.1.0 and 0.2.0
+                      (off). Keyword only.
 
 A toggle whose keyword the tree does not have and that has no patch is
 reported as unavailable and left out of the search. The corrections without a
@@ -171,6 +174,7 @@ TOGGLES = [
         doc="ultraviolet Fe II width policy against policy B (always free)",
     ),
     Toggle("host_guard", off=False, doc="host-fraction guard against the 0.1.0 host decision"),
+    Toggle("conti_multistart", off=False, doc="continuum started from several points against one start"),
 ]
 
 

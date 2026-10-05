@@ -418,7 +418,6 @@ def cmd_fit(a):
     hi = res["host_info"]
     doc = dict(
         blrfit_version=__version__,
-        core_release="0.2.0rc1",
         uncertainty=dict(
             calibrated=False,
             mc_requested=a.nmc,

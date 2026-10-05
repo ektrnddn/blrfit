@@ -7,10 +7,13 @@ import pytest
 
 from blrfit.cli import main
 from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, DESI_EXAMPLE, DESI_TARGETID, CSV_EXAMPLE, Z_J001224
+from test_pins import _current_pins
 
 # the end-point tolerance of tests/test_pins.py: the least-squares solver ends at a platform-dependent
 # point of a degenerate decomposition, which moves the primary offset by tens of km/s but not the class
 END_POINT_KMS = 100.0
+# the pinned summary row of the SDSS example (read with the IVAR-only mask, as the pins are)
+J001224_PIN = {p["file"]: p for p in _current_pins()["pins"]}["spec-0651-52141-0072.fits"]["summary"]
 
 
 def test_fit_sdss_example(tmp_path):
@@ -45,10 +48,10 @@ def test_fit_sdss_example(tmp_path):
     assert (
         ha["fitted"]
         and ha["label"] == "C"
-        and abs(ha["dv"] - (-1061.0)) < END_POINT_KMS
+        and abs(ha["dv"] - J001224_PIN["HA_c50_sys"]) < END_POINT_KMS
         and ha["strong_offset"]
     )
-    assert hb["fitted"] and hb["label"] == "C" and abs(hb["dv"] - (-1243.5)) < END_POINT_KMS
+    assert hb["fitted"] and hb["label"] == "C" and abs(hb["dv"] - J001224_PIN["HB_c50_sys"]) < END_POINT_KMS
     assert hb["systemic_source"] == "Halpha prior"
     assert (
         not mg["fitted"]
