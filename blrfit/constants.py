@@ -447,6 +447,11 @@ MASK_GROW_PIX = 2
 # A free line parameter counts as on a bound when the solver holds it there or it
 # lies within this fraction of the bound span from the bound. Amplitudes and the
 # narrow-wing fraction on their zero bound are normal (an absent line or wing).
+# Every parameter on a bound is listed (params_at_bound); only a velocity on a
+# bound flags the line 'param_at_bound', since a velocity there can shift the
+# offset: on the 823 anchor spectra any parameter is on a bound in 51 per cent of
+# the measurable Halpha and 32 per cent of the Hbeta fits, mostly widths at the
+# model's limits, and a velocity in 1 and 14 per cent.
 PARAM_BOUND_REL = 1e-6
 # Residual outliers: pixels the line model misses by more than this many sigma,
 # farther than RESIDUAL_PROTECT_KMS from every narrow-line centre (narrow cores

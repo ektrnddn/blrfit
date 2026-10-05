@@ -6,9 +6,10 @@ Unusable pixels, line parameters on a bound and residual outliers.
   6138-6142 A, 15-20 sigma above their neighbours; without the growth the
   [O III] wing ends on its +500 km/s bound and Hbeta has a reduced chi-square
   of 2.9.
-* A free line parameter that ends on a bound is listed in ``params_at_bound``
-  and flags the line ``param_at_bound``; amplitudes and the wing fraction at
-  zero, and the amplitudes of components with no data under them, are left out.
+* A free line parameter that ends on a bound is listed in ``params_at_bound``;
+  amplitudes and the wing fraction at zero, and the parameters of components
+  with no data under them or of zero amplitude, are left out. Only a velocity on
+  a bound flags the line ``param_at_bound``.
 * Pixels more than RESIDUAL_OUTLIER_SIGMA off the model, away from the narrow
   lines, are counted in ``n_residual_outliers``; RESIDUAL_OUTLIER_MIN_PIX or more
   flag ``residual_outliers``.
@@ -119,3 +120,20 @@ def test_residual_outliers_away_from_the_narrow_lines():
     near, near_flags = spiked(100.0)  # on narrow Halpha
     assert far["n_residual_outliers"] >= RESIDUAL_OUTLIER_MIN_PIX and "residual_outliers" in far_flags
     assert near["n_residual_outliers"] < RESIDUAL_OUTLIER_MIN_PIX and "residual_outliers" not in near_flags
+
+
+def test_only_velocities_on_a_bound_flag_the_line(desi_example):
+    from blrfit.classify import classify
+
+    new = desi_example[1]
+    ha = dict(new["meas"]["Halpha"])
+    # the narrow-line-region wing fraction on its upper bound is listed but does not flag the line
+    assert "nw_f:upper" in ha["params_at_bound"] and "param_at_bound" not in new["cls"]["Halpha"]["flags"]
+    for listed, flagged in (
+        (["nw_sig:upper", "Ha_b0_sig:upper"], False),
+        (["Ha_b1_v:lower"], True),
+        (["w_v:upper", "w_sig:lower"], True),
+        ([], False),
+    ):
+        ha["params_at_bound"] = listed
+        assert ("param_at_bound" in classify(ha)["flags"]) is flagged, listed

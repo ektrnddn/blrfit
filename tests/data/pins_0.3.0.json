@@ -2,7 +2,7 @@
  "produced_by": {
   "code": "blrfit 0.3.0.dev0 (tools/make_pins.py)",
   "blrfit": "0.3.0.dev0",
-  "git": "v0.2.0-dirty",
+  "git": "v0.2.0-5-g4962c35-dirty",
   "numpy": "1.26.4",
   "scipy": "1.13.1",
   "astropy": "6.1.3",
@@ -103,7 +103,7 @@
     "HA_bic_gap": 57.74530040946382,
     "HA_class": "C",
     "HA_reason": "asymmetric: tilt 0.49 FWHM, A.I. 0.42, |peak-cen| 0.43 FWHM, offset -1567",
-    "HA_flags": "pl_unphysical,param_at_bound",
+    "HA_flags": "pl_unphysical",
     "HA_systemic_source": "own narrow group",
     "HB_v_sys": -1.5242079227788263,
     "HB_sig_sys": 257.6895235135675,
@@ -494,7 +494,7 @@
     "HB_bic_gap": 40.5634849708494,
     "HB_class": "B",
     "HB_reason": "two peaks 3105 km/s apart, dip 0.14",
-    "HB_flags": "param_at_bound",
+    "HB_flags": "",
     "HB_systemic_source": "[OIII] core"
    },
    "params": {
@@ -889,7 +889,7 @@
     "HA_bic_gap": 106.6196907471907,
     "HA_class": "F",
     "HA_reason": "symmetric, offset -37 km/s not significant",
-    "HA_flags": "pl_unphysical,param_at_bound",
+    "HA_flags": "pl_unphysical",
     "HA_systemic_source": "own narrow group",
     "HB_v_sys": 20.428422102525953,
     "HB_sig_sys": 42.56272270551189,

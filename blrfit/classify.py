@@ -45,8 +45,11 @@ Flags (a measurement with none of them is "clean")
                      DEGENERATE_DCHI2 x max(1, reduced chi-square) of the best)
                      put c(1/2) more than DEGENERATE_DV_KMS apart; the span is
                      dv_spread
-    param_at_bound   a free line-model parameter (not an amplitude or the wing
-                     fraction at zero) ended on its bound (params_at_bound)
+    param_at_bound   a free line velocity (narrow group, [S II], [O III] core or
+                     wing, narrow-line-region wing, broad component) ended on its
+                     bound; params_at_bound lists every parameter on a bound,
+                     widths and fractions included, which are model limits seen
+                     in a large fraction of fits and are not flagged
     residual_outliers  at least 3 pixels more than 5 sigma off the model,
                      farther than 600 km/s from every narrow-line centre: an
                      artefact or a feature the model does not describe
@@ -105,7 +108,7 @@ FLAG_TEXT = {
     "narrow_at_bound": "narrow group at the edge of its +/-1500 km/s window",
     "edge": "data cover < +/-6000 km/s around the line",
     "degenerate": "equally good decompositions differ in c(1/2) by > 100 km/s",
-    "param_at_bound": "a line-model parameter ended on its bound",
+    "param_at_bound": "a line velocity ended on its bound",
     "residual_outliers": "3 or more pixels > 5 sigma off the model, away from the narrow lines",
     "extreme_offset": "|c(1/2) - v_sys| > 4000 km/s",
     "mc_multimodal": "Monte Carlo draws split between separate solutions; errors withheld",
@@ -202,7 +205,7 @@ def classify(m, err=None, t=None):
     spread = m.get("dv_spread", np.nan)
     if np.isfinite(spread) and spread > DEGENERATE_DV_KMS:
         flags.append("degenerate")
-    if m.get("params_at_bound"):
+    if any(p.split(":")[0].endswith("_v") for p in m.get("params_at_bound", [])):
         flags.append("param_at_bound")
     if m.get("n_residual_outliers", 0) >= RESIDUAL_OUTLIER_MIN_PIX:
         flags.append("residual_outliers")
