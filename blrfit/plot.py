@@ -209,6 +209,112 @@ def plot_ccf(pair, title="", ax=None):
     return ax.figure if own else ax
 
 
+def plot_pair(rec, title="", figsize=(12, 8)):
+    """Figure of one line of an epoch pair from ``pairs.measure_pair(...,
+    details=True)``: the two epochs' broad-only data with A's template at the
+    best shift over B and B's own broad model; the chi-square curves of both
+    directions; the pulls of B against the full model at the best shift; and
+    the narrow-line region with the narrow shift of the pair."""
+    import matplotlib.pyplot as plt
+
+    from .pairs import BROAD_KINDS, model_at, shifted_components
+
+    if "epoch_a" not in rec:
+        raise ValueError(f"{rec.get('line', 'the line')} not fitted in one epoch: {rec.get('flags')}")
+    ea, eb, fwd, rev = rec["epoch_a"], rec["epoch_b"], rec["fwd"], rec["rev"]
+    fig, ax = plt.subplots(2, 2, figsize=figsize)
+    for ep, lab, col in ((ea, "A", "C0"), (eb, "B", "C3")):
+        ok = ep["ok"]
+        ax[0, 0].errorbar(
+            ep["v"][ok],
+            ep["f"][ok],
+            ep["sig"][ok],
+            fmt=".",
+            ms=2,
+            color=col,
+            alpha=0.4,
+            label=f"{lab} broad-only data",
+        )
+    if np.isfinite(fwd.get("s", np.nan)) and "sel" in fwd:
+        sel = fwd["sel"]
+        d2 = shifted_components(ea["d"], ea["comps"], fwd["s"])
+        t = eval_components(eb["x"], d2, ea["comps"], kinds=BROAD_KINDS)
+        ax[0, 0].plot(
+            eb["v"][sel],
+            fwd["scale"] * t[sel],
+            "k-",
+            lw=1.2,
+            label=f"A template at s = {fwd['s']:+.0f} km/s, scale {fwd['scale']:.2f}",
+        )
+        ax[0, 0].plot(eb["v"][sel], eb["broad"][sel], "C3--", lw=0.8, label="B own broad model")
+        ax[0, 0].axvspan(eb["v"][sel].min(), eb["v"][sel].max(), color="0.9", zorder=0)
+    ax[0, 0].set_xlabel("v from the rest wavelength (km/s)")
+    ax[0, 0].set_ylabel("flux")
+    ax[0, 0].set_xlim(-12000, 12000)
+    ax[0, 0].legend(fontsize=7)
+    for r, lab, col in ((fwd, "A over B", "k"), (rev, "B over A", "C2")):
+        if "grid" in r:
+            ax[0, 1].plot(
+                r["grid"],
+                r["chi2"] - np.nanmin(r["chi2"]),
+                color=col,
+                label=f"{lab}: s {r.get('s', np.nan):+.0f} +/- {r.get('err', np.nan):.0f}, "
+                f"chi2_nu {r.get('chi2_nu', np.nan):.2f}",
+            )
+    ax[0, 1].axhline(1.0, color="0.5", lw=0.5)
+    ax[0, 1].axhline(6.63, color="0.5", lw=0.5, ls="--")
+    ax[0, 1].set_ylim(0, 50)
+    ax[0, 1].set_xlabel("trial shift s (km/s)")
+    ax[0, 1].set_ylabel(r"$\Delta\chi^2$")
+    ax[0, 1].legend(fontsize=7)
+    if np.isfinite(fwd.get("s", np.nan)) and "sel" in fwd and fwd.get("coef_best") is not None:
+        sel = fwd["sel"]
+        full = model_at(
+            eb,
+            ea,
+            fwd["s"],
+            fwd["coef_best"],
+            sel,
+            slope=rec.get("slope", True),
+            narrow=rec.get("narrow", "none"),
+        )
+        ax[1, 0].plot(
+            eb["v"][sel],
+            (eb["f"][sel] - full) / eb["sig"][sel],
+            "k.",
+            ms=2,
+            label="(B - model at best s) / sigma",
+        )
+        ax[1, 0].axhline(0, color="0.5", lw=0.5)
+        ax[1, 0].set_ylim(-8, 8)
+        ax[1, 0].legend(fontsize=7)
+    ax[1, 0].set_xlabel("v (km/s)")
+    ax[1, 0].set_ylabel("pull")
+    nf = rec["narrow_fwd"]
+    for ep, lab, col in ((ea, "A", "C0"), (eb, "B", "C3")):
+        ax[1, 1].plot(
+            ep["v"], ep["y"] - ep["broad"], ".", ms=2, color=col, alpha=0.5, label=f"{lab} narrow-only data"
+        )
+        ax[1, 1].plot(ep["v"], ep["narrow"], "-", lw=0.8, color=col)
+    ax[1, 1].set_title(
+        f"narrow shift {rec['dv_narrow']:+.0f} +/- {rec['err_narrow']:.0f} km/s; systemic difference "
+        f"{rec['v_sys_diff']:+.0f}; cores {nf.get('cores')}",
+        fontsize=8,
+    )
+    if "sel" in nf:
+        v = eb["v"][nf["sel"]]
+        ax[1, 1].set_xlim(v.min() - 500, v.max() + 500)
+    ax[1, 1].set_xlabel("v (km/s)")
+    ax[1, 1].legend(fontsize=7)
+    fig.suptitle(
+        f"{title} {rec['line']}: s = {rec['s_common']:+.0f} +/- {rec['err']:.0f} km/s, |s + s'| {rec['dir_mismatch']:.0f}, "
+        f"shape {rec['dchi2_shape_fwd']:.0f} / {rec['dchi2_shape_rev']:.0f}; flags {rec['flags']}",
+        fontsize=8,
+    )
+    fig.tight_layout()
+    return fig
+
+
 def rv_curve(epochs, name="Hbeta", key="c50_sys", ekey="c50_sys"):
     """Velocity curve of one line from the single-epoch fits of several dated
     spectra: ``epochs`` is a list of (mjd, label, res). Returns arrays of

@@ -4,11 +4,13 @@ Command-line interface.
     blrfit fit   SPECTRUM [--targetid TID] [--z Z] [--ebv E] [...]   one spectrum -> table, JSON, figure
     blrfit fit   --ra RA --dec DEC [--out DIR] [...]                 the public DESI or SDSS spectra of a position
     blrfit fetch --ra RA --dec DEC [--out DIR] [...]                 download them without fitting
+    blrfit pair  SPECTRUM SPECTRUM [...] [--out DIR]                 the epochs of one object: fits, velocity changes, tier
+    blrfit tiers PAIRS [...] [--out FILE]                            the candidate tier of every object of pair tables
 
 Successful point fits include explicit unavailable-line outcomes. Input or
 fitting exceptions return a nonzero status; public batches retain failed products
-in their manifests. The between-epoch routines of ``blrfit.rv`` are experimental
-and are available from Python only.
+in their manifests. The earlier between-epoch routines of ``blrfit.rv`` remain
+available from Python only.
 """
 
 from __future__ import annotations
@@ -18,11 +20,12 @@ import copy
 import json
 import os
 import sys
+from collections import Counter
 
 import numpy as np
 
 from . import __version__
-from .batch import ordered_map, read_list, scalar, summary_table, table_format, write_table
+from .batch import ordered_map, read_list, read_rows, scalar, summary_table, table_format, write_table
 from .constants import COMPLEX_WINDOW, MAX_BROAD, DBIC, ERR_FLOOR
 from .io import read_spectrum, is_desi_coadd, is_sdss_spec
 from .io.dust import sfd_ebv
@@ -30,6 +33,9 @@ from .io.sdss import mjd_to_date
 from .model.fit import PREFIX, fit_spectrum, summary_row
 from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset, velocities_at_bound
 from .errors import empirical_error, MC_MIN_CONTRIBUTING
+from .pairs import PAIR_FLAG_TEXT, enumerate_pairs, epoch_snr, measure_pair, pair_row
+from .physics import target_mass
+from .tiers import TIERS, TIER_TEXT, classify_table
 
 LINE_KEYS = (
     "v_peak_sys",
@@ -403,12 +409,13 @@ def _silent(*args):
     pass
 
 
-def fit_file(a, path, targetid=None, z=None, stem=None, out=print, jobs=1):
+def fit_file(a, path, targetid=None, z=None, stem=None, out=print, jobs=1, results=None):
     """Fit one local spectrum with the command-line options ``a`` and write its
     products. ``targetid`` and ``z`` (None: from the file or ``a.z``) and the
     output ``stem`` are those of this spectrum; ``jobs`` processes refit its
     Monte Carlo draws. Returns the spectrum's catalogue record (identity
-    columns and summary row)."""
+    columns and summary row). A dictionary ``results`` receives, under the stem,
+    the fit itself with the epoch's identity (``pair`` needs it)."""
     if z is not None:
         a = copy.copy(a)
         a.z = z
@@ -540,6 +547,20 @@ def fit_file(a, path, targetid=None, z=None, stem=None, out=print, jobs=1):
         with open(base + "_fit.pkl", "wb") as fh:
             pickle.dump(res, fh)
         out(f"-> {base}_fit.pkl")
+    if results is not None:
+        mjd = sp.get("mjd")
+        results[stem] = dict(
+            id=stem,
+            res=res,
+            path=path,
+            mjd=float(mjd) if mjd is not None else np.nan,
+            kind=sp.get("kind"),
+            targetid=sp.get("targetid", targetid),
+            plate=sp.get("plate"),
+            fiber=sp.get("fiber"),
+            z=z,
+            ebv=ebv,
+        )
     targetid = sp.get("targetid", targetid)
     return dict(
         spectrum=path,
@@ -590,7 +611,7 @@ def _batch_line(rec, lines):
     )
 
 
-def cmd_fit(a):
+def _check_fit_options(a):
     if a.nmc < 0:
         sys.exit("--nmc must be nonnegative")
     if 0 < a.nmc < MC_MIN_CONTRIBUTING:
@@ -605,6 +626,10 @@ def cmd_fit(a):
             table_format(a.table)
         except ValueError as e:
             sys.exit(str(e))
+
+
+def _entries(a):
+    """The local spectra of the command line and of --list, as fit entries."""
     entries = [dict(path=p, targetid=a.targetid, z=None) for p in a.spectra]
     if a.list:
         try:
@@ -612,6 +637,25 @@ def cmd_fit(a):
         except (ValueError, OSError) as e:
             sys.exit(f"cannot read the list {a.list}: {e}")
         entries += [dict(e, targetid=a.targetid if e["targetid"] is None else e["targetid"]) for e in listed]
+    return entries
+
+
+def _name_stems(entries):
+    """A distinct output stem for every entry: the same file name in two
+    directories, or a spectrum listed twice, must not share products."""
+    used = set()
+    for e in entries:
+        stem = base = _stem(e["path"], e["targetid"])
+        n = 2
+        while stem in used:
+            stem, n = f"{base}-{n}", n + 1
+        used.add(stem)
+        e["stem"] = stem
+
+
+def cmd_fit(a):
+    _check_fit_options(a)
+    entries = _entries(a)
     if not entries:
         from .input_workflow import fit_public
 
@@ -633,14 +677,7 @@ def cmd_fit(a):
         return 0
     if a.stem:
         sys.exit("--stem names the products of one spectrum; several spectra are named after their files")
-    used = set()
-    for e in entries:
-        stem = base = _stem(e["path"], e["targetid"])
-        n = 2
-        while stem in used:  # the same file name in two directories, or a spectrum listed twice
-            stem, n = f"{base}-{n}", n + 1
-        used.add(stem)
-        e["stem"] = stem
+    _name_stems(entries)
     table = a.table or os.path.join(a.out, "blrfit_summary.fits")
     out(
         f"blrfit {__version__}: {len(entries)} spectra, lines {','.join(lines)}"
@@ -672,6 +709,250 @@ def _table_meta(a, lines):
         SEED=a.seed,
         FLUXUNIT="1e-17 erg/s/cm2/Angstrom as read; see the column flux_unit",
     )
+
+
+# ----------------------------------------------------------------------------
+# pair
+# ----------------------------------------------------------------------------
+def _pair_fit_task(task):
+    """One epoch of a pair run (in a worker process or not): its catalogue record
+    and the epoch (the fit with its identity), or a failed record and None."""
+    a, entry = task
+    store = {}
+    try:
+        rec = fit_file(
+            a, entry["path"], entry["targetid"], entry["z"], entry["stem"], out=_silent, results=store
+        )
+    except (Exception, SystemExit) as exc:
+        failed = dict(
+            spectrum=entry["path"],
+            targetid=entry["targetid"],
+            stem=entry["stem"],
+            status="failed",
+            error=str(exc) or type(exc).__name__,
+        )
+        return failed, None
+    return rec, store[entry["stem"]]
+
+
+def _saved_fit(path):
+    """An epoch from a saved fit (``blrfit fit --pickle``): the result, and the
+    identity and date of the spectrum from the JSON written beside it."""
+    import pickle
+
+    if not os.path.exists(path):
+        sys.exit(f"file not found: {path}")
+    with open(path, "rb") as fh:
+        res = pickle.load(fh)
+    if not isinstance(res, dict) or "fits" not in res:
+        sys.exit(f"{path} is not a saved blrfit fit")
+    base = path[: -len("_fit.pkl")] if path.endswith("_fit.pkl") else os.path.splitext(path)[0]
+    epoch = dict(
+        id=os.path.basename(base),
+        res=res,
+        path=path,
+        mjd=np.nan,
+        kind=None,
+        targetid=None,
+        plate=None,
+        fiber=None,
+        z=res.get("z"),
+        ebv=(res.get("settings") or {}).get("ebv"),
+    )
+    meta = base + "_fit.json"
+    if os.path.exists(meta):
+        with open(meta) as fh:
+            inp = json.load(fh).get("input") or {}
+        mjd = inp.get("mjd")
+        epoch.update(
+            mjd=float(mjd) if mjd is not None else np.nan, kind=inp.get("kind"), targetid=inp.get("targetid")
+        )
+    return epoch
+
+
+def _pair_line(row, width):
+    s, e = row["s_common"], row["err_total"]
+    sig = abs(s) / e if (np.isfinite(s) and np.isfinite(e) and e > 0) else np.nan
+    return (
+        f"{row['id_a'] + ' -> ' + row['id_b']:{width}} {row['line']:7} {_fmt(row['dt_rest_yr'], 6, 2)} "
+        f"{_fmt(s, 7, 0, True)} {_fmt(e, 5)} {_fmt(sig, 5, 1)}  {_fmt(row['shape_max'], 5, 2)}  "
+        f"{_fmt(row['scale_fwd'], 5, 2)} {_fmt(row['scale_rev'], 5, 2)}  {row['flags'] or '-'}"
+    )
+
+
+def _measure_pairs(a, epochs, lines, out):
+    """Every pair of the epochs for every line: the rows of the pair table, the
+    target row (reference epoch, classes, mass and orbital limits) and, unless
+    --no-figure, one figure per pair and line. The epochs are one object, named
+    by --name, by their common TARGETID, or 'object'."""
+    pairs, ref = enumerate_pairs(epochs, lines)
+    tids = {str(e["targetid"]) for e in epochs if e.get("targetid") is not None}
+    name = a.name or (tids.pop() if len(tids) == 1 else "object")
+    for e in epochs:
+        e["targetid"] = name
+    out(
+        f"blrfit {__version__}: {len(epochs)} epochs of {name}, lines {','.join(lines)}; "
+        f"reference {ref['id']} (broad S/N {epoch_snr(ref['res'], lines):.0f}), {len(pairs)} pairs"
+    )
+    width = max([len(f"{p['a']['id']} -> {p['b']['id']}") for p in pairs] + [4])
+    out(
+        f"{'pair':{width}} {'line':7} {'dt_yr':>6} {'s':>7} {'+/-':>5} {'sigma':>5}  {'shape':>5}  {'scale':>5} {'rev':>5}  flags"
+    )
+    rows = []
+    for pr in pairs:
+        for line in lines:
+            rec = measure_pair(pr["a"]["res"], pr["b"]["res"], line, details=not a.no_figure)
+            row = pair_row(rec, pr["a"]["res"], pr["a"], pr["b"], role=pr["role"])
+            rows.append(row)
+            out(_pair_line(row, width))
+            if not a.no_figure and "epoch_a" in rec:
+                import matplotlib
+
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+                from .plot import plot_pair
+
+                fig = plot_pair(rec, title=f"{pr['a']['id']} -> {pr['b']['id']}")
+                fig.savefig(os.path.join(a.out, f"{pr['a']['id']}__{pr['b']['id']}_{line}_pair.png"), dpi=110)
+                plt.close(fig)
+    shown = {}
+    for row in rows:
+        for flag in row["flags"].split(";"):
+            if flag and flag not in shown:
+                shown[flag] = PAIR_FLAG_TEXT.get(flag.split(":")[-1], "")
+    for flag, text in shown.items():
+        out(f"  {flag}: {text}" if text else f"  {flag}")
+    out(
+        "  velocities in km/s; s = change of the later epoch's broad profile relative to the earlier (positive: "
+        "redder), +/- its total error, sigma = |s| / error; shape = profile-change statistic per pixel (stable at "
+        "most 0.5); scale = template flux scale of each direction; columns: blrfit pair --help"
+    )
+    cls, meas = ref["res"].get("cls") or {}, ref["res"].get("meas") or {}
+    target = dict(targetid=name, reference=ref["id"], n_epochs=len(epochs), n_pairs=len(pairs))
+    for line in lines:
+        target[f"class_{line.lower()}"] = (cls.get(line) or {}).get("label", "")
+        target[f"snr_{line.lower()}"] = float((meas.get(line) or {}).get("broad_flux_snr", np.nan))
+    target.update(target_mass(ref["res"]))
+    return rows, target, name
+
+
+def _sibling(table, word):
+    """The path of a companion table: blrfit_pairs.ecsv -> blrfit_<word>.ecsv, name.csv -> name_<word>.csv."""
+    base, ext = os.path.splitext(table)
+    if base.lower().endswith(".fits"):
+        base, ext = base[:-5], ".fits" + ext
+    return (base[:-6] if base.endswith("_pairs") else base) + "_" + word + ext
+
+
+def cmd_pair(a):
+    _check_fit_options(a)
+    lines = _parse_lines(a.lines)
+    out = _silent if a.quiet else print
+    epochs = []
+    if a.fits:
+        if a.spectra or a.list:
+            sys.exit("--fits takes saved fits in place of spectra")
+        epochs = [_saved_fit(p) for p in a.fits]
+    else:
+        entries = _entries(a)
+        if not entries:
+            from .input_workflow import fit_public
+
+            store = {}
+            fit_public(
+                a,
+                lambda one: fit_file(
+                    one,
+                    one.spectrum,
+                    one.targetid,
+                    stem=one.stem,
+                    out=(_silent if one.quiet else print),
+                    results=store,
+                ),
+            )
+            epochs = list(store.values())
+        else:
+            if a.include_sdss:
+                sys.exit("--include-sdss is for public queries without a local file")
+            _name_stems(entries)
+            out(
+                f"blrfit {__version__}: fitting {len(entries)} spectra, lines {','.join(lines)}"
+                + (f", Monte Carlo {a.nmc}" if a.nmc else "")
+                + (f", {a.jobs} processes" if a.jobs > 1 else "")
+            )
+            for k, (rec, epoch) in enumerate(
+                ordered_map(_pair_fit_task, ((a, e) for e in entries), a.jobs), 1
+            ):
+                out(f"[{k}/{len(entries)}] " + _batch_line(rec, lines))
+                if epoch is not None:
+                    epochs.append(epoch)
+    if len(epochs) < 2:
+        sys.exit("two fitted epochs are needed")
+    os.makedirs(a.out, exist_ok=True)
+    rows, target, name = _measure_pairs(a, epochs, lines, out)
+    table = a.table or os.path.join(a.out, "blrfit_pairs.ecsv")
+    meta = dict(BLRFIT=__version__, LINES=",".join(lines))
+    write_table(summary_table(rows, meta=meta), table)
+    targets_table, tiers_table = _sibling(table, "targets"), _sibling(table, "tiers")
+    write_table(summary_table([target], meta=meta), targets_table)
+    classes = {line: target[f"class_{line.lower()}"] for line in lines}
+    tiers = classify_table(rows, masses={name: target}, classes={name: classes})
+    write_table(summary_table(tiers, meta=meta), tiers_table)
+    out(f"-> {table}\n-> {targets_table}\n-> {tiers_table}")
+    for t in tiers:
+        out(f"{t['targetid']}: {t['tier']} ({TIER_TEXT[t['tier']]}): {t['reason']}")
+    return 0
+
+
+# ----------------------------------------------------------------------------
+# tiers
+# ----------------------------------------------------------------------------
+def _target_tables(a):
+    """The target tables: --targets, else the targets table written beside each pair table."""
+    if a.targets:
+        return list(a.targets)
+    return [t for t in (_sibling(p, "targets") for p in a.pairs) if os.path.exists(t)]
+
+
+def cmd_tiers(a):
+    out = _silent if a.quiet else print
+    rows = []
+    for path in a.pairs:
+        if not os.path.exists(path):
+            sys.exit(f"file not found: {path}")
+        try:
+            rows += read_rows(path)
+        except (ValueError, OSError) as e:
+            sys.exit(f"cannot read {path}: {e}")
+    masses, classes = {}, {}
+    for path in _target_tables(a):
+        try:
+            targets = read_rows(path)
+        except (ValueError, OSError) as e:
+            sys.exit(f"cannot read {path}: {e}")
+        for r in targets:
+            low = {str(k).lower(): v for k, v in r.items()}
+            tid = str(low.get("targetid", ""))
+            masses[tid] = low
+            classes[tid] = {
+                "Halpha": low.get("class_halpha", low.get("ha_class", "")) or "",
+                "Hbeta": low.get("class_hbeta", low.get("hb_class", "")) or "",
+            }
+    tiers = classify_table(rows, masses, classes)
+    if not tiers:
+        out("no pair rows")
+        return 1
+    for t in tiers:
+        out(f"{t['targetid']}: {t['tier']}: {t['reason']}")
+    counts = Counter(t["tier"] for t in tiers)
+    out("  " + ", ".join(f"{k} {counts[k]}" for k in TIERS if counts[k]))
+    for k in TIERS:
+        if counts[k]:
+            out(f"  {k}: {TIER_TEXT[k]}")
+    table = a.out or os.path.join(os.path.dirname(os.path.abspath(a.pairs[0])), "blrfit_tiers.ecsv")
+    write_table(summary_table(tiers, meta=dict(BLRFIT=__version__)), table)
+    out(f"-> {table}")
+    return 0
 
 
 # ----------------------------------------------------------------------------
@@ -730,35 +1011,36 @@ the printed table (velocities in km/s, relative to the narrow-line systemic velo
 """
 
 
-# ----------------------------------------------------------------------------
-def build_parser():
-    p = argparse.ArgumentParser(
-        prog="blrfit",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Fit the broad Balmer lines of AGN spectra: offsets from the narrow-line reference,\n"
-        "profile classes and quality flags.",
-    )
-    p.add_argument("--version", action="version", version=f"blrfit {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True)
+PAIR_TABLE_HELP = """\
+the printed table (velocities in km/s):
+  pair           the earlier epoch -> the later one; the reference epoch (highest broad S/N) is in every pair
+  dt_yr          rest-frame years between the epochs
+  s, +/-         change of the later epoch's broad profile relative to the earlier (positive: redder), with
+                 its total error, statistical plus the calibrated term; withheld (-) when a screen failed
+  sigma          |s| divided by the error
+  shape          the profile-change statistic per pixel: at most 0.5 for a stable profile
+  scale, rev     the template flux scale of each direction (A over B, B over A)
+  flags          screens and warnings, explained below the table
+then the tier of the object with its reason (blrfit tiers --help).
+"""
 
-    f = sub.add_parser(
-        "fit",
-        help="fit spectra",
-        usage="%(prog)s [spectrum ...] [options]",
-        description="Fit spectra: local files, the files of a list, or the public DESI or SDSS spectra of a\n"
-        "position or a DESI TARGETID. Writes <stem>_fit.json and <stem>_fit.png for every spectrum and\n"
-        "prints the table below; with several spectra, one line each and a catalogue table of all of them.",
-        epilog=FIT_TABLE_HELP,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
+TIERS_HELP = """\
+tiers, in the order they are tried:
+  disk           a double-peaked (class B) broad profile in the reference spectrum: a disc emitter
+  platinum       a change of at least 4 sigma with a stable profile, both Balmer lines agreeing, the two
+                 directions within 2 sigma, broad peak S/N >= 8 in both epochs, and an orbit that allows it
+  binary         the same without the conditions on the second line, the directions and the peak S/N
+  almost         a significant change that fails one condition, or a marginal one (3-4 sigma) that passes all
+  profile        the strongest change comes with a changed profile: variability, not a bulk motion
+  stable         no change above 3 sigma: an upper limit
+  none           no retained pair with both epochs at the S/N floor of 8
+"""
+
+
+def _add_fit_options(f, pairs=False):
+    """The options of a fit, shared by ``fit`` and ``pair``."""
     from .io.public import exact_targetid
 
-    f.add_argument(
-        "spectra",
-        nargs="*",
-        metavar="spectrum",
-        help="local spectrum files; leave out to search the public archives (--ra and --dec, or --targetid)",
-    )
     g = f.add_argument_group("input")
     g.add_argument(
         "--list",
@@ -851,16 +1133,26 @@ def build_parser():
     g.add_argument(
         "--out", default=".", metavar="DIR", help="output directory (default: the current directory)"
     )
-    g.add_argument(
-        "--stem", default=None, metavar="NAME", help="output file stem (default: from the file name)"
-    )
+    if not pairs:
+        g.add_argument(
+            "--stem", default=None, metavar="NAME", help="output file stem (default: from the file name)"
+        )
     g.add_argument(
         "--table",
         metavar="FILE",
-        help="catalogue table of the summary rows, FITS (.fits) or ECSV (.ecsv), with units "
-        "(default with several spectra: <out>/blrfit_summary.fits)",
+        help=(
+            "the pair table, FITS (.fits), ECSV (.ecsv) or CSV (.csv); the target and tier tables are written "
+            "beside it (default <out>/blrfit_pairs.ecsv)"
+            if pairs
+            else "catalogue table of the summary rows, FITS (.fits), ECSV (.ecsv) or CSV (.csv), with units "
+            "(default with several spectra: <out>/blrfit_summary.fits)"
+        ),
     )
-    g.add_argument("--no-figure", action="store_true", help="do not write the figure")
+    g.add_argument(
+        "--no-figure",
+        action="store_true",
+        help="do not write the figures" if pairs else "do not write the figure",
+    )
     g.add_argument("--pickle", action="store_true", help="also write the full result as <stem>_fit.pkl")
     g.add_argument("--quiet", action="store_true", help="print nothing")
     g.add_argument(
@@ -877,7 +1169,89 @@ def build_parser():
         "--mc-noise-policy", choices=("input", "effective"), default="input", help=argparse.SUPPRESS
     )
     f.add_argument("--legacy-error-diagnostic", action="store_true", help=argparse.SUPPRESS)
+
+
+# ----------------------------------------------------------------------------
+def build_parser():
+    p = argparse.ArgumentParser(
+        prog="blrfit",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Fit the broad Balmer lines of AGN spectra: offsets from the narrow-line reference,\n"
+        "profile classes and quality flags; velocity changes between epochs and candidate tiers.",
+    )
+    p.add_argument("--version", action="version", version=f"blrfit {__version__}")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    from .io.public import exact_targetid
+
+    f = sub.add_parser(
+        "fit",
+        help="fit spectra",
+        usage="%(prog)s [spectrum ...] [options]",
+        description="Fit spectra: local files, the files of a list, or the public DESI or SDSS spectra of a\n"
+        "position or a DESI TARGETID. Writes <stem>_fit.json and <stem>_fit.png for every spectrum and\n"
+        "prints the table below; with several spectra, one line each and a catalogue table of all of them.",
+        epilog=FIT_TABLE_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    f.add_argument(
+        "spectra",
+        nargs="*",
+        metavar="spectrum",
+        help="local spectrum files; leave out to search the public archives (--ra and --dec, or --targetid)",
+    )
+    _add_fit_options(f)
     f.set_defaults(func=cmd_fit)
+
+    q = sub.add_parser(
+        "pair",
+        help="velocity changes between the epochs of one object",
+        usage="%(prog)s [spectrum spectrum ...] [options]",
+        description="Measure the velocity changes of the broad lines between the dated spectra of one object:\n"
+        "local files, the files of a list, the public DESI and SDSS spectra of a position or TARGETID, or saved\n"
+        "fits (--fits). Every spectrum is fitted as by 'fit'; then the reference epoch (highest broad S/N) is\n"
+        "paired with every other and consecutive epochs with each other, each pair measured in both directions\n"
+        "with the template cross-correlation. Writes the pair table, a target table (reference, classes, mass,\n"
+        "orbital limits), a tier table and one figure per pair and line, and prints the table below.",
+        epilog=PAIR_TABLE_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    q.add_argument("spectra", nargs="*", metavar="spectrum", help="two or more spectra of one object")
+    q.add_argument(
+        "--fits",
+        nargs="+",
+        metavar="PKL",
+        help="saved fits (<stem>_fit.pkl of 'fit --pickle', with the JSON beside them) in place of spectra",
+    )
+    q.add_argument(
+        "--name",
+        metavar="NAME",
+        help="name of the object in the tables (default: its TARGETID, else 'object')",
+    )
+    _add_fit_options(q, pairs=True)
+    q.set_defaults(func=cmd_pair, stem=None)
+
+    t = sub.add_parser(
+        "tiers",
+        help="candidate tiers from pair tables",
+        description="The candidate tier of every object of one or more pair tables written by 'pair' (or by\n"
+        "Python, pairs.pair_record): one row per object with the tier, its reason and the pair behind it.",
+        epilog=TIERS_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    t.add_argument("pairs", nargs="+", metavar="PAIRS", help="pair tables (.fits, .ecsv or .csv)")
+    t.add_argument(
+        "--targets",
+        nargs="+",
+        metavar="TABLE",
+        help="target tables with the reference classes and masses (default: the table beside each pair table)",
+    )
+    t.add_argument(
+        "--out",
+        metavar="FILE",
+        help="the tier table (default: blrfit_tiers.ecsv beside the first pair table)",
+    )
+    t.add_argument("--quiet", action="store_true", help="print nothing")
+    t.set_defaults(func=cmd_tiers)
 
     g = sub.add_parser(
         "fetch",
