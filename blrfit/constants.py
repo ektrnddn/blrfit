@@ -519,3 +519,86 @@ CCF_COMMON_MIN_FRAC = 0.5
 # refinement over +/- 10 pixels), on nearly the whole window.
 CCF_REFINE_HALF_KMS = 600.0
 CCF_REFINE_HALF_PIX = 20
+
+# ----------------------------------------------------------------------------
+# Velocity changes between epochs (pairs.py)
+# ----------------------------------------------------------------------------
+# The template of one epoch (its fitted broad Gaussians) is slid across the
+# other epoch's broad-only data over +/- PAIR_VMAX_KMS in steps of
+# PAIR_STEP_KMS. The reach exceeds the largest change the method was tested
+# against (2,500 km/s); a minimum within PAIR_EDGE_STEPS of the grid edge is
+# not a measurement (flag at_bound).
+PAIR_VMAX_KMS = 4000.0
+PAIR_STEP_KMS = 10.0
+PAIR_EDGE_STEPS = 1
+# The minimum is refined by a parabola through the contiguous grid points
+# within PAIR_REFINE_DCHI2 of it, at least PAIR_REFINE_MIN_POINTS of them
+# (fewer: the three-point formula); the error is the Delta chi-square = 1
+# half-width of that parabola.
+PAIR_REFINE_DCHI2 = 2.0
+PAIR_REFINE_MIN_POINTS = 5
+# Pixels of the data epoch within max(PAIR_WIN_FWHM * FWHM, PAIR_WIN_MIN_KMS)
+# of the model c(1/2) of either epoch, where the template epoch's fitted
+# window covers every trial shift; at least PAIR_MIN_PIX of them.
+PAIR_WIN_FWHM = 1.5
+PAIR_WIN_MIN_KMS = 3000.0
+PAIR_MIN_PIX = 20
+# The narrow lines of the pair are compared the same way over +/-
+# PAIR_NARROW_VMAX_KMS in PAIR_NARROW_STEP_KMS steps, on the pixels within
+# PAIR_NARROW_WIN_KMS of the template's narrow cores.
+PAIR_NARROW_VMAX_KMS = 800.0
+PAIR_NARROW_STEP_KMS = 5.0
+PAIR_NARROW_WIN_KMS = 1500.0
+# The two directions of a pair (A's template over B's data, B's over A's) must
+# agree: |s + s'| above PAIR_DIR_NSIG times the pair error (and above two grid
+# steps) is an asymmetry of the two templates, not noise; under no change the
+# 99th percentile of |s + s'| / err is 2.6-3.0 on consecutive DESI nights and
+# 2.9 on SDSS pairs under a year.
+PAIR_DIR_NSIG = 3.0
+# Statistical errors cover the truth at the nominal rate on synthetic pairs;
+# on real pairs with no expected change they fall short by a term that is
+# added in quadrature, per line: fitted on the development half of 335
+# consecutive DESI-night pairs (at most 30 days apart) of the DESI offset-line
+# sample and checked on the other half, where the pull NMAD became 0.97
+# (Halpha) and 0.89 (Hbeta). SDSS-SDSS pairs under a year gave 29-30 km/s on
+# the development set, below both, so the same terms apply to every pair kind.
+PAIR_SYS_KMS = {"Halpha": 45.0, "Hbeta": 36.0}
+# A pair whose template fits the other epoch's own broad model worse than the
+# noise by this much per pixel (Delta chi-square per pixel of the shape
+# statistic, the larger of the two directions) has changed profile: its shift
+# is reported but it is not a mover. Under no change the 95th and 99th
+# percentiles are 0.38 and 0.72; over five years 1.64 and 4.04.
+PAIR_SHAPE_MAX = 0.5
+# Narrow amplitudes of the data epoch may be freed under a Gaussian prior of
+# this fractional width (narrow="prior"); the validated configuration keeps
+# every epoch's own narrow model (narrow="none").
+PAIR_PRIOR_FRAC = 0.10
+
+# ----------------------------------------------------------------------------
+# Candidate tiers from the pairs of a target (tiers.py)
+# ----------------------------------------------------------------------------
+# A change counts as a mover at TIER_SIG_BINARY times its total error: under
+# pure noise one of 330 SDSS pairs exceeded three sigma (0.9 expected) and
+# none four. Between TIER_SIG_MARGINAL and TIER_SIG_BINARY it is marginal.
+TIER_SIG_BINARY = 4.0
+TIER_SIG_MARGINAL = 3.0
+# The other Balmer line, where measured, must agree within this many sigma of
+# the combined error.
+TIER_TWO_LINE_NSIG = 2.0
+# The two fits' own systemic velocities must agree: a difference of hundreds of
+# km/s is a failed narrow-line fit in one epoch, not a frame to measure in.
+TIER_VSYS_MAX_KMS = 200.0
+# Both epochs of a counted pair need this integrated broad-line S/N, the floor
+# of the validation; below it a template matches noise.
+TIER_SNR_MIN = 8.0
+# The platinum tier, the two-line criterion of Guo et al. (2019) made strict:
+# a changed profile slips under the shape screen of 0.5 per pixel, and very
+# broad low-contrast lines give direction mismatches of two to three sigma
+# without reaching three.
+TIER_PLATINUM_SHAPE_MAX = 0.3
+TIER_PLATINUM_MISMATCH_NSIG = 2.0
+TIER_PLATINUM_PEAK_SNR = 8.0
+# Orbital plausibility: a change above the largest change any orbit allows at
+# the virial mass, at this many sigma below the measured value, cannot be the
+# active hole's orbital motion (physics.orbital_limits, mass ratio 0.1).
+TIER_ORBIT_NSIG = 2.0
