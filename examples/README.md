@@ -28,6 +28,9 @@ blrfit fit data/spec-*.fits --survey sdss --out output/all
 # Monte Carlo errors (slower)
 blrfit fit data/spec-0651-52141-0072.fits --survey sdss --z 0.2288 --nmc 200 --out output/mc
 
+# the two epochs of J001224: fits, the velocity change of each broad line, the candidate tier
+blrfit pair data/spec-0651-52141-0072.fits data/spec-7169-56628-0344.fits --survey sdss --z 0.2288 --out output/pair
+
 # the public spectra of the DESI target, downloaded (needs the fetch extra)
 blrfit fit --targetid 39627574082538900 --include-sdss --out output/public
 ```

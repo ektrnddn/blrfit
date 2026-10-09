@@ -100,6 +100,24 @@ failed spectra kept and their reasons. `--jobs N` fits N spectra at a time or, f
 single spectrum, refits its Monte Carlo draws in N processes; the results are the same
 for any N.
 
+## Epochs of one object
+
+```bash
+blrfit pair spec-0651-52141-0072.fits spec-7169-56628-0344.fits --survey sdss --z 0.2288 --out pairs
+blrfit pair --targetid 39627574082538900 --include-sdss --out pairs   # every public spectrum of the target
+blrfit pair --fits fits/*_fit.pkl --out pairs                          # saved fits (fit --pickle)
+```
+
+The spectra given to `pair` are the dated spectra of one object, at one redshift and
+Galactic E(B−V) (a difference between two fits is flagged). They are fitted as by `fit`,
+with the same options, and paired: the reference epoch (the highest broad-line S/N) with
+every other, and consecutive epochs with each other. Two SDSS spectra of the same plate
+and fibre are not independent (the later is a coaddition that includes the earlier
+exposures) and are not paired. `--fits` takes the results of earlier `fit --pickle` runs,
+with the JSON written beside each for the date and identity of its spectrum; `--name`
+names the object in the tables (default: its TARGETID, else `object`). The pairs are
+measured for the lines of `--lines`; Mg II changes carry no calibrated error term.
+
 ## Redshift
 
 The redshift is an input, not measured: it comes from the redrock file (DESI), the
@@ -129,3 +147,21 @@ fig = blrfit.plot_fit(res)
 `read_spectrum` returns the wavelength, flux and inverse variance with, when the file has
 them, the redshift, coordinates and date. `read_desi` and `read_table` read the other
 formats directly.
+
+```python
+rec = blrfit.measure_pair(res_2001, res_2013, "Hbeta")  # one line of one pair
+row = blrfit.pair_record(
+    res_2001,
+    res_2013,
+    "Hbeta",  # a row of the pair table
+    dict(id="2001", mjd=52141.0, kind="sdss"),
+    dict(id="2013", mjd=56628.0, kind="sdss"),
+)
+tier, reasons, best = blrfit.classify_target(
+    blrfit.tiers.pair_verdicts([row]), mass=blrfit.target_mass(res_2013)
+)
+```
+
+`measure_pair` takes two `fit_spectrum` results; the statistical errors come from the
+inverse variance the results keep, or from the input arrays (`inputs_a`, `inputs_b` =
+dict(wave, flux, ivar)) for reduced results that lack it.

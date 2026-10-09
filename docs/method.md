@@ -239,22 +239,125 @@ median-separation test on v_n and Δv), move as a whole away from the fit, or ar
 few, the line is flagged and its errors are withheld (`null`); the percentiles stay in
 `mc_info`. The evidence for these errors is on the [validation page](validation.md).
 
+## Velocity changes between epochs
+
+`blrfit pair` measures, for each broad line, how far the profile of one epoch has moved
+relative to another epoch of the same object. The difference of two separately fitted
+offsets would mix a bulk motion with a change of profile, with the decomposition each fit
+chose and with each fit's own narrow-line subtraction. Instead, the **template** of
+epoch A, its fitted broad Gaussians and nothing else, is evaluated at every trial shift s
+from −4000 to +4000 km/s in steps of 10 km/s and compared with the **data** of epoch B,
+the continuum-subtracted flux minus B's own narrow model; at each shift the template's
+flux scale (held non-negative), an offset and a slope are solved linearly. The reach
+exceeds the largest change the method was tested against (2500 km/s); the slope is free
+because a linear baseline the fit missed biased the shift by up to 180 km/s without it;
+the scale is held non-negative because an inverted template is not a model of the line.
+
+- **Pixels.** The usable pixels of B within max(1.5 FWHM, 3000 km/s) of the model c(1/2)
+  of either epoch (so that a large shift keeps both profiles inside), where A's fitted
+  window covers every trial shift; at least 20 of them.
+- **Errors.** The statistical inverse variance of B's spectrum, carried pixel by pixel
+  through the same preprocessing as the fit (mask, de-reddening, rest frame) and never the
+  fit weights, which include the 2 per cent calibration floor: that floor is a systematic
+  of the absolute calibration and does not scatter one pixel against the next. The weights
+  are rebuilt from the statistical variance and the floor and compared with the fit's own
+  (`weights_consistent`).
+- **Minimum.** A parabola through the contiguous grid points within Δχ² = 2 of the
+  minimum (at least five, else the three-point formula) gives the shift and, from its
+  curvature, the error, scaled by √χ²_ν where the reduced χ² exceeds one. A minimum within
+  one step of the grid edge is `at_bound`; a second local minimum within Δχ² = 6.63 and more
+  than 500 km/s away makes the pair `ambiguous`.
+- **Both directions.** B's template over A's data gives s′. Under no change s ≈ −s′; the
+  change of the pair is (s − s′)/2 in the common input-redshift frame (`s_common`), with the
+  error hypot(σ, σ′): each direction's curvature sees the noise of its data epoch only, the
+  template epoch's noise enters through its fitted profile, and the two directions are
+  nearly anti-correlated, so the two curvature errors add in quadrature (with half that
+  error the estimate covered the truth 38 per cent of the time at a nominal 68).
+- **Shape.** On the same pixels and with the same linear terms, the χ² of A's template at
+  its best shift minus the χ² of B's own broad model is the shape statistic; its value per
+  pixel, the larger of the two directions, is `shape_max`. It does not depend on the shift
+  itself, so a moved profile gives zero and a changed profile a positive value. A pair
+  with `shape_max` ≤ 0.5 has a **stable** profile: on pairs with no expected change the
+  95th and 99th percentiles are 0.38 and 0.72.
+- **Frame.** A's narrow model (cores and wings) is slid across B's broad-subtracted data
+  over ±800 km/s with the same code, in both directions: `dv_narrow` is the shift of the
+  narrow lines between the epochs. It does not correct the broad shift (on SDSS pairs the
+  corrected shift was no tighter than the uncorrected one); a narrow shift beyond 200 km/s
+  vetoes the pair (`frame_offset_large`), as do the fits' own systemic velocities when they
+  differ by more than 200 km/s in the tiers.
+- **Systematic term.** On real pairs with no expected change the statistical error falls
+  short by a term that is added in quadrature: `err_total` = hypot(`err`, 45 km/s) for Hα
+  and hypot(`err`, 36 km/s) for Hβ, measured on consecutive DESI nights of the same
+  targets ([validation](validation.md#velocity-changes)). Mg II has no term and is flagged
+  `uncalibrated_line`.
+
+A pair is **retained** unless a direction is at bound, has a flat minimum, too few pixels
+or a flux scale outside 0.25–4; the product of the two scales is outside 0.5–2 (the two
+directions must fit reciprocal factors); or the two directions disagree, |s + s′| above
+three times the pair error and above two grid steps (on pairs with no change the 99th
+percentile of |s + s′|/err is 2.6–3.0). A pair that fails keeps its direction values in
+the table with `retained` false and the shift withheld. Every flag is listed with its
+meaning on the [outputs page](outputs.md#pair-table).
+
+The pairs of an object are the reference epoch (the highest broad-line S/N) against every
+other epoch, and consecutive epochs against each other. Positive `s_common` means the
+later epoch is redder.
+
+## Candidate tiers
+
+`blrfit tiers` gives one verdict per object from its pairs, with the pair, the line and
+the numbers behind it as the reason. Only pairs retained, with both epochs at an
+integrated broad-line S/N of at least 8 (below it a template matches noise), are counted,
+each with its total error. The tiers are tried in this order:
+
+| Tier | Rule |
+|---|---|
+| **disk** | a double-peaked (class B) broad profile in the reference spectrum: a disc emitter, whose peaks move with the disc; the largest change is reported |
+| **binary** | a pair whose change is at least 4σ, with a stable profile in both directions, no frame flag, the other Balmer line agreeing within 2σ of the combined error where it is measured, no class B epoch in the pair, no reversal of sign at 4σ twice over the epochs, and a change that an orbit at the virial mass allows |
+| **platinum** | the binary rule with the other line measured and agreeing (the two-line criterion of Guo et al. 2019), `shape_max` ≤ 0.3, the two directions within 2σ of each other and a broad peak S/N ≥ 8 in both epochs: a changed profile can slip under the 0.5 shape screen, and very broad low-contrast lines give direction mismatches of 2–3σ without reaching 3 |
+| **almost** | a change of at least 4σ that fails exactly one of the shape, two-line and frame conditions; a marginal change (3–4σ) that passes them all; or a change that no orbit allows or that reverses sign |
+| **profile** | the strongest change comes with a changed profile and no clean significant pair exists: variability of the line, not a bulk motion |
+| **stable** | retained pairs, none above 3σ: an upper limit on the change |
+| **none** | no retained pair with both epochs at the S/N floor |
+
+The 4σ threshold comes from the noise alone: of 330 SDSS pairs with no expected change,
+one exceeded 3σ (0.9 expected) and none 4σ.
+
+**Orbital bound.** For a circular binary in which the active black hole of virial mass
+M carries the broad-line region and the companion has mass M/q, the closest orbit that
+keeps the broad-line region inside the active hole's Roche lobe (Paczyński 1971) has the
+separation a_min = R_BLR / f(q) and, seen edge-on, the active hole's line-of-sight
+amplitude v_max = √(G M_tot / a_min) / (1 + q) at the period P_min; a wider orbit is
+slower, v(P) = v_max (P / P_min)^(−1/3), so the largest change of the line-of-sight
+velocity over a time Δt is 2 v(P) |sin(π Δt / P)| at the most favourable P ≥ P_min. The
+mass is the Hα virial mass of Greene & Ho (2005) where broad Hα is measurable, else the
+Hβ mass of Vestergaard & Peterson (2006) with λL_λ(5100) of the power law, and R_BLR
+follows Bentz et al. (2013). With q = 0.1 (a heavier companion makes the active hole move
+fastest) a change that exceeds the bound at 2σ cannot be the active hole's orbital motion;
+otherwise the longest period that still allows it is reported for q = 0.1 and q = 1. The
+bound is a label on the candidate, not a model of the object.
+
 ## References
+
+Bentz M. C. et al. 2013, ApJ, 767, 149 ·
 
 Boroson T. A., Green R. F. 1992, ApJS, 80, 109 ·
 Cardelli J. A., Clayton G. C., Mathis J. S. 1989, ApJ, 345, 245 ·
 Eracleous M., Boroson T. A., Halpern J. P., Liu J. 2012, ApJS, 201, 23 ·
+Greene J. E., Ho L. C. 2005, ApJ, 630, 122 ·
 Guo H., Shen Y., Wang S. 2018, PyQSOFit, ascl:1809.008 ·
 Heckman T. M., Miley G. K., van Breugel W. J. M., Butcher H. R. 1981, ApJ, 247, 403 ·
 Liu X., Shen Y., Bian F., Loeb A., Tremaine S. 2014, ApJ, 789, 140 ·
 Marziani P., Sulentic J. W., Dultzin-Hacyan D., Calvani M., Moles M. 1996, ApJS, 104, 37 ·
 O'Donnell J. E. 1994, ApJ, 422, 158 ·
+Paczyński B. 1971, ARA&A, 9, 183 ·
 Planck Collaboration 2020, A&A, 641, A6 ·
 Salviander S., Shields G. A., Gebhardt K., Bonning E. W. 2007, ApJ, 662, 131 ·
 Schlegel D. J., Finkbeiner D. P., Davis M. 1998, ApJ, 500, 525 ·
 Shen Y. et al. 2011, ApJS, 194, 45 ·
 Shen Y., Liu X., Loeb A., Tremaine S. 2013, ApJ, 775, 49 ·
 Tsuzuki Y., Kawara K., Yoshii Y., Oyabu S., Tanabé T., Matsuoka Y. 2006, ApJ, 650, 57 ·
+Vestergaard M., Peterson B. M. 2006, ApJ, 641, 689 ·
 Vestergaard M., Wilkes B. J. 2001, ApJS, 134, 1 ·
 Whittle M. 1985, MNRAS, 216, 817 ·
 Yip C. W. et al. 2004, AJ, 128, 585
