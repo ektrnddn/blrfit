@@ -15,10 +15,13 @@
 # The results go to $PSCRATCH/SINGLE_UNCERTAINTY_<job id>/ and the compact return archive next to it
 # (RETURN_FILE= and SHA256= in the job output); the ordinary fits are backed up to the CFS directory
 # named by REQUEST.json (durable_parent).
-set -euo pipefail
+set -eo pipefail
 HERE="${SLURM_SUBMIT_DIR:?submit this script from the bundle directory}"
 cd "$HERE"
+# the DESI environment script reads variables that may be unset, so strict unset-variable mode is
+# switched on only after it has been loaded
 source /global/common/software/desi/desi_environment.sh main
+set -u
 export PYTHONNOUSERSITE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export PYTHONPATH="$HERE/installed"
 python -c "import blrfit, numpy, scipy, astropy, sys; print('blrfit', blrfit.__version__, blrfit.__file__); print(sys.version); print('numpy', numpy.__version__, 'scipy', scipy.__version__, 'astropy', astropy.__version__)"
