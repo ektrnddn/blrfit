@@ -1,9 +1,12 @@
 # Changelog
 
-The full notes of versions up to 0.2.0 are attached to the 0.3.0 release on GitHub, and
-each version is preserved by its tag.
+The full notes of versions up to 0.2.0 are attached to the v0.3.0rc1 pre-release on GitHub,
+and each version is preserved by its tag.
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-10-10)
+
+The fitter is unchanged from 0.3.0rc1 (the pinned fits of `tests/data/pins_0.3.0.json` hold);
+0.4.0 adds the velocity changes between epochs and the candidate tiers, and closes 0.3.0.
 
 - `blrfit pair`: the velocity change of each broad line between the dated spectra of one
   object, by a template cross-correlation: one epoch's fitted profile is slid across the
@@ -20,6 +23,14 @@ each version is preserved by its tag.
 - Tables can be written and read as CSV.
 - Python: `measure_pair`, `pair_record`, `enumerate_pairs`, `classify_target`,
   `classify_table`, `target_mass`, `plot_pair`.
+- `target_mass`: the 5100 Å luminosity of a fit flagged `pl_unphysical` is the value implied by
+  the broad Hα (or Hβ) luminosity through Greene & Ho (2005), not the power law, which is 0.3 dex
+  too faint for such fits; `l5100_source` and `l5100_pl` record the choice (`l5100_from_line`).
+- `blrfit.rv`, the earlier cross-correlation, is deprecated: it is imported on first use, with a
+  warning, and will be removed in 0.5; its 0.1.0 calibration constants are marked superseded.
+- Python 3.14 is tested and declared.
+- `validation/uncertainty_20261010`: the single-spectrum uncertainty study prepared for repetition
+  with this release (the protocol of 2026-10-03; `prepare.py`, `run.sbatch`, `finish.py`).
 
 ## 0.3.0rc1 (2026-10-05)
 

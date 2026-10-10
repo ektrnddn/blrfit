@@ -3,7 +3,7 @@
 Broad-line profiles, velocity offsets and velocity changes for AGN spectra.
 
 [![tests](https://github.com/ektrnddn/blrfit/actions/workflows/tests.yml/badge.svg)](https://github.com/ektrnddn/blrfit/actions/workflows/tests.yml)
-![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)
+![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
 blrfit fits the Hα and Hβ regions of an optical AGN spectrum and measures the broad-line
@@ -30,7 +30,7 @@ the dot its midpoint c(1/2), whose velocity is the offset Δv. Made by
 ## Install
 
 ```bash
-python -m pip install "blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@v0.3.0"
+python -m pip install "blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@v0.4.0"
 ```
 
 Python 3.10 or later. The `fetch` extra is needed only to download public spectra;
@@ -143,14 +143,15 @@ rate; injected shifts of up to 2,500 km/s are recovered without attenuation.
 - Errors do not include the choice of model: host templates, continuum shape, number of
   broad components.
 - With a host, the power law is often steeper than an accretion disc (`pl_unphysical`);
-  continuum luminosities of such fits are unreliable.
+  continuum luminosities of such fits are unreliable, and the masses use the luminosity
+  implied by the broad line instead.
 - Classes describe shapes. B and C are not disc or binary models, and an offset alone does
   not establish a binary.
 - Mg II is fitted but not validated, and a Mg II change carries no calibrated error term.
 - Velocity changes are calibrated for Hα and Hβ between DESI nights and between SDSS and
   DESI epochs, at the precision of single DESI spectra; a changed profile is reported but
-  never counted as a motion. The earlier `blrfit.rv` is superseded by `pair` and remains
-  available from Python.
+  never counted as a motion. The earlier `blrfit.rv` is deprecated: importing it warns, and
+  it will be removed in 0.5.
 - Redshifts are inputs, not measured, and fluxes keep the calibration of the input.
 
 ## Citing
