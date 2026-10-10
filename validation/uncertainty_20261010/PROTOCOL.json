@@ -1,0 +1,92 @@
+{
+  "schema": "blrfit-single-spectrum-uncertainty-confirmation-1",
+  "created": "2026-10-10",
+  "nmc": 200,
+  "grids": [
+    "desi_linear",
+    "sdss_log"
+  ],
+  "snrs": [
+    15,
+    30
+  ],
+  "blocks": 10,
+  "realizations_per_block": 2,
+  "seed_base": 202610031000,
+  "smoke_seed_base": 202610039000,
+  "report_seed": 202610039999,
+  "expected_spectra": 2640,
+  "maximum_mc_refits": 528000,
+  "diagnostic_start_refits": 0,
+  "noise": "independent Gaussian; constant supplied pixel variance; no simulated fitting floor",
+  "masks_angstrom": [
+    [
+      5576,
+      5581
+    ],
+    [
+      6297,
+      6303
+    ],
+    [
+      7590,
+      7605
+    ]
+  ],
+  "widths": "observed profiles; not deconvolved intrinsic widths",
+  "resources": {
+    "cpus": 64,
+    "workers": 32,
+    "memory_gib": 96,
+    "hours": 12,
+    "case_seconds": 1800,
+    "dispatch_hours": 10.5,
+    "estimated_output_gib": 12
+  },
+  "metrics": [
+    "c50_sys",
+    "fwhm",
+    "broad_flux"
+  ],
+  "coverage_bands": {
+    "one_error": [
+      0.603,
+      0.763
+    ],
+    "two_error": [
+      0.914,
+      0.994
+    ]
+  },
+  "accuracy_regions": {
+    "c50_sys": [
+      -1,
+      1
+    ],
+    "fwhm": [
+      -0.1,
+      0.1
+    ],
+    "broad_flux": [
+      -0.1,
+      0.1
+    ]
+  },
+  "accuracy_normalization": {
+    "c50_sys": "max(30 km/s, 0.05*abs(truth))",
+    "fwhm": "truth",
+    "broad_flux": "truth"
+  },
+  "min_finite_mc": 167,
+  "n_boot": 2000,
+  "claim": "conditional pooled synthetic-grid behavior for reported narrow-frame c50, observed width and broad flux; no universal survey or velocity validation",
+  "stopping": "one fixed roster; no adaptive extension, new model or empirical error multiplier",
+  "point_fitter": "blrfit 0.4.0, whose fitter is that of 0.3.0rc1 (several continuum starts, masks grown by two pixels, new flags); explicit nmc=200; the default MC unchanged",
+  "mc_precision_reason": "Gaussian quantile delta-method relative SD of 16/84 half-width is about sqrt(0.94/n): 17.7% at n=30, 6.9% at n=200. Choose 200 before any new spectral outcome to resolve MC sampling noise, not to ensure coverage passes.",
+  "sample_size_reason": "660 spectra per grid/line/SNR preserves 33 configurations x20 independent noise draws; nominal independent Bernoulli 95% half-widths ~3.6pp at .683 and ~1.6pp at .954. Formal cell-block intervals retain heterogeneity and may be wider; no pass guarantee.",
+  "prior_experiments_unchanged": true,
+  "archive_expansion": false,
+  "production_fits": 0,
+  "scientific_acceptance": false,
+  "repeat_of": "uncertainty_20261003 (blrfit 0.2.0rc2.dev0, commit 323f2a4, NERSC job 59295726): the same roster, seeds, criteria and stopping rule"
+}
