@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blrfit"
-version = "0.4.0.dev0"
+version = "0.4.0"
 description = "Fit the broad Balmer lines of AGN spectra: offsets from the narrow-line reference, profile classes and quality flags"
 readme = "README.md"
 license = {text = "MIT"}
@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
 # the oldest tested stack: numpy 1.26, scipy 1.13, astropy 6 (the reference stack of the pins)
