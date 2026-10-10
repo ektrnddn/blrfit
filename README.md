@@ -5,6 +5,7 @@ Broad-line profiles, velocity offsets and velocity changes for AGN spectra.
 [![tests](https://github.com/ektrnddn/blrfit/actions/workflows/tests.yml/badge.svg)](https://github.com/ektrnddn/blrfit/actions/workflows/tests.yml)
 ![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23287993.svg)](https://doi.org/10.5281/zenodo.23287993)
 
 blrfit fits the Hα and Hβ regions of an optical AGN spectrum and measures the broad-line
 profile relative to the narrow lines of the same fit. The model has a power-law, Fe II
@@ -158,7 +159,9 @@ rate; injected shifts of up to 2,500 km/s are recovered without attenuation.
 
 Please cite the software with the metadata in [CITATION.cff](CITATION.cff) ("Cite this
 repository" on GitHub), and the papers behind the parts you use (listed in
-[docs/method.md](docs/method.md#references)).
+[docs/method.md](docs/method.md#references)). Each release is archived on Zenodo: version 0.4.0
+has the DOI [10.5281/zenodo.23287994](https://doi.org/10.5281/zenodo.23287994), and
+[10.5281/zenodo.23287993](https://doi.org/10.5281/zenodo.23287993) always resolves to the latest version.
 
 ## Licence
 

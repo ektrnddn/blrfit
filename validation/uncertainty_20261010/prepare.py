@@ -5,8 +5,9 @@ files that study.py verifies before and during the run. Nothing is fitted here.
     python validation/uncertainty_20261010/prepare.py --out ~/blrfit_uncertainty_20261010
 
 Then copy the bundle to Perlmutter and submit run.sbatch from inside it (the commands are printed).
-The bundle is built from `git archive HEAD` of this repository, so the working tree must be clean
-(--allow-dirty to override, for a rehearsal only). BUNDLE_IDENTITY.json is written next to this file
+The wheel is built from `git archive` of --ref (default HEAD; the release tag, e.g. v0.4.0, keeps the
+candidate exactly the released commit while the batch script and this record come from the working
+tree, which must be clean; --allow-dirty overrides that for a rehearsal only). BUNDLE_IDENTITY.json is written next to this file
 with the hashes that finish.py compares with the return.
 """
 
@@ -54,23 +55,24 @@ def main(argv=None):
         "--allow-dirty", action="store_true", help="build from HEAD although the working tree has changes"
     )
     ap.add_argument("--python", default=sys.executable, help="the python that builds the wheel")
+    ap.add_argument("--ref", default="HEAD", help="the commit or tag whose package is studied (default HEAD)")
     a = ap.parse_args(argv)
     out = Path(a.out).expanduser().resolve()
     if out.exists():
         sys.exit(f"{out} exists; choose a new directory")
-    commit = git("rev-parse", "HEAD")
+    commit = git("rev-parse", f"{a.ref}^{{commit}}")
     dirty = git("status", "--porcelain", "--untracked-files=no")
     if dirty and not a.allow_dirty:
         sys.exit(
             "the working tree has uncommitted changes; commit them (the bundle records the commit) or pass --allow-dirty"
         )
-    tags = git("tag", "--points-at", "HEAD").split()
+    tags = git("tag", "--points-at", commit).split()
     with tempfile.TemporaryDirectory(prefix="blrfit-bundle-") as tmp:
         tmp = Path(tmp)
         src = tmp / "src"
         src.mkdir()
         archive = subprocess.run(
-            ["git", "archive", "--format=tar", "HEAD"], cwd=REPO, check=True, capture_output=True
+            ["git", "archive", "--format=tar", commit], cwd=REPO, check=True, capture_output=True
         ).stdout
         with tarfile.open(fileobj=io.BytesIO(archive)) as t:
             t.extractall(src)
@@ -103,9 +105,11 @@ def main(argv=None):
         created=str(date.today()),
         study=HERE.name,
         repeat_of="uncertainty_20261003",
+        candidate_ref=a.ref,
         candidate_commit=commit,
         candidate_tags=tags,
         candidate_version=version,
+        payload_commit=git("rev-parse", "HEAD"),
         wheel=wheel.name,
         wheel_sha256=wheel_sha,
         package_hashes=package_hashes,
@@ -121,7 +125,9 @@ def main(argv=None):
     (out / "MANIFEST.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     identity = dict(
         bundle=str(out),
+        candidate_ref=a.ref,
         candidate_commit=commit,
+        payload_commit=git("rev-parse", "HEAD"),
         candidate_tags=tags,
         candidate_version=version,
         wheel=wheel.name,

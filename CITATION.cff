@@ -4,6 +4,14 @@ type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
 version: 0.4.0
 date-released: 2026-10-10
+doi: 10.5281/zenodo.23287994
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23287993
+    description: "Concept DOI of the software, resolving to its latest version"
+  - type: doi
+    value: 10.5281/zenodo.23287994
+    description: "DOI of version 0.4.0"
 license: MIT
 repository-code: "https://github.com/ektrnddn/blrfit"
 authors:
