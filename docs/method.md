@@ -57,8 +57,11 @@ fit is repeated.
   accretion disc (α < −7/3 for a thin disc): 59 per cent of the host fits of the SDSS
   comparison sample have α < −2.5, and no fit without a host does. Such fits carry the
   flag `pl_unphysical`, and `continuum_luminosity()` warns, because the luminosity at
-  5100 Å then depends on the decomposition. The line measurements are much less
-  sensitive to it.
+  5100 Å then depends on the decomposition: against the luminosity implied by the broad
+  Hα luminosity (Greene & Ho 2005) such a power law is 0.3 dex too faint in the median
+  (scatter 0.27 dex) where unflagged fits agree to 0.05 dex, measured on 3,300 DESI fits.
+  The line measurements are much less sensitive to it. `target_mass` replaces the
+  luminosity of a flagged fit by the line-implied one (see the orbital bound below).
 
 ## Narrow lines
 
@@ -332,7 +335,12 @@ slower, v(P) = v_max (P / P_min)^(−1/3), so the largest change of the line-of-
 velocity over a time Δt is 2 v(P) |sin(π Δt / P)| at the most favourable P ≥ P_min. The
 mass is the Hα virial mass of Greene & Ho (2005) where broad Hα is measurable, else the
 Hβ mass of Vestergaard & Peterson (2006) with λL_λ(5100) of the power law, and R_BLR
-follows Bentz et al. (2013). With q = 0.1 (a heavier companion makes the active hole move
+follows Bentz et al. (2013). Where the power law is flagged `pl_unphysical`, λL_λ(5100)
+is instead the value implied by the broad Hα luminosity, or by the broad Hβ luminosity
+when only Hβ is measurable, through the luminosity relations of Greene & Ho (2005)
+(`l5100_from_line`; the target table records `l5100_source`): the Hα mass is unchanged,
+and R_BLR of such a fit grows by 0.16 dex in the median, which lowers v_max by 16 per
+cent and lengthens P_min by a factor 1.7. With q = 0.1 (a heavier companion makes the active hole move
 fastest) a change that exceeds the bound at 2σ cannot be the active hole's orbital motion;
 otherwise the longest period that still allows it is reported for q = 0.1 and q = 1. The
 bound is a label on the candidate, not a model of the object.

@@ -122,6 +122,26 @@ YEAR_S = 3.15576e7
 RL_K, RL_ALPHA = 1.527, 0.533
 
 
+# Luminosity-luminosity relations of Greene & Ho (2005), equations 1 and 2, fitted with
+# L5100 as the independent variable: L(Halpha) = 5.25e42 (L5100/1e44)^1.157 erg/s and
+# L(Hbeta) = 1.425e42 (L5100/1e44)^1.133 erg/s, with an rms scatter of about 0.2 dex each.
+LINE_L5100_RELATION = {"Halpha": (5.25e42, 1.157), "Hbeta": (1.425e42, 1.133)}
+
+
+def l5100_from_line(l_line, line="Halpha"):
+    """The 5100 A continuum luminosity (erg/s) implied by the broad Halpha or
+    Hbeta luminosity (erg/s), the relation of Greene & Ho (2005) inverted:
+    L5100 = 1e44 (L_line / norm)^(1/slope). It does not depend on the continuum
+    decomposition, which is why ``target_mass`` uses it in place of the power
+    law of a fit flagged ``pl_unphysical``. NaN where the line luminosity is
+    not positive."""
+    norm, slope = LINE_L5100_RELATION[line]
+    l_line = np.asarray(l_line, float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(l_line > 0, 1e44 * (l_line / norm) ** (1.0 / slope), np.nan)
+    return float(out) if out.ndim == 0 else out
+
+
 def virial_mass_halpha(l_halpha, fwhm_kms):
     """Black-hole mass in solar masses from the broad Halpha luminosity (erg/s)
     and FWHM (km/s), Greene & Ho (2005): M = 2.0e6 (L/1e42)^0.55 (FWHM/1e3)^2.06;
@@ -226,8 +246,22 @@ def target_mass(res):
     where broad Halpha is measurable (class A, B, C or F with a luminosity and a
     width), else the Hbeta mass; the broad-line radius from the 5100 A continuum
     luminosity; and ``orbital_limits`` for q = 0.1 and 1. Returns a dictionary
-    with logmbh, logmbh_ha, logmbh_hb, l5100, r_blr_ltd, vmax_q01, pmin_q01_yr,
-    vmax_q1 and pmin_q1_yr, NaN where a quantity is not available."""
+    with logmbh, logmbh_ha, logmbh_hb, l5100, l5100_pl, l5100_source, r_blr_ltd,
+    vmax_q01, pmin_q01_yr, vmax_q1 and pmin_q1_yr, NaN where a quantity is not
+    available.
+
+    The continuum luminosity is the fitted power law at 5100 A unless the slope
+    is bluer than PL_ALPHA_BLUE_LIMIT (flag ``pl_unphysical``: a power law
+    steeper than an accretion disc, which the host decomposition produces in
+    22 per cent of the measurable DESI fits). Against the luminosity implied by the
+    broad Halpha luminosity (Greene & Ho 2005) such a power law is 0.3 dex too
+    faint in the median, with a scatter of 0.27 dex, where unflagged fits agree
+    to 0.05 dex. For a flagged fit the continuum luminosity is therefore the one
+    implied by the broad Halpha luminosity, or by the broad Hbeta luminosity when
+    only Hbeta is measurable (``l5100_from_line``); ``l5100_source`` records the
+    choice ('power law', 'Halpha' or 'Hbeta') and ``l5100_pl`` keeps the power
+    law. The Halpha mass does not use the continuum; the Hbeta mass, the radius
+    and the orbital limits of a flagged fit follow the substitution."""
     meas, cls = res.get("meas") or {}, res.get("cls") or {}
 
     def usable(line):
@@ -240,7 +274,16 @@ def target_mass(res):
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        l5100 = continuum_luminosity(res)
+        l5100_pl = continuum_luminosity(res)
+    l5100, source = l5100_pl, "power law"
+    alpha = _pl_parameter(res.get("conti") or {}, "pl_alpha") if res.get("conti") else np.nan
+    if np.isfinite(l5100_pl) and np.isfinite(alpha) and alpha < PL_ALPHA_BLUE_LIMIT:
+        for line in ("Halpha", "Hbeta"):
+            if usable(line):
+                l5100, source = l5100_from_line(meas[line].get("broad_lum", np.nan), line), line
+                break
+        else:
+            l5100, source = np.nan, "none"
     m_ha = (
         virial_mass_halpha(meas["Halpha"].get("broad_lum", np.nan), meas["Halpha"]["fwhm"])
         if usable("Halpha")
@@ -254,6 +297,8 @@ def target_mass(res):
         logmbh_ha=float(np.log10(m_ha)) if np.isfinite(m_ha) and m_ha > 0 else np.nan,
         logmbh_hb=float(np.log10(m_hb)) if np.isfinite(m_hb) and m_hb > 0 else np.nan,
         l5100=float(l5100) if np.isfinite(l5100) else np.nan,
+        l5100_pl=float(l5100_pl) if np.isfinite(l5100_pl) else np.nan,
+        l5100_source=source,
         r_blr_ltd=float(r_blr) if np.isfinite(r_blr) else np.nan,
     )
     for q, tag in ((0.1, "q01"), (1.0, "q1")):
@@ -267,6 +312,7 @@ __all__ = [
     "lambda_l_lambda",
     "continuum_luminosity",
     "lumdist_cm",
+    "l5100_from_line",
     "virial_mass_halpha",
     "virial_mass_hbeta",
     "blr_radius_ltd",
