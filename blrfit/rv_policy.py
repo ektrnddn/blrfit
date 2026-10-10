@@ -1,4 +1,5 @@
-"""Explicit reporting policy for development RV measurements.
+"""Explicit reporting policy for development RV measurements (deprecated with
+``blrfit.rv`` since 0.4.0, removed in 0.5).
 
 The corrected shift estimator requires a new on-sky calibration. Legacy
 floors are retained as references, never silently applied to the new estimator.

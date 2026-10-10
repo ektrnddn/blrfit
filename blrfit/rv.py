@@ -1,5 +1,11 @@
 """Velocity translations of continuum/narrow-subtracted broad profiles.
 
+DEPRECATED since 0.4.0, to be removed in 0.5: the template cross-correlation of
+``blrfit.pairs`` (``measure_pair``, the ``pair`` command) supersedes this module.
+In the review of September 2026 this estimator left false minima on real pairs
+and attenuated injected shifts, and its floors and grade thresholds were
+calibrated with version 0.1.0 and never re-measured. Importing it warns.
+
 Experimental, and available from Python only: the shifts and errors computed
 here have no on-sky calibration and are not validated velocity measurements.
 
@@ -31,6 +37,8 @@ coordinate; this API does not fit a relativistic wavelength dilation.
 
 from __future__ import annotations
 
+import os
+import sys
 import warnings
 
 import numpy as np
@@ -62,6 +70,26 @@ from .constants import (
     CCF_REFINE_HALF_PIX,
 )
 from .model.lines import eval_components
+
+
+def _deprecation_stacklevel():
+    """The stack level that points the warning at the code that imported this
+    module, past the import machinery and the package's own frames."""
+    frame, level = sys._getframe(1), 1
+    here = os.path.dirname(os.path.abspath(__file__))
+    while frame is not None and (
+        "importlib" in frame.f_code.co_filename or os.path.abspath(frame.f_code.co_filename).startswith(here)
+    ):
+        frame, level = frame.f_back, level + 1
+    return level
+
+
+warnings.warn(
+    "blrfit.rv is deprecated since 0.4.0 and will be removed in 0.5: its shifts were not validated on the "
+    "sky; blrfit.measure_pair (the pair command) supersedes it",
+    DeprecationWarning,
+    stacklevel=_deprecation_stacklevel(),
+)
 
 ALGORITHM_VERSION = "profile-eiv-v3"
 
