@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below, together with the relevant methodological references listed in the documentation."
 type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
-version: 0.3.0rc1
-date-released: 2026-10-05
+version: 0.4.0
+date-released: 2026-10-10
 license: MIT
 repository-code: "https://github.com/ektrnddn/blrfit"
 authors:
@@ -23,5 +23,6 @@ abstract: >-
   their offsets from the narrow lines of the same fit, and reports profile classes,
   quality flags and optional Monte Carlo errors. Reads DESI coadds, SDSS spectra
   and spectra in tables or FITS images, and downloads public DESI and SDSS spectra
-  by TARGETID or sky position. Mg II and the between-epoch routines are
-  experimental.
+  by TARGETID or sky position; measures the velocity change of a broad line between
+  the dated spectra of one object by a template cross-correlation and sorts objects
+  into candidate tiers. Mg II is experimental.

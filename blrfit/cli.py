@@ -9,8 +9,8 @@ Command-line interface.
 
 Successful point fits include explicit unavailable-line outcomes. Input or
 fitting exceptions return a nonzero status; public batches retain failed products
-in their manifests. The earlier between-epoch routines of ``blrfit.rv`` remain
-available from Python only.
+in their manifests. The earlier between-epoch routines of ``blrfit.rv`` are
+deprecated since 0.4.0 (removed in 0.5); ``blrfit pair`` supersedes them.
 """
 
 from __future__ import annotations
@@ -1278,8 +1278,8 @@ def main(argv=None):
     if args[:1] == ["rv"]:
         p.exit(
             2,
-            "blrfit: the rv command was removed in version 0.3.0; the between-epoch routines remain "
-            "available, as experimental Python functions, in blrfit.rv\n",
+            "blrfit: the rv command was removed in version 0.3.0 and blrfit.rv is deprecated since "
+            "0.4.0 (removed in 0.5): use blrfit pair\n",
         )
     a = p.parse_args(args)
     try:

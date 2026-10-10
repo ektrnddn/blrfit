@@ -26,7 +26,7 @@ numerical libraries the least-squares solver can end at a slightly different poi
 degenerate decomposition, so the comparison allows such differences; with
 `BLRFIT_STRICT_PINS=1` it is exact, bit for bit, on the stack that recorded the pins
 (Python 3.12, numpy 1.26.4 with OpenBLAS 0.3.21, scipy 1.13.1, astropy 6.1.3, macOS).
-Continuous integration runs the fast suite on Python 3.10–3.13 with current releases,
+Continuous integration runs the fast suite on Python 3.10–3.14 with current releases,
 and weekly on that numpy 1.26 stack.
 
 ## Comparison with published offsets
@@ -77,10 +77,13 @@ So the offset errors cover as they should on these spectra; the width errors are
 may be somewhat small for Hβ on the DESI grid. The spectra are drawn from the same
 family of components that the model fits, with Gaussian noise: the study cannot reveal
 errors of the model itself (for example a host that the eigenspectra do not describe). It
-was run with version 0.2.0; 0.3.0 changes the continuum starts and the masks, and the
-study has not yet been repeated with it. The protocol, the decisions and the scripts are
-in [`validation/uncertainty_20261003`](../validation/uncertainty_20261003/README.md),
-which also says how to regenerate the report from the archived records.
+was run with version 0.2.0; 0.3.0 changed the continuum starts and the masks, and 0.4.0
+keeps that fitter. The protocol, the decisions and the scripts are in
+[`validation/uncertainty_20261003`](../validation/uncertainty_20261003/README.md), which
+also says how to regenerate the report from the archived records. The repetition of the
+study with the 0.4.0 wheel, on the same roster and criteria, is prepared in
+[`validation/uncertainty_20261010`](../validation/uncertainty_20261010/README.md); its
+report will be added here when it returns.
 
 **A known failure.** `tests/test_errors_mc.py::test_monte_carlo_pulls_of_c50_sys` (slow)
 fits 20 noise realisations of one configuration (Hα and Hβ at +800 km/s, FWHM
@@ -150,5 +153,5 @@ bundled data.
   tests offsets, not their errors.
 - Profiles outside the model family (Lorentzian, disc, shouldered profiles), hosts from
   other stellar-population libraries, other Fe II templates; these tests are planned.
-- The earlier `blrfit.rv`; the virial masses and the orbital bound as physics (standard
+- The earlier `blrfit.rv` (deprecated); the virial masses and the orbital bound as physics (standard
   calibrations are applied, not tested); Mg II, including Mg II changes.

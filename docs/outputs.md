@@ -193,7 +193,9 @@ One row per object: `targetid`, `reference` (the epoch of highest broad-line S/N
 template of the reference pairs), `n_epochs`, `n_pairs`, the class and integrated S/N of
 each line in the reference fit (`class_halpha`, `snr_halpha`, ...), and from that fit the
 virial mass `logmbh` (`logmbh_ha` from broad Hα where measurable, else `logmbh_hb`),
-`l5100` (erg/s), the broad-line radius `r_blr_ltd` (light-days) and the orbital limits
+`l5100` (erg/s; `l5100_source` says whether it is the power law or, for a fit flagged
+`pl_unphysical`, the value implied by the broad Hα or Hβ luminosity, and `l5100_pl` keeps
+the power law), the broad-line radius `r_blr_ltd` (light-days) and the orbital limits
 `vmax_q01`, `pmin_q01_yr`, `vmax_q1`, `pmin_q1_yr` (km/s and years, for mass ratios 0.1 and
 1; [method](method.md#candidate-tiers)).
 

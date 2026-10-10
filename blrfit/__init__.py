@@ -15,8 +15,9 @@ object (``blrfit.pairs``) and candidate tiers from them (``blrfit.tiers``).
 The command-line tool ``blrfit fit`` does the same and writes a JSON summary
 and a diagnostic figure; ``blrfit pair`` fits the epochs of one object and
 measures their changes; ``blrfit tiers`` classifies objects from pair tables.
-The earlier ``blrfit.rv`` remains available from Python. See the README for the
-model and its validation.
+The earlier ``blrfit.rv`` is deprecated since 0.4.0 (``measure_pair`` supersedes it;
+it is imported on first use, with a warning). See the README for the model and its
+validation.
 """
 
 from .model.fit import fit_spectrum, remeasure, summary_row
@@ -36,9 +37,9 @@ from .io import read_spectrum, read_sdss, read_desi, read_table
 from .physics import lambda_l_lambda, continuum_luminosity, target_mass
 from .pairs import measure_pair, pair_record, enumerate_pairs
 from .tiers import classify_target, classify_table
-from . import constants, rv, physics, pairs, tiers
+from . import constants, physics, pairs, tiers
 
-__version__ = "0.4.0.dev0"
+__version__ = "0.4.0"
 
 __all__ = [
     "fit_spectrum",
@@ -74,9 +75,18 @@ __all__ = [
     "classify_target",
     "classify_table",
     "constants",
-    "rv",
     "physics",
     "pairs",
     "tiers",
     "__version__",
 ]
+
+
+def __getattr__(name):
+    """``blrfit.rv``, the earlier cross-correlation, is imported on first use;
+    importing it warns of its deprecation (removed in 0.5)."""
+    if name == "rv":
+        import importlib
+
+        return importlib.import_module(".rv", __name__)
+    raise AttributeError(f"module 'blrfit' has no attribute '{name}'")

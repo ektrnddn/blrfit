@@ -1,5 +1,7 @@
 """The virial masses, the broad-line radius and the orbital bound."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -64,3 +66,42 @@ def test_target_mass_from_a_result():
     res["cls"]["Halpha"]["label"] = "E"
     out2 = P.target_mass(res)
     assert out2["logmbh"] == pytest.approx(out["logmbh_hb"]) and np.isnan(out2["logmbh_ha"])
+
+
+def test_target_mass_replaces_a_flagged_power_law():
+    # the Halpha-implied luminosity is the Greene & Ho relation inverted
+    assert P.l5100_from_line(5.25e42, "Halpha") == pytest.approx(1e44)
+    assert P.l5100_from_line(1.425e42 * 10**1.133, "Hbeta") == pytest.approx(1e45)
+    assert np.isnan(P.l5100_from_line(0.0))
+    res = dict(
+        z=0.2,
+        conti=dict(pl_norm=10.0, pl_alpha=-3.5),  # bluer than PL_ALPHA_BLUE_LIMIT: pl_unphysical
+        meas=dict(Halpha=dict(fwhm=3000.0, broad_lum=1e42), Hbeta=dict(fwhm=3500.0, broad_lum=3e41)),
+        cls=dict(Halpha=dict(label="A"), Hbeta=dict(label="C")),
+    )
+    out = P.target_mass(res)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        l_pl = P.continuum_luminosity(res)
+    assert out["l5100_source"] == "Halpha" and out["l5100_pl"] == pytest.approx(l_pl)
+    assert out["l5100"] == pytest.approx(P.l5100_from_line(1e42, "Halpha"))
+    assert out["r_blr_ltd"] == pytest.approx(P.blr_radius_ltd(out["l5100"]))
+    assert out["logmbh_hb"] == pytest.approx(np.log10(P.virial_mass_hbeta(out["l5100"], 3500.0)))
+    assert out["logmbh"] == pytest.approx(
+        np.log10(P.virial_mass_halpha(1e42, 3000.0))
+    )  # Halpha mass: unchanged
+    # only Hbeta measurable: its own luminosity stands in
+    res["cls"]["Halpha"]["label"] = "E"
+    out2 = P.target_mass(res)
+    assert out2["l5100_source"] == "Hbeta" and out2["l5100"] == pytest.approx(
+        P.l5100_from_line(3e41, "Hbeta")
+    )
+    assert out2["logmbh"] == pytest.approx(out2["logmbh_hb"])
+    # neither line measurable: no luminosity, no radius, no bound
+    res["cls"]["Hbeta"]["label"] = "E"
+    out3 = P.target_mass(res)
+    assert out3["l5100_source"] == "none" and np.isnan(out3["l5100"]) and np.isnan(out3["vmax_q01"])
+    # an unflagged slope keeps the power law
+    res["conti"]["pl_alpha"] = -1.5
+    res["cls"]["Halpha"]["label"] = "A"
+    assert P.target_mass(res)["l5100_source"] == "power law"

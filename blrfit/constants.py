@@ -318,7 +318,8 @@ MC_DEFAULT_N = 30
 MC_MIN_SAMPLES = 5
 
 # ----------------------------------------------------------------------------
-# Cross-correlation between epochs (rv.py)
+# Cross-correlation between epochs (rv.py, deprecated since 0.4.0: the template
+# cross-correlation of pairs.py supersedes it; its calibration was never re-measured)
 # ----------------------------------------------------------------------------
 CCF_VMAX_KMS = 2000.0  # default search range
 CCF_WIN_FWHM = 1.5  # window +/- this * FWHM about c(1/2) ...
@@ -330,12 +331,12 @@ CCF_SIG_FROM_99 = 2.576  # 99 per cent two-sided <-> 1 sigma
 CCF_SYS_KMS = {
     "Halpha": 155.0,
     "Hbeta": 79.0,
-}  # on-sky floors from consecutive DESI epochs (0.1.0 calibration, to be re-measured with the corrected estimator)
-CCF_SYS_HBETA_LOWSNR_KMS = 157.0  # Hbeta at S/N proxy < 8 (0.1.0 calibration, as above)
+}  # on-sky floors from consecutive DESI epochs (0.1.0 calibration; superseded with rv.py, never re-measured)
+CCF_SYS_HBETA_LOWSNR_KMS = 157.0  # Hbeta at S/N proxy < 8 (0.1.0 calibration; superseded)
 CCF_DIR_CUT_KMS = {
     "Halpha": 466.0,
     "Hbeta": 238.0,
-}  # direction-mismatch cut of the reliable tier (0.1.0 calibration, to be re-measured with the corrected estimator)
+}  # direction-mismatch cut of the reliable tier (0.1.0 calibration; superseded with rv.py, never re-measured)
 CCF_PROFILE_Z_MAX = 5.0  # profile-stability cut of the reliable tier
 # Profile-stability grades for pairs across surveys (an SDSS spectrum against a
 # DESI template). z_prof is a significance: for DESI-DESI pairs its median is
@@ -349,8 +350,7 @@ CCF_PROFILE_Z_MAX = 5.0  # profile-stability cut of the reliable tier
 # passed; Halpha 582 / 145 / 339 points, Hbeta 781 / 69 / 87 points in the
 # three grades): NMAD 143, 161, 262 km/s (Halpha) and 147, 208, 221 km/s (Hbeta).
 # The grade bounds, inflation factors and null floor are the 0.1.0 calibration,
-# measured with the frozen estimator; they stand until re-measured with the
-# corrected estimator and the narrow-line frame veto.
+# measured with the frozen estimator; superseded with rv.py (0.4.0), never re-measured.
 PROFILE_GRADE_Z = (("stable", 5.0), ("mild", 10.0), ("changed", np.inf))  # upper bounds of z_prof
 PROFILE_GRADE_INFLATION = {
     "Halpha": {"stable": 1.0, "mild": 1.15, "changed": 1.85},
