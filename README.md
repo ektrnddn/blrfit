@@ -1,6 +1,6 @@
 # blrfit
 
-Broad-line profiles and velocity offsets for AGN spectra.
+Broad-line profiles, velocity offsets and velocity changes for AGN spectra.
 
 [![tests](https://github.com/ektrnddn/blrfit/actions/workflows/tests.yml/badge.svg)](https://github.com/ektrnddn/blrfit/actions/workflows/tests.yml)
 ![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)
@@ -12,6 +12,9 @@ and host-galaxy continuum, narrow lines with tied kinematics, and one to three b
 Gaussians chosen with the Bayesian information criterion. The broad profile is then
 described without reference to the Gaussians: peak, bisector centres c(f), widths W(f),
 and asymmetry and kurtosis indices. Each line gets a shape class and quality flags.
+Between the dated spectra of one object, the velocity change of each broad line is
+measured by sliding one epoch's fitted profile across the other epoch's data, and the
+object is sorted into a candidate tier.
 
 It reads DESI coadds, SDSS spectra and spectra in tables or FITS images, and downloads
 public DESI DR1/EDR and SDSS DR17 spectra by DESI TARGETID or sky position.
@@ -48,6 +51,9 @@ blrfit fit spectrum.csv --survey generic --wave lambda --flux flux --err error -
 
 # many spectra, four at a time, with one catalogue table
 blrfit fit spectra/*.fits --survey sdss --jobs 4 --out fits
+
+# the epochs of one object: their fits, the velocity changes between them, the candidate tier
+blrfit pair examples/data/spec-0651-52141-0072.fits examples/data/spec-7169-56628-0344.fits --survey sdss --z 0.2288 --out pairs
 ```
 
 In Python:
@@ -58,6 +64,11 @@ import blrfit
 sp = blrfit.read_spectrum("spec-0651-52141-0072.fits", survey="sdss")
 res = blrfit.fit_spectrum(sp["wave"], sp["flux"], sp["ivar"], z=0.2288, ebv=0.0)
 res["meas"]["Hbeta"]["c50_sys"], res["cls"]["Hbeta"]["label"], res["cls"]["Hbeta"]["flags"]
+
+sp2 = blrfit.read_spectrum("spec-7169-56628-0344.fits", survey="sdss")  # the same object, 2013
+res2 = blrfit.fit_spectrum(sp2["wave"], sp2["flux"], sp2["ivar"], z=0.2288, ebv=0.0)
+rec = blrfit.measure_pair(res, res2, "Hbeta")
+rec["s_common"], rec["err"], rec["retained"], rec["flags"]
 ```
 
 A walk-through with outputs: [examples/quickstart.ipynb](examples/quickstart.ipynb). More on
@@ -78,6 +89,12 @@ printed table; for several spectra, also a catalogue table with units
 | `flags` | warnings, e.g. `degenerate` (equally good decompositions disagree on Δv), `poor_fit`, `edge`, `pl_unphysical` |
 | `dv_err_mc` (`e_c50_sys`) | Monte Carlo error of Δv, with `--nmc` |
 
+For the epochs of one object, `blrfit pair` writes a pair table (one row per pair and line:
+the change `s_common` of the later epoch relative to the earlier, its error `err_total`, the
+shape statistic, the screens and flags), a target table (reference epoch, classes, virial
+mass, orbital limits), a tier table and one figure per pair; `blrfit tiers` classifies the
+objects of several pair tables.
+
 Every column, unit and flag: [docs/outputs.md](docs/outputs.md).
 
 ## How it works
@@ -96,6 +113,12 @@ Every column, unit and flag: [docs/outputs.md](docs/outputs.md).
 - **Classes and flags**: fixed rules applied in order, E, X, W, B, A, C, F.
 - **Errors** (optional): Monte Carlo refits of the spectrum perturbed with its pixel
   noise.
+- **Velocity changes**: one epoch's fitted broad Gaussians are slid across the other
+  epoch's continuum- and narrow-subtracted data, with the flux scale, an offset and a
+  slope solved at every trial shift; both directions are measured and averaged; a shape
+  statistic tells a moved profile from a changed one, and the narrow lines check the frame.
+- **Tiers**: fixed rules on the pairs of an object: disk, binary, platinum (both lines),
+  almost, profile, stable, none.
 
 Details, and the reason for each choice: [docs/method.md](docs/method.md).
 
@@ -109,6 +132,12 @@ as they should in all 16 checks, while 5 of the 32 coverage checks of widths and
 were inconclusive. Errors are withheld when the draws split between separate solutions. See
 [docs/validation.md](docs/validation.md), which also describes one known failure.
 
+The error of a velocity change is statistical, from the pixel noise of both epochs
+through the curvature of the chi-square curve, plus a term per line measured on pairs of
+DESI nights with no expected change (45 km/s for Hα, 36 km/s for Hβ), in quadrature. On
+synthetic pairs and on such nights the combined error covers the truth at the nominal
+rate; injected shifts of up to 2,500 km/s are recovered without attenuation.
+
 ## Limitations
 
 - Errors do not include the choice of model: host templates, continuum shape, number of
@@ -117,8 +146,11 @@ were inconclusive. Errors are withheld when the draws split between separate sol
   continuum luminosities of such fits are unreliable.
 - Classes describe shapes. B and C are not disc or binary models, and an offset alone does
   not establish a binary.
-- Mg II is fitted but not validated. The between-epoch routines of `blrfit.rv` are
-  experimental and available from Python only.
+- Mg II is fitted but not validated, and a Mg II change carries no calibrated error term.
+- Velocity changes are calibrated for Hα and Hβ between DESI nights and between SDSS and
+  DESI epochs, at the precision of single DESI spectra; a changed profile is reported but
+  never counted as a motion. The earlier `blrfit.rv` is superseded by `pair` and remains
+  available from Python.
 - Redshifts are inputs, not measured, and fluxes keep the calibration of the input.
 
 ## Citing

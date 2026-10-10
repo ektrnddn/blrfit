@@ -197,7 +197,9 @@ def test_batch_records_failures_and_names(tmp_path, capsys):
         main(["fit", SDSS_EXAMPLE, SDSS_EXAMPLE_2, "--stem", "x", "--out", str(tmp_path)])
     with pytest.raises(SystemExit, match="--jobs"):
         main(["fit", SDSS_EXAMPLE, "--jobs", "0", "--out", str(tmp_path)])
-    with pytest.raises(SystemExit, match="ECSV"):  # refused before anything is fitted
+    with pytest.raises(
+        SystemExit, match="ECSV"
+    ):  # an unsupported table format is refused before anything is fitted
         main(
-            ["fit", SDSS_EXAMPLE, SDSS_EXAMPLE_2, "--table", str(tmp_path / "t.csv"), "--out", str(tmp_path)]
+            ["fit", SDSS_EXAMPLE, SDSS_EXAMPLE_2, "--table", str(tmp_path / "t.txt"), "--out", str(tmp_path)]
         )

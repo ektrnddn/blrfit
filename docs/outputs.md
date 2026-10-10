@@ -24,8 +24,8 @@ columns are listed by `blrfit fit --help`.
 ## Catalogue table
 
 With several spectra (or with `--table FILE`) the summary rows are collected into one
-table, FITS (`.fits`) or ECSV (`.ecsv`), one row per spectrum in the order given, with
-units. Its first columns identify the spectrum:
+table, FITS (`.fits`), ECSV (`.ecsv`) or CSV (`.csv`, without units), one row per spectrum
+in the order given, with units. Its first columns identify the spectrum:
 
 | Column | Meaning |
 |---|---|
@@ -135,6 +135,77 @@ outside the data has `fitted: false` and the reason. Values that do not exist ar
 `null`, never zero. (`dv_err_model` is always `null`; it is kept so that files of earlier
 versions and this one can be read alike.)
 
+## Pair table
+
+For the epochs of one object, `blrfit pair` writes `<out>/blrfit_pairs.ecsv` (or `--table`,
+FITS, ECSV or CSV), one row per pair and line, with the target and tier tables beside it
+(`blrfit_targets.ecsv`, `blrfit_tiers.ecsv`) and one figure per pair and line,
+`<A>__<B>_<line>_pair.png`: the two epochs' broad-only data with A's template at the
+best shift, the χ² curves of both directions, the pulls at the best shift and the
+narrow-line region. The method is on the [method page](method.md#velocity-changes-between-epochs).
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `targetid`, `pair`, `kind`, `line`, `role` | | the object (`--name`), `<A>__<B>`, the pair kind (`desi-desi`, `sdss-desi`, `sdss-sdss`), the line, and whether the pair is with the reference epoch, consecutive, or both |
+| `id_a`, `id_b`, `mjd_a`, `mjd_b`, `dt_days`, `dt_rest_yr` | d, yr | the epochs (A earlier), their dates and the time between them, observed and rest-frame |
+| `retained` | | no screen failed: the change is measured |
+| `stable_shape`, `shape_max` | | the profile did not change: `shape_max` ≤ 0.5, the shape statistic per pixel, the larger of the two directions |
+| `s_common`, `err` | km/s | **the change** of B's broad profile relative to A's, (s − s′)/2, and its statistical error hypot(σ, σ′); withheld (empty) when not retained |
+| `sigma_sys`, `err_total` | km/s | the calibrated term of the line and the total error, hypot(`err`, `sigma_sys`) |
+| `s_fwd`, `err_fwd`, `s_rev`, `err_rev` | km/s | each direction: A's template over B's data (s), B's over A's (s′) |
+| `dir_mismatch` | km/s | \|s + s′\|, zero under noise alone |
+| `dv_narrow`, `err_narrow` | km/s | the shift of the narrow lines between the epochs, both directions averaged |
+| `s_corrected`, `err_corrected` | km/s | `s_common` − `dv_narrow`, a diagnostic |
+| `v_sys_diff`, `dc50_sys`, `dc50_model` | km/s | the differences of the two fits' own systemic velocities, offsets Δv and model c(1/2) |
+| `scale_fwd`, `scale_rev` | | the template flux scale of each direction (reciprocal for an honest match) |
+| `chi2_nu_fwd`, `chi2_nu_rev`, `chi2_own_nu_fwd`, `chi2_own_nu_rev` | | reduced χ² of the template at its best shift, and of the data epoch's own broad model, per direction |
+| `dchi2_shape_fwd`, `dchi2_shape_rev`, `npix_fwd`, `npix_rev` | | the shape statistic of each direction in χ² units and its pixel count |
+| `s_alt_fwd`, `dchi2_alt_fwd`, `s_alt_rev`, `dchi2_alt_rev` | km/s, — | the second minimum of each direction and its Δχ² above the first |
+| `fwhm_a`, `fwhm_b` | km/s | FWHM of each epoch's broad model |
+| `snr_a`, `snr_b`, `peak_snr_a`, `peak_snr_b` | | integrated and peak broad-line S/N of each epoch |
+| `cls_a`, `cls_b` | | the class of each epoch's fit |
+| `z_a`, `z_b`, `ebv_a`, `ebv_b` | | the redshift and Galactic E(B−V) of each fit |
+| `errors_a`, `errors_b` | | where each epoch's statistical errors came from: the input spectrum, the fit result, or (flagged) the fit weights |
+| `flags` | | the flags below, joined with `;`; a direction's are prefixed `fwd:` or `rev:`, the narrow comparison's `narrow_fwd:` or `narrow_rev:` |
+
+| Flag | Meaning |
+|---|---|
+| `at_bound` | χ² minimum at the edge of the ±4000 km/s scan: no shift claimed |
+| `flat_minimum` | no curvature at the minimum: no error |
+| `ambiguous` | a second minimum within Δχ² = 6.63, more than 500 km/s away |
+| `scale_out_of_range` | template flux scale outside 0.25–4: a sliver of the profile was matched |
+| `too_few_pixels` | fewer than 20 usable pixels in the window |
+| `dir_inconsistent` | the two directions disagree by more than 3σ (an asymmetry of the templates) |
+| `scale_product_out_of_range` | the flux scales of the two directions are not reciprocal (product outside 0.5–2) |
+| `frame_offset_large` | the narrow lines moved by more than 200 km/s between the epochs: the frame is not shared |
+| `no_narrow_template` | no narrow line with a positive amplitude in the template epoch |
+| `z_differs`, `ebv_differs` | the two fits used different redshifts or E(B−V) |
+| `weights_inconsistent_a`, `_b` | the fit weights of that epoch could not be rebuilt from the given input spectrum |
+| `errors_from_fit_weights_a`, `_b` | no statistical errors for that epoch: the fit weights, floor included, were used |
+| `line_not_fitted` | the line was not fitted in one of the epochs |
+| `uncalibrated_line` | no systematic term for this line (Mg II): `err_total` is the statistical error |
+| `dependent` | the two spectra are not independent observations (the same SDSS plate and fibre) |
+| `not_retained` | a screen failed: the shift is withheld, the direction values are kept |
+
+## Target table
+
+One row per object: `targetid`, `reference` (the epoch of highest broad-line S/N, the
+template of the reference pairs), `n_epochs`, `n_pairs`, the class and integrated S/N of
+each line in the reference fit (`class_halpha`, `snr_halpha`, ...), and from that fit the
+virial mass `logmbh` (`logmbh_ha` from broad Hα where measurable, else `logmbh_hb`),
+`l5100` (erg/s), the broad-line radius `r_blr_ltd` (light-days) and the orbital limits
+`vmax_q01`, `pmin_q01_yr`, `vmax_q1`, `pmin_q1_yr` (km/s and years, for mass ratios 0.1 and
+1; [method](method.md#candidate-tiers)).
+
+## Tier table
+
+One row per object, the strongest first: `tier`, `reason` (the pair, line and numbers
+behind the verdict), and for the pair behind it `line`, `pair`, `s_kms`, `err_kms`, `sigma`,
+`shape_max`, `two_line_agree`, `dt_rest_yr`, `orbital_ok`, the longest allowed periods
+`p_max_q01_yr` and `p_max_q1_yr`, `p_min_q1_yr`, `logmbh`, and `n_pairs`. `blrfit tiers`
+reads one or more pair tables (and the target tables beside them, or `--targets`) and
+writes the same table for all their objects.
+
 ## Public searches
 
 `blrfit fit --targetid ...` or `--ra ... --dec ...` writes `inputs/fetch_manifest.json` (every
@@ -147,4 +218,4 @@ candidate found and every file downloaded, with checksums), the downloaded spect
 
 0 when every requested fit completed (a line outside the data still completes); 1 when an
 input could not be read or a fit failed, including one spectrum of a batch or of a
-public search; 2 for a usage error.
+public search, or when fewer than two epochs could be paired; 2 for a usage error.

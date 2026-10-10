@@ -197,20 +197,44 @@ def summary_table(records, meta=None):
 
 
 def table_format(path):
-    """The astropy format of a catalogue table path: FITS (.fits, .fit, .fits.gz) or ECSV (.ecsv)."""
+    """The astropy format of a table path: FITS (.fits, .fit, .fits.gz), ECSV
+    (.ecsv) or CSV (.csv; without units and types, for other programs)."""
     lower = str(path).lower()
     if lower.endswith((".fits", ".fit", ".fits.gz")):
         return "fits"
     if lower.endswith(".ecsv"):
         return "ascii.ecsv"
-    raise ValueError(f"{path}: the table is written as FITS (.fits) or ECSV (.ecsv)")
+    if lower.endswith(".csv"):
+        return "ascii.csv"
+    raise ValueError(f"{path}: the table is written as FITS (.fits), ECSV (.ecsv) or CSV (.csv)")
 
 
 def write_table(table, path):
-    """Write the catalogue table as FITS or ECSV (see ``table_format``), creating its directory."""
+    """Write a table as FITS, ECSV or CSV (see ``table_format``), creating its directory."""
     fmt = table_format(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     table.write(path, format=fmt, overwrite=True)
+
+
+def _cell(value):
+    """A Python scalar from a table cell: masked to None, numpy scalars to
+    Python, bytes to text."""
+    if np.ma.is_masked(value):
+        return None
+    if isinstance(value, bytes):
+        return value.decode()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def read_rows(path):
+    """The rows of a table written by this package (FITS, ECSV or CSV), as
+    dictionaries of Python scalars with the column names as keys."""
+    from astropy.table import Table
+
+    t = Table.read(path, format=table_format(path))
+    return [{c: _cell(row[c]) for c in t.colnames} for row in t]
 
 
 # ----------------------------------------------------------------------------
