@@ -145,9 +145,9 @@ def main(argv=None):
     )
     print(f"\nbundle: {out}  ({len(package_hashes)} package files)")
     print("next:")
-    print(f"  scp -r {out} perlmutter:/pscratch/sd/e/eka/_2BINARIES/{out.name}")
+    print(f"  scp -r {out} perlmutter.nersc.gov:/pscratch/sd/e/eka/_2BINARIES/{out.name}")
     print(
-        f"  ssh perlmutter 'mkdir -p {a.durable_parent} && cd /pscratch/sd/e/eka/_2BINARIES/{out.name} && sbatch run.sbatch'"
+        f"  ssh perlmutter.nersc.gov 'mkdir -p {a.durable_parent} && cd /pscratch/sd/e/eka/_2BINARIES/{out.name} && sbatch run.sbatch'"
     )
     print(
         "  (about 5.3 h on 32 workers in October; then copy back the return archive and run finish.py on it)"

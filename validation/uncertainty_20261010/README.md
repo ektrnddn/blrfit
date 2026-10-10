@@ -22,8 +22,8 @@ the job returns.
    `MANIFEST.json`, and records the hashes in `BUNDLE_IDENTITY.json` here.
 2. Copy the bundle to Perlmutter and submit (the commands are printed by `prepare.py`):
    ```bash
-   scp -r ~/blrfit_uncertainty_20261010 perlmutter:/pscratch/sd/e/eka/_2BINARIES/blrfit_uncertainty_20261010
-   ssh perlmutter 'mkdir -p /global/cfs/cdirs/desi/users/eka/software/blrfit_validation && cd /pscratch/sd/e/eka/_2BINARIES/blrfit_uncertainty_20261010 && sbatch run.sbatch'
+   scp -r ~/blrfit_uncertainty_20261010 perlmutter.nersc.gov:/pscratch/sd/e/eka/_2BINARIES/blrfit_uncertainty_20261010
+   ssh perlmutter.nersc.gov 'mkdir -p /global/cfs/cdirs/desi/users/eka/software/blrfit_validation && cd /pscratch/sd/e/eka/_2BINARIES/blrfit_uncertainty_20261010 && sbatch run.sbatch'
    ```
    `run.sbatch` asks for 64 CPUs, 96 GiB and 12 hours in the shared queue, loads the DESI environment,
    puts `installed/` first on the path with one numerical thread per worker, verifies the bundle
