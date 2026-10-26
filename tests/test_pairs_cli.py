@@ -1,4 +1,5 @@
-"""The pair and tiers commands on the two bundled SDSS epochs of J001224."""
+"""The pair and tiers commands on the two bundled SDSS epochs of J001224 (the tiers are deprecated since 0.5.0: the
+pair command no longer writes a tier table; the tiers command still classifies a pair table)."""
 
 import numpy as np
 import pytest
@@ -6,7 +7,11 @@ import pytest
 from blrfit.batch import read_rows
 from blrfit.cli import main
 from blrfit.pairs import PAIR_COLUMNS
-from blrfit.tiers import TIERS, TIER_COLUMNS
+import warnings
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    from blrfit.tiers import TIERS, TIER_COLUMNS
 from conftest import SDSS_EXAMPLE, SDSS_EXAMPLE_2, Z_J001224
 
 
@@ -55,8 +60,7 @@ def test_pair_tables(paired):
     assert len(targets) == 1 and targets[0]["reference"] in ("spec-0651-52141-0072", "spec-7169-56628-0344")
     assert targets[0]["n_epochs"] == 2 and targets[0]["class_halpha"] in "ABCFEXW"
     assert np.isfinite(targets[0]["logmbh"]) and np.isfinite(targets[0]["vmax_q01"])
-    tiers = read_rows(out / "blrfit_tiers.ecsv")
-    assert len(tiers) == 1 and list(tiers[0]) == list(TIER_COLUMNS) and tiers[0]["tier"] in TIERS
+    assert not (out / "blrfit_tiers.ecsv").exists()  # no tier table since 0.5.0
     assert (out / "spec-0651-52141-0072__spec-7169-56628-0344_Hbeta_pair.png").exists()
     assert (out / "spec-0651-52141-0072_fit.json").exists() and (
         out / "spec-7169-56628-0344_fit.pkl"
@@ -91,7 +95,7 @@ def test_saved_fits_reproduce_the_pairs(paired, tmp_path):
         )
         for k in ("s_fwd", "s_rev", "err_fwd", "scale_fwd", "dchi2_shape_fwd"):
             assert np.isclose(a[k], b[k], rtol=1e-9, equal_nan=True), k
-    assert (tmp_path / "pairs_targets.csv").exists() and (tmp_path / "pairs_tiers.csv").exists()
+    assert (tmp_path / "pairs_targets.csv").exists() and not (tmp_path / "pairs_tiers.csv").exists()
     assert not list(tmp_path.glob("*_pair.png"))
 
 
@@ -101,10 +105,10 @@ def test_tiers_command(paired, tmp_path, capsys):
     assert rc == 0
     printed = capsys.readouterr().out
     tiers = read_rows(tmp_path / "tiers.ecsv")
-    before = read_rows(out / "blrfit_tiers.ecsv")
-    assert tiers[0]["tier"] == before[0]["tier"] and tiers[0]["reason"] == before[0]["reason"]
-    assert f"object: {tiers[0]['tier']}" in printed
-    assert np.isfinite(tiers[0]["logmbh"]) == np.isfinite(before[0]["logmbh"])
+    targets = read_rows(out / "blrfit_targets.ecsv")
+    assert len(tiers) == 1 and list(tiers[0]) == list(TIER_COLUMNS) and tiers[0]["tier"] in TIERS
+    assert f"object: {tiers[0]['tier']}" in printed and "deprecated" in printed
+    assert targets[0]["n_epochs"] == 2
 
 
 def test_pair_needs_two_epochs(tmp_path):
