@@ -1,6 +1,11 @@
 """
 Candidate tiers from the measured velocity changes of a target.
 
+DEPRECATED since 0.5.0: the verdicts of ``blrfit.multiepoch`` (velocity curves from every
+pair of an object's dated spectra, a motion test with a calibrated noise model, the orbit
+tests) replace the tiers, which judged each object by its best single pair. Importing this
+module warns; the ``tiers`` command still runs.
+
 One verdict per target with its reasons, from the rows of a pair table
 (``pairs.pair_record``): the retained pairs whose two epochs both reach the
 S/N floor, with the total error (statistical plus the calibrated term). The
@@ -44,6 +49,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+import warnings
+
 import numpy as np
 
 from .constants import (
@@ -61,6 +68,12 @@ from .constants import (
 )
 from .pairs import independent
 from .physics import max_orbital_change, longest_period
+
+warnings.warn(
+    "blrfit.tiers is deprecated since 0.5.0: the verdicts of blrfit.multiepoch replace the candidate tiers",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 TIERS = ("platinum", "binary", "almost", "profile", "disk", "stable", "none")
 
