@@ -168,8 +168,9 @@ rate; injected shifts of up to 2,500 km/s are recovered without attenuation.
 
 Please cite the software with the metadata in [CITATION.cff](CITATION.cff) ("Cite this
 repository" on GitHub), and the papers behind the parts you use (listed in
-[docs/method.md](docs/method.md#references)). Each release is archived on Zenodo: version 0.4.0
-has the DOI [10.5281/zenodo.23287994](https://doi.org/10.5281/zenodo.23287994), and
+[docs/method.md](docs/method.md#references)). Each release is archived on Zenodo: version 0.5.0
+has the DOI [10.5281/zenodo.23675266](https://doi.org/10.5281/zenodo.23675266), version 0.4.0
+[10.5281/zenodo.23287994](https://doi.org/10.5281/zenodo.23287994), and
 [10.5281/zenodo.23287993](https://doi.org/10.5281/zenodo.23287993) always resolves to the latest version.
 
 ## Licence
