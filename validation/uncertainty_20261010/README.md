@@ -8,8 +8,12 @@ protocol only in `created`, `repeat_of` and `point_fitter`). `study.py` and `gen
 frozen sources of the first study, unchanged; `study.measure` was checked to run against 0.4.0 on
 two roster spectra of each grid before the bundle was built.
 
-**Status: prepared, not run.** REPORT.json, DECISIONS.json and STUDY_IDENTITY.json appear here when
-the job returns.
+**Status: run** on Perlmutter as job 60292783 (2026-10-25 19:57 to 2026-10-26 01:33 PDT, 5.6 h on 32
+workers). `finish.py` verified the 2,640 records of the return archive (SHA-256
+`a68bedbd24a27153f66f6e001bf1173169461f5e08551de814163e8ba3804ffc`) against `BUNDLE_IDENTITY.json`, reduced
+them again with the frozen `study.py` (no difference beyond roundoff) and wrote `REPORT.json`, `DECISIONS.json`
+and `STUDY_IDENTITY.json`: 67 criteria pass, 5 inconclusive, the result in `docs/validation.md`. The return
+archive (93 MB) and the ordinary fits (731 MB, backed up on CFS) are not in the repository.
 
 ## Run it
 

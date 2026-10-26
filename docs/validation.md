@@ -76,14 +76,34 @@ lower boundary:
 So the offset errors cover as they should on these spectra; the width errors are
 may be somewhat small for Hβ on the DESI grid. The spectra are drawn from the same
 family of components that the model fits, with Gaussian noise: the study cannot reveal
-errors of the model itself (for example a host that the eigenspectra do not describe). It
-was run with version 0.2.0; 0.3.0 changed the continuum starts and the masks, and 0.4.0
-keeps that fitter. The protocol, the decisions and the scripts are in
-[`validation/uncertainty_20261003`](../validation/uncertainty_20261003/README.md), which
-also says how to regenerate the report from the archived records. The repetition of the
-study with the 0.4.0 wheel, on the same roster and criteria, is prepared in
-[`validation/uncertainty_20261010`](../validation/uncertainty_20261010/README.md); its
-report will be added here when it returns.
+errors of the model itself (for example a host that the eigenspectra do not describe). The
+first run used version 0.2.0; 0.3.0 changed the continuum starts and the masks, and 0.4.0
+keeps that fitter. The study was repeated with the 0.4.0 wheel on the same roster, seeds and
+criteria (Perlmutter, 2026-10-25, 5.6 h on 32 workers;
+[`validation/uncertainty_20261010`](../validation/uncertainty_20261010/README.md)): 2,640 of
+2,640 spectra recorded, 67 criteria pass and 5 are inconclusive, with the same reading:
+
+| Quantity | Accuracy | Coverage |
+|---|---|---|
+| Δv (`c50_sys`) | 8 of 8 pass | 16 of 16 pass |
+| FWHM | 8 of 8 pass | 13 pass, 3 inconclusive |
+| Broad flux | 8 of 8 pass | 14 pass, 2 inconclusive |
+
+The five inconclusive checks are again Hβ on the DESI-like grid, each interval crossing the
+lower boundary (659–660 spectra each):
+
+| Line, S/N | Quantity, interval | Coverage | 95 % interval |
+|---|---|---:|---:|
+| Hβ, 15 | FWHM, one error | 62.2 % | 58.2–66.3 % |
+| Hβ, 30 | FWHM, one error | 63.6 % | 59.7–67.3 % |
+| Hβ, 30 | FWHM, two errors | 92.7 % | 90.5–94.7 % |
+| Hβ, 30 | broad flux, one error | 63.9 % | 59.5–67.9 % |
+| Hβ, 30 | broad flux, two errors | 92.4 % | 90.0–94.5 % |
+
+The protocol, the decisions and the scripts of both runs are in
+[`validation/uncertainty_20261003`](../validation/uncertainty_20261003/README.md) and
+[`validation/uncertainty_20261010`](../validation/uncertainty_20261010/README.md), which say how
+to regenerate the reports from the archived records.
 
 **A known failure.** `tests/test_errors_mc.py::test_monte_carlo_pulls_of_c50_sys` (slow)
 fits 20 noise realisations of one configuration (Hα and Hβ at +800 km/s, FWHM

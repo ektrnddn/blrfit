@@ -26,6 +26,7 @@ and the pair tests hold); 0.5.0 adds the multi epoch analysis of pair tables, th
   its best single pair; the module is imported on first use, with a warning, and `blrfit pair` no longer
   writes a tier table.
 - `blrfit.rv` stays deprecated and imported on first use; its removal, announced for 0.5, is deferred.
+- Validation: the single-spectrum uncertainty study repeated with the 0.4.0 wheel on the same roster and criteria (`validation/uncertainty_20261010`, Perlmutter job 60292783); the offset errors pass all 24 of their criteria again, five width and flux coverage tests of Hβ on the DESI grid stay inconclusive (`docs/validation.md`).
 
 ## 0.4.0 (2026-10-10)
 
