@@ -308,6 +308,10 @@ later epoch is redder.
 
 ## Candidate tiers
 
+Deprecated since 0.5.0: the verdicts of `blrfit multiepoch` ([multiepoch.md](multiepoch.md)), which
+fit one velocity curve to every pair of an object's spectra with a calibrated noise model, replace
+the tiers, which judged each object by its best single pair. The command still runs.
+
 `blrfit tiers` gives one verdict per object from its pairs, with the pair, the line and
 the numbers behind it as the reason. Only pairs retained, with both epochs at an
 integrated broad-line S/N of at least 8 (below it a template matches noise), are counted,
