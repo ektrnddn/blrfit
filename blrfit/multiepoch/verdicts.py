@@ -143,7 +143,8 @@ def mass_test(fit, tc, vmax, pmin):
             du = abs(fit["u"][j] - fit["u"][i])
             dvmax, _ = O.max_change(vmax, pmin, abs(tc[j] - tc[i]))
             if np.isfinite(dvmax) and du - 2 * np.sqrt(max(var, 0.0)) > dvmax:
-                fast.append((round(du), round(dvmax), round(abs(tc[j] - tc[i]), 2)))
+                # Python scalars, so that the cell reads the same under numpy 1 and 2
+                fast.append((int(round(du)), int(round(dvmax)), float(round(abs(tc[j] - tc[i]), 2))))
     return fast
 
 
