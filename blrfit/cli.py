@@ -4,13 +4,14 @@ Command-line interface.
     blrfit fit   SPECTRUM [--targetid TID] [--z Z] [--ebv E] [...]   one spectrum -> table, JSON, figure
     blrfit fit   --ra RA --dec DEC [--out DIR] [...]                 the public DESI or SDSS spectra of a position
     blrfit fetch --ra RA --dec DEC [--out DIR] [...]                 download them without fitting
-    blrfit pair  SPECTRUM SPECTRUM [...] [--out DIR]                 the epochs of one object: fits, velocity changes, tier
-    blrfit tiers PAIRS [...] [--out FILE]                            the candidate tier of every object of pair tables
+    blrfit pair  SPECTRUM SPECTRUM [...] [--out DIR]                 the epochs of one object: fits, velocity changes
+    blrfit multiepoch calibrate|verdicts|orbits|population|fraction  velocity curves and verdicts from pair tables
+    blrfit tiers PAIRS [...] [--out FILE]                            the candidate tiers of 0.4.0 (deprecated)
 
 Successful point fits include explicit unavailable-line outcomes. Input or
 fitting exceptions return a nonzero status; public batches retain failed products
 in their manifests. The earlier between-epoch routines of ``blrfit.rv`` are
-deprecated since 0.4.0 (removed in 0.5); ``blrfit pair`` supersedes them.
+deprecated since 0.4.0; ``blrfit pair`` supersedes them.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ from .classify import LABEL_TEXT, FLAG_TEXT, is_measurable, is_strong_offset, ve
 from .errors import empirical_error, MC_MIN_CONTRIBUTING
 from .pairs import PAIR_FLAG_TEXT, enumerate_pairs, epoch_snr, measure_pair, pair_row
 from .physics import target_mass
-from .tiers import TIERS, TIER_TEXT, classify_table
+from .multiepoch import Inputs, run_calibration, run_fraction, run_orbits, run_population, run_verdicts
 
 LINE_KEYS = (
     "v_peak_sys",
@@ -893,14 +894,9 @@ def cmd_pair(a):
     table = a.table or os.path.join(a.out, "blrfit_pairs.ecsv")
     meta = dict(BLRFIT=__version__, LINES=",".join(lines))
     write_table(summary_table(rows, meta=meta), table)
-    targets_table, tiers_table = _sibling(table, "targets"), _sibling(table, "tiers")
+    targets_table = _sibling(table, "targets")
     write_table(summary_table([target], meta=meta), targets_table)
-    classes = {line: target[f"class_{line.lower()}"] for line in lines}
-    tiers = classify_table(rows, masses={name: target}, classes={name: classes})
-    write_table(summary_table(tiers, meta=meta), tiers_table)
-    out(f"-> {table}\n-> {targets_table}\n-> {tiers_table}")
-    for t in tiers:
-        out(f"{t['targetid']}: {t['tier']} ({TIER_TEXT[t['tier']]}): {t['reason']}")
+    out(f"-> {table}\n-> {targets_table}")
     return 0
 
 
@@ -915,7 +911,12 @@ def _target_tables(a):
 
 
 def cmd_tiers(a):
+    from .tiers import TIERS, TIER_TEXT, classify_table
+
     out = _silent if a.quiet else print
+    out(
+        "blrfit tiers is deprecated since 0.5.0: the verdicts of 'blrfit multiepoch' replace the candidate tiers"
+    )
     rows = []
     for path in a.pairs:
         if not os.path.exists(path):
@@ -1021,11 +1022,10 @@ the printed table (velocities in km/s):
   shape          the profile-change statistic per pixel: at most 0.5 for a stable profile
   scale, rev     the template flux scale of each direction (A over B, B over A)
   flags          screens and warnings, explained below the table
-then the tier of the object with its reason (blrfit tiers --help).
 """
 
 TIERS_HELP = """\
-tiers, in the order they are tried:
+deprecated since 0.5.0: the verdicts of 'blrfit multiepoch' replace the tiers. Tiers, in the order they are tried:
   disk           a double-peaked (class B) broad profile in the reference spectrum: a disc emitter
   platinum       a change of at least 4 sigma with a stable profile, both Balmer lines agreeing, the two
                  directions within 2 sigma, broad peak S/N >= 8 in both epochs, and an orbit that allows it
@@ -1177,7 +1177,7 @@ def build_parser():
         prog="blrfit",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Fit the broad Balmer lines of AGN spectra: offsets from the narrow-line reference,\n"
-        "profile classes and quality flags; velocity changes between epochs and candidate tiers.",
+        "profile classes and quality flags; velocity changes between epochs, velocity curves and verdicts.",
     )
     p.add_argument("--version", action="version", version=f"blrfit {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1211,7 +1211,7 @@ def build_parser():
         "fits (--fits). Every spectrum is fitted as by 'fit'; then the reference epoch (highest broad S/N) is\n"
         "paired with every other and consecutive epochs with each other, each pair measured in both directions\n"
         "with the template cross-correlation. Writes the pair table, a target table (reference, classes, mass,\n"
-        "orbital limits), a tier table and one figure per pair and line, and prints the table below.",
+        "orbital limits) and one figure per pair and line, and prints the table below.",
         epilog=PAIR_TABLE_HELP,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1232,9 +1232,10 @@ def build_parser():
 
     t = sub.add_parser(
         "tiers",
-        help="candidate tiers from pair tables",
-        description="The candidate tier of every object of one or more pair tables written by 'pair' (or by\n"
-        "Python, pairs.pair_record): one row per object with the tier, its reason and the pair behind it.",
+        help="candidate tiers from pair tables (deprecated since 0.5.0)",
+        description="Deprecated since 0.5.0: the verdicts of 'blrfit multiepoch' replace the tiers. The candidate tier\n"
+        "of every object of one or more pair tables written by 'pair': one row per object with the tier, its\n"
+        "reason and the pair behind it.",
         epilog=TIERS_HELP,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1269,7 +1270,124 @@ def build_parser():
     g.add_argument("--quiet", action="store_true", help="print nothing")
     _public_args(g)
     g.set_defaults(func=cmd_fetch)
+    _multiepoch_parser(sub)
     return p
+
+
+# ----------------------------------------------------------------------------
+# multiepoch
+# ----------------------------------------------------------------------------
+MULTIEPOCH_HELP = """\
+the stages, in order (each reads the tables and writes into --out / --run):
+  calibrate      the noise model on objects whose broad lines should not move -> CALIBRATION.json, CALIBRATION.md
+  verdicts       the spectrum check, every object's velocity curve per line and its verdict
+                 -> spectra.csv, verdicts.csv, objects.csv, curves.json, pair_table.csv, members.json, VERDICTS.md
+  orbits         the circular orbits the virial mass allows, fitted to every curve -> orbits.json, orbits.csv
+  population     strong offsets against matched objects without one -> POPULATION.md
+  fraction       the fraction of strong offsets that can be binaries, against the period -> BINARY_FRACTION.json, .md
+tables (docs/multiepoch.md): --pairs the pair table (CSV, blrfit pair's columns plus the per-spectrum classes and
+S/N), --catalog the coadd fit of every identifier, --masses the virial masses and orbital limits (target_mass),
+--facts every dated spectrum's own fit (the offset scale of the orbits), --all-fits the coadd two-peak measurements.
+"""
+
+
+def _inputs(a):
+    return Inputs(
+        pairs=a.pairs, catalog=a.catalog, masses=a.masses, facts=a.facts, all_fits=a.all_fits
+    ).check()
+
+
+def cmd_multiepoch(a):
+    stage = a.stage
+    if stage == "calibrate":
+        run_calibration(
+            _inputs(a), a.out, nboot=a.nboot, exclude_objects=a.exclude_objects, verbose=not a.quiet
+        )
+    elif stage == "verdicts":
+        calibration = a.calibration or os.path.join(a.out, "CALIBRATION.json")
+        run_verdicts(_inputs(a), calibration, a.out, alt_population=a.alt_population, verbose=not a.quiet)
+    elif stage == "orbits":
+        run_orbits(
+            a.run, _inputs(a), out=a.out, objects=a.objects, verdict=a.verdict, min_times=a.min_times,
+            com_max=a.com_max, nproc=a.nproc, verbose=not a.quiet,
+        )  # fmt: skip
+    elif stage == "population":
+        run_population(a.run, _inputs(a), out=a.out, seeds=a.seeds, verbose=not a.quiet)
+    elif stage == "fraction":
+        run_fraction(a.run, _inputs(a), ndraw=a.ndraw, seeds=a.seeds, verbose=not a.quiet)
+    return 0
+
+
+def _multiepoch_parser(sub):
+    m = sub.add_parser(
+        "multiepoch",
+        help="velocity curves and verdicts from pair tables",
+        description="The multi epoch analysis of pair tables: the noise model, every object's velocity curves and\n"
+        "verdicts, the orbit tests, the matched comparison of strong offsets and the binary-fraction limit.",
+        epilog=MULTIEPOCH_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ms = m.add_subparsers(dest="stage", required=True)
+
+    def tables(p, masses=True):
+        g = p.add_argument_group("tables")
+        g.add_argument("--pairs", required=True, metavar="CSV", help="the pair table")
+        g.add_argument(
+            "--catalog", required=True, metavar="TABLE", help="the catalog (coadd fit of every identifier)"
+        )
+        g.add_argument(
+            "--masses", metavar="TABLE", required=masses, help="the virial masses and orbital limits"
+        )
+        g.add_argument("--facts", metavar="CSV", help="every dated spectrum's own fit (optional)")
+        g.add_argument(
+            "--all-fits", metavar="TABLE", help="the coadd fits with the two-peak measurements (optional)"
+        )
+        p.add_argument("--quiet", action="store_true", help="print nothing")
+
+    c = ms.add_parser("calibrate", help="the noise model")
+    tables(c, masses=False)
+    c.add_argument("--out", required=True, metavar="DIR")
+    c.add_argument("--nboot", type=int, default=60, help="bootstrap draws of the wandering term (default 60)")
+    c.add_argument(
+        "--exclude-objects", metavar="FILE", help="object keys (one per line) left out of every population"
+    )
+    v = ms.add_parser("verdicts", help="the velocity curves and verdicts")
+    tables(v)
+    v.add_argument("--out", required=True, metavar="DIR")
+    v.add_argument("--calibration", metavar="JSON", help="CALIBRATION.json (default: in --out)")
+    v.add_argument(
+        "--alt-population",
+        default="broad",
+        metavar="POP",
+        help="the second noise model ('' for none; default broad)",
+    )
+    o = ms.add_parser("orbits", help="the orbit tests of every curve")
+    tables(o)
+    o.add_argument("--run", required=True, metavar="DIR", help="the directory of the verdicts")
+    o.add_argument("--out", metavar="JSON", help="default: orbits.json in --run")
+    o.add_argument("--objects", nargs="*", metavar="KEY")
+    o.add_argument("--verdict", metavar="VERDICT", help="only lines with this verdict (e.g. moving)")
+    o.add_argument("--min-times", type=int, default=2)
+    o.add_argument(
+        "--com-max",
+        type=float,
+        default=300.0,
+        help="the bound on the center-of-mass velocity, km/s (default 300)",
+    )
+    o.add_argument("--nproc", type=int, default=None)
+    pp = ms.add_parser("population", help="strong offsets against matched objects")
+    tables(pp, masses=False)
+    pp.add_argument("--run", required=True, metavar="DIR")
+    pp.add_argument("--out", metavar="FILE", help="default: POPULATION.md in --run")
+    pp.add_argument("--seeds", type=int, default=200, help="random matchings (default 200)")
+    fr = ms.add_parser("fraction", help="the binary-fraction limit against the period")
+    tables(fr)
+    fr.add_argument("--run", required=True, metavar="DIR")
+    fr.add_argument("--ndraw", type=int, default=2000, help="binary draws per object (default 2000)")
+    fr.add_argument("--seeds", type=int, default=200, help="random matchings (default 200)")
+    for p in (c, v, o, pp, fr):
+        p.set_defaults(func=cmd_multiepoch)
+    return m
 
 
 def main(argv=None):
@@ -1279,7 +1397,7 @@ def main(argv=None):
         p.exit(
             2,
             "blrfit: the rv command was removed in version 0.3.0 and blrfit.rv is deprecated since "
-            "0.4.0 (removed in 0.5): use blrfit pair\n",
+            "0.4.0: use blrfit pair\n",
         )
     a = p.parse_args(args)
     try:

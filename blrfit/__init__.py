@@ -1,7 +1,8 @@
 """
 blrfit: broad AGN emission lines fitted against the narrow-line systemic
 velocity, classified and flagged; velocity changes between the epochs of one
-object (``blrfit.pairs``) and candidate tiers from them (``blrfit.tiers``).
+object (``blrfit.pairs``) and, from every pair of an object's dated spectra, its
+velocity curves and verdicts (``blrfit.multiepoch``).
 
     from blrfit import read_spectrum, fit_spectrum, summary_row, plot_fit
     sp  = read_spectrum("spec-0651-52141-0072.fits")
@@ -12,12 +13,17 @@ object (``blrfit.pairs``) and candidate tiers from them (``blrfit.tiers``).
     rec = measure_pair(res_2001, res_2013, "Hbeta")
     rec["s_common"], rec["err"], rec["retained"], rec["flags"]
 
+    from blrfit.multiepoch import Inputs, run_calibration, run_verdicts
+    inp = Inputs(pairs="pairs.csv", catalog="catalog.fits", masses="masses.fits")
+    run_calibration(inp, "out"); run_verdicts(inp, "out/CALIBRATION.json", "out")
+
 The command-line tool ``blrfit fit`` does the same and writes a JSON summary
 and a diagnostic figure; ``blrfit pair`` fits the epochs of one object and
-measures their changes; ``blrfit tiers`` classifies objects from pair tables.
-The earlier ``blrfit.rv`` is deprecated since 0.4.0 (``measure_pair`` supersedes it;
-it is imported on first use, with a warning). See the README for the model and its
-validation.
+measures their changes; ``blrfit multiepoch`` runs the chain of verdicts, orbit
+tests, population test and binary-fraction limit on pair tables. The candidate
+tiers of 0.4.0 (``blrfit.tiers``, ``blrfit tiers``) are deprecated since 0.5.0:
+the verdicts replace them; the module is imported on first use, with a warning,
+as the earlier ``blrfit.rv`` is. See the README for the model and its validation.
 """
 
 from .model.fit import fit_spectrum, remeasure, summary_row
@@ -36,10 +42,9 @@ from .plot import (
 from .io import read_spectrum, read_sdss, read_desi, read_table
 from .physics import lambda_l_lambda, continuum_luminosity, target_mass
 from .pairs import measure_pair, pair_record, enumerate_pairs
-from .tiers import classify_target, classify_table
-from . import constants, physics, pairs, tiers
+from . import constants, physics, pairs, multiepoch
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "fit_spectrum",
@@ -72,19 +77,26 @@ __all__ = [
     "measure_pair",
     "pair_record",
     "enumerate_pairs",
-    "classify_target",
-    "classify_table",
     "constants",
     "physics",
     "pairs",
-    "tiers",
+    "multiepoch",
     "__version__",
 ]
 
 
 def __getattr__(name):
-    """``blrfit.rv``, the earlier cross-correlation, is imported on first use;
-    importing it warns of its deprecation (removed in 0.5)."""
+    """``blrfit.tiers``, the candidate tiers of 0.4.0, is imported on first use;
+    importing it warns of its deprecation (the verdicts of ``blrfit.multiepoch``
+    replace the tiers). ``blrfit.rv`` stays deprecated and is imported the same way."""
+    if name == "tiers":
+        import importlib
+
+        return importlib.import_module(".tiers", __name__)
+    if name in ("classify_target", "classify_table"):
+        import importlib
+
+        return getattr(importlib.import_module(".tiers", __name__), name)
     if name == "rv":
         import importlib
 

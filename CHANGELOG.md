@@ -3,6 +3,31 @@
 The full notes of versions up to 0.2.0 are attached to the v0.3.0rc1 pre-release on GitHub,
 and each version is preserved by its tag.
 
+## 0.5.0 (unreleased)
+
+The fitter and the pair measurement are unchanged from 0.4.0 (the pinned fits of `tests/data/pins_0.3.0.json`
+and the pair tests hold); 0.5.0 adds the multi epoch analysis of pair tables, the chain of Dadiani & Palmese
+(2026) from the noise model to the binary-fraction limit, and deprecates the candidate tiers.
+
+- `blrfit multiepoch`, with the stages `calibrate`, `verdicts`, `orbits`, `population` and `fraction`
+  (`docs/multiepoch.md`): the noise model calibrated on objects whose broad lines should not move (a jitter
+  per spectrum by instrument, an offset of one object's SDSS or BOSS spectra against its DESI ones, a
+  per-pair term from closed loops, and the wandering of the broad line as a damped random walk in units of
+  its width); for every object and line a generalized-least-squares velocity curve on all its measured pairs
+  with a stable profile and the verdict moving (p < 2.7e-3), constant, profile variable or not measurable,
+  with the tags (steady, allowed by its mass or faster, disappears when one spectrum or one time is excluded,
+  width changes, ...); the circular orbits the virial mass allows fitted to every curve; strong offsets
+  against matched objects; and the fraction of strong offsets that can be binaries, against the period.
+- Python: `blrfit.multiepoch` (`Inputs`, `run_calibration`, `run_verdicts`, `run_orbits`, `run_population`,
+  `run_fraction`, `check_spectra`, `analyze`, `Calibration`, the behavior groups of the robust movers).
+- A regression test on a frozen extract of the paper's catalog (38 objects, 6,092 pair rows) reproduces the
+  paper's verdicts, tags and curves to the printed digits and the orbit summaries of its candidate lines.
+- `blrfit.tiers` and `blrfit tiers` are deprecated: the verdicts replace the tiers, which judged each object by
+  its best single pair; the module is imported on first use, with a warning, and `blrfit pair` no longer
+  writes a tier table.
+- `blrfit.rv` stays deprecated and imported on first use; its removal, announced for 0.5, is deferred.
+- Validation: the single-spectrum uncertainty study repeated with the 0.4.0 wheel on the same roster and criteria (`validation/uncertainty_20261010`, Perlmutter job 60292783); the offset errors pass all 24 of their criteria again, five width and flux coverage tests of Hβ on the DESI grid stay inconclusive (`docs/validation.md`).
+
 ## 0.4.0 (2026-10-10)
 
 The fitter is unchanged from 0.3.0rc1 (the pinned fits of `tests/data/pins_0.3.0.json` hold);

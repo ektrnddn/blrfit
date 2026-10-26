@@ -2,16 +2,13 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below, together with the relevant methodological references listed in the documentation."
 type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
-version: 0.4.0
-date-released: 2026-10-10
-doi: 10.5281/zenodo.23287994
+version: 0.5.0
+date-released: 2026-10-25
+doi: 10.5281/zenodo.23287993
 identifiers:
   - type: doi
     value: 10.5281/zenodo.23287993
     description: "Concept DOI of the software, resolving to its latest version"
-  - type: doi
-    value: 10.5281/zenodo.23287994
-    description: "DOI of version 0.4.0"
 license: MIT
 repository-code: "https://github.com/ektrnddn/blrfit"
 authors:
@@ -32,5 +29,7 @@ abstract: >-
   quality flags and optional Monte Carlo errors. Reads DESI coadds, SDSS spectra
   and spectra in tables or FITS images, and downloads public DESI and SDSS spectra
   by TARGETID or sky position; measures the velocity change of a broad line between
-  the dated spectra of one object by a template cross-correlation and sorts objects
-  into candidate tiers. Mg II is experimental.
+  the dated spectra of one object by a template cross-correlation and, from every pair
+  of an object's spectra, fits its velocity curves and decides whether the line moves,
+  with orbit tests, a matched comparison of offset objects and a binary-fraction limit.
+  Mg II is experimental.

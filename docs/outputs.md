@@ -201,7 +201,9 @@ the power law), the broad-line radius `r_blr_ltd` (light-days) and the orbital l
 
 ## Tier table
 
-One row per object, the strongest first: `tier`, `reason` (the pair, line and numbers
+Deprecated since 0.5.0 (the verdicts of `blrfit multiepoch` replace the tiers; its run directory
+is described in [multiepoch.md](multiepoch.md#outputs-of-a-run-directory)); `blrfit pair` no longer
+writes this table. One row per object, the strongest first: `tier`, `reason` (the pair, line and numbers
 behind the verdict), and for the pair behind it `line`, `pair`, `s_kms`, `err_kms`, `sigma`,
 `shape_max`, `two_line_agree`, `dt_rest_yr`, `orbital_ok`, the longest allowed periods
 `p_max_q01_yr` and `p_max_q1_yr`, `p_min_q1_yr`, `logmbh`, and `n_pairs`. `blrfit tiers`

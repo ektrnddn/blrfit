@@ -1,0 +1,23 @@
+{
+  "bundle": "/Users/ktrnddn/blrfit_uncertainty_20261010",
+  "candidate_commit": "1b06e81c80de24ddf2aa1eda3f2bb9669ecc5d07",
+  "candidate_ref": "v0.4.0",
+  "candidate_tags": [
+    "v0.4.0"
+  ],
+  "candidate_version": "0.4.0",
+  "manifest_sha256": "886947397165ca39ce638662857d02a531a26309f62b7c176668ece219a970a0",
+  "payload_commit": "ba1e66bb4cada6621ac42f52591594ac4c09dce4",
+  "prepared": "2026-10-10",
+  "protocol_sha256": "b794664326cd6a23798e5e5984d56bfec156c0e92a8edf0d42d10e951e8dbcb1",
+  "request_sha256": "57bb8b93f4a13dd5ecdec94ff80bd1602910e8a9124b3c956a7a784a440eda58",
+  "source_hashes": {
+    "PROTOCOL.json": "b794664326cd6a23798e5e5984d56bfec156c0e92a8edf0d42d10e951e8dbcb1",
+    "generators.py": "072a1dcd2f8c234c4d4d5981356eff4bdd7f545b1c79f8ca2c4c7346728da082",
+    "run.sbatch": "2538ef1d5511ea7a01a6698b200ac01d4a82dc39d133e82f39c174bd28a6cf4b",
+    "study.py": "39e8c4e07b63db592bd7623d54ed2da9c206f0587447a3afcbf3a664061ccf77"
+  },
+  "wheel": "blrfit-0.4.0-py3-none-any.whl",
+  "wheel_sha256": "cf4e1b363f5601b44fda94acc8934071abd96d7966703c950a7604d67dbdc841",
+  "working_tree_clean": true
+}

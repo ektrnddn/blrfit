@@ -14,8 +14,10 @@ Gaussians chosen with the Bayesian information criterion. The broad profile is t
 described without reference to the Gaussians: peak, bisector centres c(f), widths W(f),
 and asymmetry and kurtosis indices. Each line gets a shape class and quality flags.
 Between the dated spectra of one object, the velocity change of each broad line is
-measured by sliding one epoch's fitted profile across the other epoch's data, and the
-object is sorted into a candidate tier.
+measured by sliding one epoch's fitted profile across the other epoch's data; from every
+pair of an object's spectra, a velocity curve per line and a verdict: moving, constant,
+profile variable or not measurable, with the orbit tests and the population tests of
+Dadiani & Palmese (2026).
 
 It reads DESI coadds, SDSS spectra and spectra in tables or FITS images, and downloads
 public DESI DR1/EDR and SDSS DR17 spectra by DESI TARGETID or sky position.
@@ -31,7 +33,7 @@ the dot its midpoint c(1/2), whose velocity is the offset Δv. Made by
 ## Install
 
 ```bash
-python -m pip install "blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@v0.4.0"
+python -m pip install "blrfit[fetch] @ git+https://github.com/ektrnddn/blrfit.git@v0.5.0"
 ```
 
 Python 3.10 or later. The `fetch` extra is needed only to download public spectra;
@@ -53,8 +55,13 @@ blrfit fit spectrum.csv --survey generic --wave lambda --flux flux --err error -
 # many spectra, four at a time, with one catalogue table
 blrfit fit spectra/*.fits --survey sdss --jobs 4 --out fits
 
-# the epochs of one object: their fits, the velocity changes between them, the candidate tier
+# the epochs of one object: their fits and the velocity changes between them
 blrfit pair examples/data/spec-0651-52141-0072.fits examples/data/spec-7169-56628-0344.fits --survey sdss --z 0.2288 --out pairs
+
+# many objects: the noise model, every object's velocity curves and verdicts, the orbit tests (docs/multiepoch.md)
+blrfit multiepoch calibrate --pairs pairs.csv --catalog catalog.fits --out run
+blrfit multiepoch verdicts  --pairs pairs.csv --catalog catalog.fits --masses masses.fits --out run
+blrfit multiepoch orbits    --run run --pairs pairs.csv --catalog catalog.fits --masses masses.fits --facts facts.csv
 ```
 
 In Python:
@@ -93,8 +100,10 @@ printed table; for several spectra, also a catalogue table with units
 For the epochs of one object, `blrfit pair` writes a pair table (one row per pair and line:
 the change `s_common` of the later epoch relative to the earlier, its error `err_total`, the
 shape statistic, the screens and flags), a target table (reference epoch, classes, virial
-mass, orbital limits), a tier table and one figure per pair; `blrfit tiers` classifies the
-objects of several pair tables.
+mass, orbital limits) and one figure per pair. For many objects, `blrfit multiepoch` turns
+pair tables into velocity curves and verdicts, orbit tests, a matched comparison of strong
+offsets and a binary-fraction limit ([docs/multiepoch.md](docs/multiepoch.md)); the
+candidate tiers of 0.4.0 (`blrfit tiers`) are deprecated.
 
 Every column, unit and flag: [docs/outputs.md](docs/outputs.md).
 
@@ -151,8 +160,8 @@ rate; injected shifts of up to 2,500 km/s are recovered without attenuation.
 - Mg II is fitted but not validated, and a Mg II change carries no calibrated error term.
 - Velocity changes are calibrated for Hα and Hβ between DESI nights and between SDSS and
   DESI epochs, at the precision of single DESI spectra; a changed profile is reported but
-  never counted as a motion. The earlier `blrfit.rv` is deprecated: importing it warns, and
-  it will be removed in 0.5.
+  never counted as a motion. The earlier `blrfit.rv` and the candidate tiers (`blrfit.tiers`)
+  are deprecated: importing them warns.
 - Redshifts are inputs, not measured, and fluxes keep the calibration of the input.
 
 ## Citing

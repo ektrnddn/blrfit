@@ -1,0 +1,32 @@
+{
+  "candidate_commit": "1b06e81c80de24ddf2aa1eda3f2bb9669ecc5d07",
+  "candidate_tags": [
+    "v0.4.0"
+  ],
+  "candidate_version": "0.4.0",
+  "candidate_wheel_sha256": "cf4e1b363f5601b44fda94acc8934071abd96d7966703c950a7604d67dbdc841",
+  "environment": {
+    "astropy": "8.0.1",
+    "blrfit": "0.4.0",
+    "numpy": "2.5.3",
+    "platform": "Linux-6.4.0-150600.23.135_15.0.44-cray_shasta_c-x86_64-with-glibc2.38",
+    "python": "3.14.7 | packaged by conda-forge | (main, Sep  2 2026, 21:08:32) [GCC 15.3.0]",
+    "scipy": "1.18.0"
+  },
+  "job_id": "60292783",
+  "manifest_sha256": "886947397165ca39ce638662857d02a531a26309f62b7c176668ece219a970a0",
+  "protocol_sha256": "b794664326cd6a23798e5e5984d56bfec156c0e92a8edf0d42d10e951e8dbcb1",
+  "records": 2640,
+  "repeat_of": "uncertainty_20261003",
+  "request_sha256": "57bb8b93f4a13dd5ecdec94ff80bd1602910e8a9124b3c956a7a784a440eda58",
+  "return_archive": "SINGLE_UNCERTAINTY_60292783.tar.gz",
+  "return_archive_sha256": "a68bedbd24a27153f66f6e001bf1173169461f5e08551de814163e8ba3804ffc",
+  "roundoff_only_differences": 0,
+  "source_hashes": {
+    "DECISIONS.json": "b2d34e2003ed399910c95e4fdc0fd26d0b414d86cf0866e8529a115da2524c19",
+    "PROTOCOL.json": "b794664326cd6a23798e5e5984d56bfec156c0e92a8edf0d42d10e951e8dbcb1",
+    "REPORT.json": "f6ba4ac8ca4e4a7f2f78b20d6b7eca58553491bf5df02dc9abb7e1a0a745edf9",
+    "generators.py": "072a1dcd2f8c234c4d4d5981356eff4bdd7f545b1c79f8ca2c4c7346728da082",
+    "study.py": "39e8c4e07b63db592bd7623d54ed2da9c206f0587447a3afcbf3a664061ccf77"
+  }
+}
