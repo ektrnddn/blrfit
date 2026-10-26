@@ -3,7 +3,7 @@
 The full notes of versions up to 0.2.0 are attached to the v0.3.0rc1 pre-release on GitHub,
 and each version is preserved by its tag.
 
-## 0.5.0 (unreleased)
+## 0.5.0 (2026-10-26)
 
 The fitter and the pair measurement are unchanged from 0.4.0 (the pinned fits of `tests/data/pins_0.3.0.json`
 and the pair tests hold); 0.5.0 adds the multi epoch analysis of pair tables, the chain of Dadiani & Palmese

@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below, together with the r
 type: software
 title: "blrfit: broad AGN emission lines against the narrow-line systemic velocity"
 version: 0.5.0
-date-released: 2026-10-25
+date-released: 2026-10-26
 doi: 10.5281/zenodo.23287993
 identifiers:
   - type: doi
