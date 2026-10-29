@@ -57,7 +57,8 @@ def make_spectrum(
                sii_ratio=6716/6731, balmer=Halpha_n/Hbeta_n, o3=[O III]5007/Hbeta_n,
                ped_frac=fraction of each narrow line's flux in a pedestal, ped_width=pedestal
                width / core width, ped_v=pedestal velocity offset, o3_wing=(v, sigma, flux
-               fraction) of an [O III] blue wing, sii_dv=[S II] velocity offset, o3_dv=[O III]
+               fraction) of an [O III] blue wing, o3_base=(v, sigma, flux fraction) of a second,
+               broader [O III] component, sii_dv=[S II] velocity offset, o3_dv=[O III]
                velocity offset)
     v_sys      velocity of the whole narrow-line system relative to the input redshift
     wave       observed-frame grid (default the DESI grid)
@@ -91,6 +92,7 @@ def make_spectrum(
         ped_width=3.0,
         ped_v=0.0,
         o3_wing=None,
+        o3_base=None,
         sii_dv=0.0,
         o3_dv=0.0,
     )
@@ -115,13 +117,14 @@ def make_spectrum(
                 model = model + gauss_v(
                     wr, lam0, v + nar["ped_v"], nar["sigma"] * nar["ped_width"], f * nar["ped_frac"]
                 )
-        if nar["o3_wing"] is not None:
-            wv, wsig, wfrac = nar["o3_wing"]
-            f_o3 = nar["o3"] * f_ha / nar["balmer"]
-            model = model + gauss_v(wr, LAM["OIII5007"], v_sys + nar["o3_dv"] + wv, wsig, wfrac * f_o3)
-            model = model + gauss_v(
-                wr, LAM["OIII4959"], v_sys + nar["o3_dv"] + wv, wsig, wfrac * f_o3 / R_OIII
-            )
+        for key in ("o3_wing", "o3_base"):
+            if nar[key] is not None:
+                wv, wsig, wfrac = nar[key]
+                f_o3 = nar["o3"] * f_ha / nar["balmer"]
+                model = model + gauss_v(wr, LAM["OIII5007"], v_sys + nar["o3_dv"] + wv, wsig, wfrac * f_o3)
+                model = model + gauss_v(
+                    wr, LAM["OIII4959"], v_sys + nar["o3_dv"] + wv, wsig, wfrac * f_o3 / R_OIII
+                )
         truth["narrow"].update(sigma=nar["sigma"], flux_ha=f_ha)
 
     vgrid = np.arange(-25000.0, 25000.01, 5.0)

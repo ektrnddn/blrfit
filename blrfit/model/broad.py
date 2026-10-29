@@ -17,6 +17,8 @@ from ..constants import (
     S2F,
     LAM,
     V_BROAD_MAX,
+    O3_BASE_TRIGGER_KMS,
+    O3_BASE_TRIGGER_WIDTH,
     SIG_BROAD_MIN,
     SIG_BROAD_MAX,
     BROAD_WIDTH_SLOPE,
@@ -117,6 +119,22 @@ def width_offset_penalty(d, broad_pairs):
     return [
         max(0.0, WIDTH_SLOPE_SIGMA * abs(d[vn]) - d[sn]) / BROAD_WIDTH_PENALTY_SCALE for vn, sn in broad_pairs
     ]
+
+
+def o3_base_trigger(d, comps):
+    """The broad Gaussian of an Hbeta fit that calls for the [O III] base: centred
+    more than O3_BASE_TRIGGER_KMS redward of the systemic velocity (``n_v``) and
+    narrower than O3_BASE_TRIGGER_WIDTH times its distance from the line (the
+    narrowest such one). Returns (velocity from the systemic, FWHM / |v|), or
+    None when no broad Gaussian qualifies."""
+    v_sys = d.get("n_v", np.nan)
+    found = None
+    for vn, sn in broad_parameter_pairs(comps):
+        v, ratio = d[vn], S2F * d[sn] / max(abs(d[vn]), 1e-9)
+        if d[vn] - v_sys > O3_BASE_TRIGGER_KMS and ratio < O3_BASE_TRIGGER_WIDTH:
+            if found is None or ratio < found[1]:
+                found = (float(v - v_sys), float(ratio))
+    return found
 
 
 def first_component_starts(vlo_b, vhi_b, n_broad):

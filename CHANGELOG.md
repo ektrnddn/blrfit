@@ -3,6 +3,23 @@
 The full notes of versions up to 0.2.0 are attached to the v0.3.0rc1 pre-release on GitHub,
 and each version is preserved by its tag.
 
+## 0.6.0.dev0 (unreleased)
+
+The Hβ complex gains a broad [O III] base, fitted only where the selected fit puts a narrow broad Gaussian
+between the [O III] lines; every other fit is unchanged.
+
+- The base: a second, broad wing on [O III] λλ4959, 5007, with σ 800–2500 km/s and centre −3000 to +500 km/s,
+  and the wing no wider than the base.
+- The trigger: a broad Gaussian centred more than 5500 km/s redward of the systemic velocity with
+  FWHM < 0.7 |v|. The complex is then refitted with the base, which is kept unless its BIC is worse by more
+  than 10 (`O3_BASE_*` in `constants.py`, `docs/method.md`).
+- On the DESI DR2 Hβ tier, where 1,299 of 2,183 two-peaked class-B fits had a false red peak between the
+  [O III] lines, the rule removes 1,103 of them. It changes 12 of 884 genuine-looking double-peaked fits and
+  none of 122 visually inspected class-A strong offsets.
+- New measures `o3_base`, `o3_base_trigger`, `o3_base_dbic` and `c50_sys_alt` in the summary row, and the
+  decision record `fits['Hbeta']['o3_base']`. The Monte Carlo draws keep the base where the fit kept it.
+- `fit_spectrum(o3_base=False)` and `blrfit fit --no-oiii-base` give the fit of 0.5.0.
+
 ## 0.5.0 (2026-10-26)
 
 The fitter and the pair measurement are unchanged from 0.4.0 (the pinned fits of `tests/data/pins_0.3.0.json`

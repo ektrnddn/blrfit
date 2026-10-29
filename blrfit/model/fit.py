@@ -10,6 +10,9 @@ Steps, in order:
   4. each requested complex, Halpha first: 1-3 broad Gaussians chosen by the
      BIC, from several starting velocities; the Halpha narrow kinematics are
      passed to the Hbeta complex when the Halpha narrow lines are detected;
+     where the Hbeta fit puts a narrow broad Gaussian between the [O III]
+     lines, the complex is fitted again with a broad [O III] base, which is
+     kept unless the BIC rejects it (``o3_base``, O3_BASE_* in constants.py);
   5. profile measurements, optional Monte Carlo errors, classification.
 
 Result dictionary: z, wave_rest, flux_rest, ivar_rest, host_model, host_info,
@@ -71,11 +74,17 @@ from ..constants import (
     MC_ERROR_INVALID_FLAGS,
     MC_LINE_FLAGS,
     MASK_GROW_PIX,
+    O3_BASE,
+    O3_BASE_DBIC,
+    PROFILE_GRID_KMS,
+    PROFILE_GRID_MAX_KMS,
+    LAM,
 )
 from .extinction import deredden
 from .continuum import fit_continuum, fit_continuum_host
 from .lines import fit_complex, fit_complex_select
-from ..measure import measure_complex
+from .broad import o3_base_trigger
+from ..measure import measure_complex, broad_profile, profile_measures
 from ..classify import classify
 
 SUMMARY_KEYS = (
@@ -139,6 +148,9 @@ SUMMARY_KEYS = (
     "n_equivalent",
     "n_residual_outliers",
 )
+# the record of the [O III]-base rule (_o3_base_measures): in the row of an Hbeta fit made with the rule only, so
+# that a fit made without it keeps the columns of version 0.5
+O3_BASE_KEYS = ("o3_base", "o3_base_trigger", "o3_base_dbic", "c50_sys_alt")
 PREFIX = {"Halpha": "HA", "Hbeta": "HB", "MgII": "MG"}
 
 
@@ -166,6 +178,71 @@ def _lumdist_cm(z):
         return np.nan
 
 
+def _o3_base_rule(wr, fsub, ir, r, allfits, diag, max_broad, dbic, kws):
+    """The broad [O III] base for a selected Hbeta fit ``r``: where a broad
+    Gaussian of ``r`` qualifies (``broad.o3_base_trigger``), the complex is fitted
+    again with the base (1..max_broad broad Gaussians by the BIC) and that fit is
+    kept unless its BIC is worse than that of ``r`` by more than O3_BASE_DBIC.
+
+    Returns the kept fit, its list of trial fits and its diagnostics. The kept fit
+    carries ``o3_base``: whether the rule was triggered, whether the base was
+    kept, the BIC difference (base minus no base), the trigger Gaussian's velocity
+    from the systemic and its FWHM / |v|, and the c(1/2) (from its own systemic),
+    FWHM and broad-component count of the fit not kept."""
+    trig = o3_base_trigger(r["d"], r["comps"])
+    rec = dict(
+        triggered=trig is not None,
+        kept=False,
+        dbic=np.nan,
+        trigger_v_sys=np.nan if trig is None else trig[0],
+        trigger_fwhm_ratio=np.nan if trig is None else trig[1],
+        c50_sys_alt=np.nan,
+        fwhm_alt=np.nan,
+        n_broad_alt=0,
+    )
+    if trig is None:
+        r["o3_base"] = rec
+        return r, allfits, diag
+    diag_b = {}
+    rb, allb = fit_complex_select(
+        "Hbeta", wr, fsub, ir, max_broad=max_broad, dbic=dbic, diagnostics=diag_b, oiii_base=True, **kws
+    )
+    if rb is None:
+        rec["base_status"] = diag_b.get("status", "no_valid_fit")
+        r["o3_base"] = rec
+        diag["o3_base"] = dict(triggered=True, kept=False, base_status=rec["base_status"])
+        return r, allfits, diag
+    rec["dbic"] = float(rb["bic"] - r["bic"])
+    rec["kept"] = bool(rec["dbic"] <= O3_BASE_DBIC)
+    kept, other = (rb, r) if rec["kept"] else (r, rb)
+    vgrid = np.arange(-PROFILE_GRID_MAX_KMS, PROFILE_GRID_MAX_KMS + 0.01, PROFILE_GRID_KMS)
+    pm = profile_measures(vgrid, broad_profile(other, LAM["Hbeta"], vgrid))
+    rec.update(
+        c50_sys_alt=float(pm["c50"] - other["d"].get("n_v", np.nan)),
+        fwhm_alt=float(pm["fwhm"]),
+        n_broad_alt=int(other["n_broad"]),
+    )
+    kept["o3_base"] = rec
+    if rec["kept"]:
+        allfits, diag = allb, diag_b
+    diag["o3_base"] = dict(triggered=True, kept=rec["kept"], dbic=rec["dbic"])
+    return kept, allfits, diag
+
+
+def _o3_base_measures(r):
+    """The measures of the [O III]-base rule recorded on a fit (``_o3_base_rule``);
+    empty for a fit made without the rule."""
+    rec = r.get("o3_base")
+    if rec is None:
+        return {}
+    return dict(
+        o3_base=float(rec["kept"]),
+        o3_base_trigger=float(rec["triggered"]),
+        o3_base_dbic=float(rec["dbic"]),
+        c50_sys_alt=float(rec["c50_sys_alt"]),
+    )
+
+
 def _fit_line_sequence(
     wr,
     fsub,
@@ -180,11 +257,15 @@ def _fit_line_sequence(
     fixed_n_broad=None,
     kw=None,
     dl=np.nan,
+    o3_base=False,
 ):
     """The same systemic estimator for the observed spectrum and each MC draw.
 
-    MC conditions on the selected component counts and host model. All data-
-    dependent OIII starts/priors and Halpha-to-Hbeta transfers are recomputed.
+    MC conditions on the selected component counts and host model, and on the
+    [O III] base where the observed spectrum kept it (``oiii_base`` in ``kw``).
+    All data-dependent OIII starts/priors and Halpha-to-Hbeta transfers are
+    recomputed. ``o3_base`` applies the [O III]-base rule to the selected Hbeta
+    fit (``_o3_base_rule``); it is not applied with ``fixed_n_broad``.
     """
     prior_v = prior_s = prior_snr = prior_nw = None
     order = [c for c in ("Halpha", "Hbeta", "MgII") if c in complexes]
@@ -219,6 +300,9 @@ def _fit_line_sequence(
             r, allfits = fit_complex_select(
                 name, wr, fsub, ir, max_broad=max_broad, dbic=dbic, diagnostics=diag, **kws
             )
+            base_rule = o3_base and kws.get("oiii_wing", True) and not kws.get("oiii_base")
+            if name == "Hbeta" and base_rule and r is not None:
+                r, allfits, diag = _o3_base_rule(wr, fsub, ir, r, allfits, diag, max_broad, dbic, kws)
         else:
             r = fit_complex(name, wr, fsub, ir, fixed_n_broad[name], diagnostics=diag, **kws)
             allfits = []
@@ -228,6 +312,7 @@ def _fit_line_sequence(
         if fixed_n_broad is None:
             r["all_fits"] = allfits
         m = measure_complex(r, cmodel + host_model, wr, z, dl_cm=dl, host_model=host_model)
+        m.update(_o3_base_measures(r))
         ha_prior_used = name == "Hbeta" and use_ha_systemic and prior_v is not None
         m["systemic_source"] = (
             "Halpha prior" if ha_prior_used else ("[OIII] core" if name == "Hbeta" else "own narrow group")
@@ -277,6 +362,7 @@ def fit_spectrum(
     conti_multistart=True,
     mask_grow=MASK_GROW_PIX,
     jobs=1,
+    o3_base=O3_BASE,
 ):
     """Fit one spectrum end to end; see the module docstring for the result keys.
 
@@ -311,6 +397,10 @@ def fit_spectrum(
         only, as up to version 0.2; recorded in ``settings``
     mask_grow : pixels on each side of every unusable pixel that are excluded as well
         (MASK_GROW_PIX; 0 as up to version 0.2); recorded in ``settings``
+    o3_base : fit the Hbeta complex again with a broad [O III] base where its selected fit
+        has a narrow broad Gaussian between the [O III] lines, and keep the base unless the
+        BIC rejects it (O3_BASE_* in constants.py; needs ``oiii_wing``); False gives the fit
+        of version 0.5; recorded in ``settings``, the decision in ``fits['Hbeta']['o3_base']``
     """
     complexes = tuple(complexes)
     if mc_noise_policy not in ("input", "effective"):
@@ -445,6 +535,7 @@ def fit_spectrum(
         mc_noise_policy=mc_noise_policy,
         conti_multistart=bool(conti_multistart),
         mask_grow=int(mask_grow),
+        o3_base=bool(o3_base),
     )
     fsub = fr - host_model - cmodel
     res["flux_sub"] = fsub
@@ -479,6 +570,7 @@ def fit_spectrum(
         dbic=dbic,
         kw=line_kw,
         dl=dl,
+        o3_base=bool(o3_base) and bool(oiii_wing),
     )
     for status in res["fit_status"].values():
         status["continuum_converged"] = continuum_converged
@@ -546,6 +638,7 @@ def remeasure(res, thresholds=None):
         )
         m["host_frac"] = float(hinfo.get("host_frac_4200_5000", np.nan)) if hinfo.get("applied") else 0.0
         m["pl_alpha"] = float(cd.get("pl_alpha", np.nan))
+        m.update(_o3_base_measures(r))
         src = old_meas.get(name, {}).get("systemic_source")
         # Prefer the fitted constraint over legacy metadata, which could report
         # an Halpha prior even when use_ha_systemic=False.
@@ -586,7 +679,9 @@ def summary_row(res, prefix_meta=None):
     ``fit_status``, and ``*_bic_margin`` (the smallest single-score change
     that changes the chosen component count) from the fit. MC counts separate
     contributing, finite and solver-converged draws; flags and their scalar
-    diagnostics accompany the percentile errors."""
+    diagnostics accompany the percentile errors. An Hbeta fit made with the
+    [O III]-base rule adds ``HB_o3_base``, ``HB_o3_base_trigger``,
+    ``HB_o3_base_dbic`` and ``HB_c50_sys_alt`` (O3_BASE_KEYS)."""
     row = dict(prefix_meta or {})
     row["z_in"] = res["z"]
     row["host_applied"] = bool(res["host_info"].get("applied", False))
@@ -610,6 +705,9 @@ def summary_row(res, prefix_meta=None):
         p = PREFIX[name]
         for k in SUMMARY_KEYS:
             row[f"{p}_{k}"] = m.get(k, np.nan)
+        for k in O3_BASE_KEYS:
+            if k in m:
+                row[f"{p}_{k}"] = m[k]
         if "params_at_bound" in m:
             row[f"{p}_params_at_bound"] = ",".join(m["params_at_bound"])
         if "bic_margin" in res["fits"].get(name, {}):

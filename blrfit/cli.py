@@ -437,6 +437,7 @@ def fit_file(a, path, targetid=None, z=None, stem=None, out=print, jobs=1, resul
             ebv=ebv,
             host=not a.no_host,
             fe=not a.no_fe,
+            o3_base=not getattr(a, "no_oiii_base", False),
             complexes=tuple(lines),
             max_broad=a.max_broad,
             dbic=a.dbic,
@@ -1098,6 +1099,12 @@ def _add_fit_options(f, pairs=False):
     )
     g.add_argument("--no-host", action="store_true", help="no host-galaxy component")
     g.add_argument("--no-fe", action="store_true", help="no Fe II templates")
+    g.add_argument(
+        "--no-oiii-base",
+        action="store_true",
+        help="no broad [O III] base where the Hbeta fit puts a narrow broad Gaussian between the [O III] "
+        "lines (the Hbeta model of version 0.5)",
+    )
     g.add_argument(
         "--max-broad",
         type=int,

@@ -101,6 +101,7 @@ when the slope is flagged `pl_unphysical`.
 | `data_v_peak`, `data_c50`, `data_centroid_win` | km/s | peak, c(1/2) and windowed centroid of the lightly smoothed data, relative to the input redshift |
 | `dv_spread`, `fwhm_spread`, `n_equivalent` | km/s, km/s, — | the degeneracy check: spread of Δv and FWHM over the equally good decompositions, and their number |
 | `n_residual_outliers`, `params_at_bound` | | pixels more than 5σ off the model away from the narrow lines; fitted parameters on a bound |
+| `o3_base`, `o3_base_trigger`, `o3_base_dbic`, `c50_sys_alt` | —, —, —, km/s | Hβ only: the broad [O III] base kept (1) or not (0), the rule triggered (1) or not, the BIC with the base minus without it, and the c(1/2) of the fit not kept ([method](method.md#broad-o-iii-base)); absent for a fit made without the rule (`o3_base=False`), whose columns are those of version 0.5 |
 | `systemic_source` | | the narrow lines that define v_n |
 
 **Monte Carlo** (with `--nmc`), per line:

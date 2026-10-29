@@ -15,7 +15,9 @@ own kinematics tied softly to them; one narrow-line-region wing with a common
 amplitude fraction sits under every narrow line.
 
 Hbeta complex: the [O III] doublet is a core plus a blueshifted wing, ordered in
-width and amplitude; narrow Hbeta and He II 4686 either follow the Halpha
+width and amplitude, and optionally a broad base under both lines (fitted where a
+broad Hbeta Gaussian would otherwise sit between them; ``model/fit.py``), at
+least as wide as the wing; narrow Hbeta and He II 4686 either follow the Halpha
 systemic (velocity, width and wing fixed from the Halpha fit, the default when
 the Halpha narrow lines are detected) or are tied to the [O III] core.
 
@@ -51,6 +53,13 @@ from ..constants import (
     O3_ORDER_WIDTH,
     O3_ORDER_AMPLITUDE,
     O3_AMP_ORDER_SCALE,
+    V_O3_BASE_MIN,
+    V_O3_BASE_MAX,
+    SIG_O3_BASE_MIN,
+    SIG_O3_BASE_MAX,
+    O3_BASE_V_START,
+    O3_BASE_SIG_START,
+    O3_BASE_AMP_START,
 )
 
 
@@ -138,8 +147,12 @@ def add_hbeta_narrow(
     oiii_wing=True,
     heii=True,
     nw_prior=None,
+    oiii_base=False,
 ):
-    """[O III] core (+ wing), narrow Hbeta (+ carried-over wing) and He II 4686."""
+    """[O III] core (+ wing, + base), narrow Hbeta (+ carried-over wing) and He II 4686.
+
+    ``oiii_base`` adds the broad base of both [O III] lines (kind 'wing', so it
+    stays out of every broad-line measure); it needs the wing."""
     o3_v0 = oiii_start_velocity(wave, fsub, 0.0 if v_sys_prior is None else float(v_sys_prior))
     ps.add("o3_v", o3_v0, -V_NARROW_MAX, V_NARROW_MAX)
     ps.add("o3_sig", 120.0, SIG_NARROW_MIN, SIG_O3_CORE_MAX)
@@ -199,6 +212,22 @@ def add_hbeta_narrow(
                 ("OIII5007w_A", 1.0 / R_OIII),
             )
         )
+        if oiii_base:
+            ps.add("wb_v", O3_BASE_V_START, V_O3_BASE_MIN, V_O3_BASE_MAX)
+            ps.add("wb_sig", O3_BASE_SIG_START, SIG_O3_BASE_MIN, SIG_O3_BASE_MAX)
+            ps.add("OIII5007b_A", O3_BASE_AMP_START * amp_guess(wave, fsub, LAM["OIII5007"], 6.0), 0.0, amax)
+            comps.append(("OIII5007b", LAM["OIII5007"], "OIII5007b_A", "wb_v", "wb_sig", "wing", None))
+            comps.append(
+                (
+                    "OIII4959b",
+                    LAM["OIII4959"],
+                    "OIII5007b_A",
+                    "wb_v",
+                    "wb_sig",
+                    "wing",
+                    ("OIII5007b_A", 1.0 / R_OIII),
+                )
+            )
 
 
 def add_mgii_narrow(ps, comps, wave, fsub, amax):
@@ -236,11 +265,14 @@ def sii_soft_tie_penalty(d):
 
 
 def oiii_order_penalty(d):
-    """[O III] wing at least as wide as the core, core at least as tall as the wing."""
+    """[O III] wing at least as wide as the core, core at least as tall as the wing,
+    and, with the base, the base at least as wide as the wing."""
     pen = [max(0.0, d["o3_sig"] - d["w_sig"]) / 10.0]
     if O3_ORDER_AMPLITUDE:
         ac, aw = d["OIII5007c_A"], d["OIII5007w_A"]
         pen.append(max(0.0, aw - ac) / (O3_AMP_ORDER_SCALE * (ac + aw) + 1e-9))
+    if "wb_sig" in d:
+        pen.append(max(0.0, d["w_sig"] - d["wb_sig"]) / 10.0)
     return pen
 
 

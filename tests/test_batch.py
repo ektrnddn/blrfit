@@ -35,6 +35,9 @@ DIMENSIONLESS = {
     "chi2_red",
     "bic_margin",
     "bic_gap",
+    "o3_base",
+    "o3_base_trigger",
+    "o3_base_dbic",
     "mc_alias_fraction",
     "n_peaks",
 }

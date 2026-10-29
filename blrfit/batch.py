@@ -99,6 +99,7 @@ UNITS = {
             "v_peak_sys",
             "centroid_sys",
             "c50_sys",
+            "c50_sys_alt",
             "c25_sys",
             "c75_sys",
             "peak_top",

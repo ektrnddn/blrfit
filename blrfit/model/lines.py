@@ -71,10 +71,12 @@ def build_complex(
     sig_broad_min=SIG_BROAD_MIN,
     nw_prior=None,
     v_bounds=None,
+    oiii_base=False,
 ):
     """Parameter set and component list of one complex (narrow lines first, then
     the broad block). Components are ``(label, lam0, amp_name, v_name, sig_name,
-    kind, ratio_to)``; see ``narrow.py``."""
+    kind, ratio_to)``; see ``narrow.py``. ``oiii_base`` adds the broad [O III]
+    base to the Hbeta complex and is ignored by the others."""
     ps = ParamSet()
     comps = []
     amax = max(float(np.nanmax(np.abs(fsub))) * 5.0, 1e-2)
@@ -96,6 +98,7 @@ def build_complex(
             oiii_wing=oiii_wing,
             heii=heii,
             nw_prior=nw_prior,
+            oiii_base=oiii_base,
         )
         add_broad_block(ps, comps, wave, fsub, LAM["Hbeta"], "Hb", n_broad, amax, vb_lo, vb_hi, sig_broad_min)
     elif name == "MgII":

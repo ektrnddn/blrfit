@@ -362,6 +362,10 @@ def monte_carlo(
         for k in ("oiii_wing", "heii", "mgii_narrow", "mgii_doublet", "sig_broad_min")
         if k in settings
     }
+    # the draws condition on the [O III] base where the fit kept it, as on the
+    # component counts (fit._o3_base_rule)
+    if ((res.get("fits", {}).get("Hbeta") or {}).get("o3_base") or {}).get("kept"):
+        line_kw["oiii_base"] = True
     line_kw.update(kw or {})
     rng = np.random.default_rng(seed)
     wr, fr, ir = res["wave_rest"], res["flux_rest"], res["ivar_rest"]

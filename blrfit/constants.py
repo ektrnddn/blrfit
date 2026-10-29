@@ -225,6 +225,49 @@ BROAD_WIDTH_PENALTY_SCALE = 10.0  # km/s of sigma deficit per unit residual
 BROAD_STARTS_KMS = (0.0, 1500.0, -1500.0, 3000.0, -3000.0)  # first-component starts
 MAX_BROAD = 3
 DBIC = 10.0  # a more complex model must improve the BIC by this much
+# Broad [O III] base. The [O III] model above (a core and one wing) has nothing
+# broader than its wing, which in the DESI H-beta fits is narrow (median sigma
+# 370 km/s). Where [O III] is strong, the flux of a broader base between [O III]
+# 4959 and 5007 is then taken by a broad H-beta Gaussian centred between the
+# two lines (+6000 to +8100 km/s) at the width limit of the hinge above: 1,299
+# of the 2,183 two-peaked class-B H-beta fits of the DESI DR2 H-beta tier had
+# such a "red peak", at a rate rising from 1.9 to 44 per 1,000 fits as the
+# [O III] core S/N rises from below 5 to above 80. A second, broad [O III]
+# wing on both lines (the base) takes that flux; it is fitted only where the
+# selected fit has such a Gaussian, so that every other fit stays as it was:
+# switched on everywhere, it moved 24 of 120 tested strong H-beta offsets below
+# 1000 km/s at a median Delta BIC of +7.3, i.e. where the data do not ask for it.
+#   trigger  a broad Gaussian centred more than O3_BASE_TRIGGER_KMS redward of
+#            the systemic velocity and narrower than O3_BASE_TRIGGER_WIDTH |v|
+#            (FWHM / |v|, |v| from the line as in the hinge above). In the false
+#            peaks the Gaussian sits at the hinge limit (40 per cent below 0.4,
+#            median 0.45); broad red wings under [O III] are wider: the six such
+#            Gaussians of class-A fits kept on visual inspection have 0.71-1.55,
+#            and of the 61 in genuine-looking double-peaked fits none above 0.7
+#            is at the hinge limit, while 12 of the 21 below 0.7 are.
+#   choice   the fit with the base is refitted from scratch (1-3 broad
+#            Gaussians by the BIC) and kept unless its BIC is worse than that of
+#            the fit without it by more than O3_BASE_DBIC. A broad H-beta
+#            Gaussian between the two [O III] lines is the less plausible
+#            reading of the same flux, so the base needs no BIC gain to be kept,
+#            only no clear loss. On the 1,299 false peaks this rule removed
+#            1,103; on 884 genuine-looking double-peaked fits it changed 12.
+O3_BASE = True  # fit_spectrum default; False reproduces version 0.5
+# beyond the red peaks of disk emitters (median +2000 km/s) and short of [O III] 4959 (+6020)
+O3_BASE_TRIGGER_KMS = 5500.0
+O3_BASE_TRIGGER_WIDTH = 0.7
+O3_BASE_DBIC = DBIC
+# Bounds of the base: centred within V_O3_BASE_MIN..V_O3_BASE_MAX of [O III] and
+# as wide as SIG_O3_BASE_MIN..SIG_O3_BASE_MAX, the range of the broad outflow
+# components of luminous quasars; its lower width bound exceeds the wing's
+# median so that it does not duplicate the wing, and a width hinge keeps the
+# wing no wider than the base. The flux it took in the DESI false peaks: median
+# sigma 980 km/s, centre -1030 km/s.
+V_O3_BASE_MIN, V_O3_BASE_MAX = -3000.0, 500.0
+SIG_O3_BASE_MIN, SIG_O3_BASE_MAX = 800.0, 2500.0
+O3_BASE_V_START = -1000.0  # starting centre, km/s from [O III]
+O3_BASE_SIG_START = 1200.0  # starting sigma, km/s
+O3_BASE_AMP_START = 0.03  # starting amplitude, fraction of the [O III] 5007 peak estimate
 # Equally good decompositions. The starts of a line complex can end at points
 # whose chi-square differ by less than the noise while their broad profiles
 # differ: on the 2001 SDSS spectrum of J001224 with the single-start continuum

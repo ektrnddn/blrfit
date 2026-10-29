@@ -44,7 +44,7 @@ from .physics import lambda_l_lambda, continuum_luminosity, target_mass
 from .pairs import measure_pair, pair_record, enumerate_pairs
 from . import constants, physics, pairs, multiepoch
 
-__version__ = "0.5.0"
+__version__ = "0.6.0.dev0"
 
 __all__ = [
     "fit_spectrum",

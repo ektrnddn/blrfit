@@ -91,7 +91,8 @@ its physical range (about 0.44–1.45). Narrow widths are 25 ≤ σ ≤ 510 km/s
 - **[O III].** The doublet is a core (σ ≤ 800 km/s) plus a blueshifted wing (σ
   250–2500 km/s, v between −2500 and +500 km/s), ordered by two hinge penalties (wing at
   least as wide as the core, core at least as tall as the wing) so that the two cannot
-  exchange roles. The core starts at the smoothed data peak near 5007 Å.
+  exchange roles. The core starts at the smoothed data peak near 5007 Å. Where the Hβ fit
+  calls for it, a broad base is added under both lines (see [Broad [O III] base](#broad-o-iii-base)).
 - **Hβ narrow lines.** When the Hα narrow lines are detected (peak S/N ≥ 3), the
   velocity and width of narrow Hβ, He II and the wing are fixed to the Hα values;
   otherwise they are tied to the [O III] core, as in Shen et al. (2011).
@@ -134,6 +135,69 @@ roughly halved their widths.
   coverage below ±6000 km/s is flagged `edge`. Hα at z ≳ 0.477 leaves the red end of
   DESI; unconstrained fits there placed components outside the data and manufactured
   offsets of +4000 to +8000 km/s.
+
+### Broad [O III] base
+
+The [O III] model (core and wing) has nothing broader than its wing, and in the DESI Hβ
+fits the wing is narrow (median σ 370 km/s; neither its velocity nor its width reaches a
+bound). Where [O III] is strong, the flux of a broader base between [O III] λ4959 and
+λ5007 is then taken by a broad Hβ Gaussian centred between the two lines, +6000 to
++8100 km/s from Hβ, at the width limit of the hinge above, and the broad profile gains a
+false red peak:
+
+- In the DESI DR2 Hβ tier, 1,299 of the 2,183 two-peaked class-B fits have their red peak
+  beyond +5500 km/s, and only 80 have a blue peak beyond −5500 km/s.
+- The rate rises from 1.9 to 44 per 1000 fits as the [O III] core S/N rises from below 5
+  to above 80.
+- Fe II strength and broad-line S/N play no part.
+
+The base is a second wing on both lines (5007/4959 = 2.98, σ 800–2500 km/s, centre
+−3000 to +500 km/s from [O III], kind `wing`, so it is excluded from every broad-profile
+measure), with a hinge that keeps the wing no wider than the base. Fitting it everywhere
+costs real profiles: in 120 class-A strong Hβ offsets it moved 24 below 1000 km/s at a
+median ΔBIC of +7.3, i.e. where the data do not ask for it. It is therefore fitted only
+where the selected fit shows the failure:
+
+- **Trigger.** A broad Gaussian centred more than 5500 km/s redward of the systemic
+  velocity and narrower than 0.7 |v| (FWHM / |v|, with |v| from the line as in the
+  hinge).
+  - In the false peaks the Gaussian sits at the hinge limit: 40 per cent below 0.4,
+    median 0.45.
+  - Broad red wings under [O III] are wider. The six such Gaussians of class-A fits kept
+    on visual inspection have 0.71–1.55. Of the 61 in genuine-looking double-peaked
+    fits, none above 0.7 is at the hinge limit, while 12 of the 21 below 0.7 are.
+- **Choice.** The complex is fitted again with the base (1–3 broad Gaussians by the BIC)
+  and that fit is kept unless its BIC is worse than the fit without it by more than 10.
+  A broad Hβ Gaussian between the two [O III] lines is the less plausible reading of the
+  same flux, so the base needs no BIC gain, only no clear loss.
+- **Record.** `fits['Hbeta']['o3_base']` holds whether the rule was triggered and whether
+  the base was kept, the BIC difference, the trigger Gaussian, and the c(1/2), FWHM and
+  component count of the fit not kept. The measures `o3_base`, `o3_base_trigger`,
+  `o3_base_dbic` and `c50_sys_alt` (the alternative's c(1/2)) are in the summary row of
+  every Hβ fit made with the rule.
+- **Errors.** The Monte Carlo draws refit with the base where the fit kept it, as they
+  keep the component counts.
+- **Switching it off.** `fit_spectrum(o3_base=False)` and `blrfit fit --no-oiii-base`
+  give the Hβ fit of version 0.5.
+
+Refits of the stored window data of the DESI fits, with the continuum held, give the
+effect of the rule:
+
+| set | fits | changed by the rule |
+|---|---|---|
+| false peaks | 1,299 | 1,103 removed; 196 remain |
+| genuine-looking double-peaked Hβ, red peak ≤ 5500 km/s | 884 | 12 (1.4%) |
+| class-A strong offsets inspected by eye | 122 | 0 |
+
+- **The 196 that remain** have a broad far Gaussian (FWHM ≥ 0.7 |v|). It is a smooth
+  shelf from the Hβ core to [O III], which looks like the red shelf of Hβ (He I, Fe II or
+  a redshifted very broad Hβ); whether it belongs to the broad line is a choice rather
+  than a fitting error.
+- **The 12 changed genuine-looking fits:**
+  - 2 are the same false peak just inside the 5500 km/s cut;
+  - in 5 a resolved red peak at +1900 to +3400 km/s becomes a shoulder;
+  - 5 change their c(1/2), losing 5 red strong offsets that the Gaussian between the
+    [O III] lines had inflated.
 
 ## Measurements
 
