@@ -40,6 +40,8 @@ from ..constants import (
     SIG_NARROW_MIN,
     SIG_NARROW_MAX,
     SIG_O3_CORE_MAX,
+    O3_START_MATCH_SIG,
+    O3_START_MATCH_SNR,
     SIG_WING_MIN,
     SIG_WING_MAX,
     V_WING_MIN,
@@ -118,22 +120,49 @@ def add_halpha_narrow(ps, comps, wave, fsub, amax, v_sys_prior=None, sig_sys_pri
             comps.append((lab, lam0, f"{lab}_A", "nw_v", "nw_sig", "nwing", None))
 
 
-def oiii_start_velocity(wave, fsub, v0):
-    """Starting velocity of the [O III] core from the data: the smoothed peak near
-    5007 A inside the narrow window, if it stands 5 MAD above the median.
+def oiii_doublet_match(wave, fsub, weights=None):
+    """The velocity inside the narrow window at which the [O III] doublet best matches
+    the data, and the S/N of that match: a matched filter of both lines (5007 and 4959
+    at 1/R_OIII, Gaussians of O3_START_MATCH_SIG), weighted by ``weights`` = 1/sigma
+    where given (else by the pixel-to-pixel scatter) and insensitive to a flat pedestal.
+    Returns (nan, -inf) without usable pixels."""
+    if weights is None:  # the noise from the pixel-to-pixel scatter
+        sd = 1.4826 * np.nanmedian(np.abs(np.diff(fsub))) / np.sqrt(2.0)
+        w2 = np.full(np.shape(fsub), 1.0 / max(sd, 1e-12) ** 2)
+    else:
+        w2 = np.asarray(weights, float) ** 2
+    lo = LAM["OIII4959"] * (1.0 - (V_NARROW_MAX + 4.0 * O3_START_MATCH_SIG) / C_KMS)
+    hi = LAM["OIII5007"] * (1.0 + (V_NARROW_MAX + 4.0 * O3_START_MATCH_SIG) / C_KMS)
+    sel = (wave > lo) & (wave < hi) & np.isfinite(fsub) & (w2 > 0)
+    if sel.sum() <= 10:
+        return np.nan, -np.inf
+    x, y, w2 = wave[sel], fsub[sel], w2[sel]
+    best_v, best_snr = np.nan, -np.inf
+    for v in np.arange(-V_NARROW_MAX + 1.0, V_NARROW_MAX, 20.0):
+        t = np.zeros_like(x)
+        for lam0, f in ((LAM["OIII5007"], 1.0), (LAM["OIII4959"], 1.0 / R_OIII)):
+            lc = lam0 * (1.0 + v / C_KMS)
+            t += f * np.exp(-0.5 * ((x - lc) / (lc * O3_START_MATCH_SIG / C_KMS)) ** 2)
+        t -= np.sum(w2 * t) / np.sum(w2)  # zero weighted mean: a pedestal does not match
+        den = np.sum(w2 * t * t)
+        if den <= 0:
+            continue
+        snr = np.sum(w2 * t * y) / np.sqrt(den)
+        if snr > best_snr:
+            best_v, best_snr = float(v), float(snr)
+    return best_v, best_snr
+
+
+def oiii_start_velocity(wave, fsub, v0, weights=None):
+    """Starting velocity of the [O III] core from the data: the doublet match
+    (``oiii_doublet_match``) if its S/N >= O3_START_MATCH_SNR; else ``v0``.
 
     An optimiser started at zero velocity (or at the Halpha prior) sees no
     gradient towards an [O III] line several hundred km/s away, and the wing
-    then takes the line."""
-    vg = (wave / LAM["OIII5007"] - 1.0) * C_KMS
-    sel = np.abs(vg) < V_NARROW_MAX
-    if sel.sum() > 10:
-        ys = np.convolve(fsub[sel], np.ones(3) / 3.0, mode="same")
-        j = int(np.argmax(ys))
-        mad = 1.4826 * np.median(np.abs(ys - np.median(ys))) + 1e-12
-        if (ys[j] - np.median(ys)) / mad > 5.0:
-            return float(np.clip(vg[sel][j], -V_NARROW_MAX + 1, V_NARROW_MAX - 1))
-    return v0
+    then takes the line. Both lines are matched so that a single-pixel sky residual,
+    which has no partner at 4959 A, cannot set the start (constants.py)."""
+    v, snr = oiii_doublet_match(wave, fsub, weights)
+    return v if snr >= O3_START_MATCH_SNR else v0
 
 
 def add_hbeta_narrow(
@@ -148,12 +177,13 @@ def add_hbeta_narrow(
     heii=True,
     nw_prior=None,
     oiii_base=False,
+    weights=None,
 ):
     """[O III] core (+ wing, + base), narrow Hbeta (+ carried-over wing) and He II 4686.
 
     ``oiii_base`` adds the broad base of both [O III] lines (kind 'wing', so it
     stays out of every broad-line measure); it needs the wing."""
-    o3_v0 = oiii_start_velocity(wave, fsub, 0.0 if v_sys_prior is None else float(v_sys_prior))
+    o3_v0 = oiii_start_velocity(wave, fsub, 0.0 if v_sys_prior is None else float(v_sys_prior), weights)
     ps.add("o3_v", o3_v0, -V_NARROW_MAX, V_NARROW_MAX)
     ps.add("o3_sig", 120.0, SIG_NARROW_MIN, SIG_O3_CORE_MAX)
     ps.add("OIII5007c_A", amp_guess(wave, fsub, LAM["OIII5007"], 6.0), 0.0, amax)

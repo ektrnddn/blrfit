@@ -72,6 +72,7 @@ def build_complex(
     nw_prior=None,
     v_bounds=None,
     oiii_base=False,
+    weights=None,
 ):
     """Parameter set and component list of one complex (narrow lines first, then
     the broad block). Components are ``(label, lam0, amp_name, v_name, sig_name,
@@ -99,6 +100,7 @@ def build_complex(
             heii=heii,
             nw_prior=nw_prior,
             oiii_base=oiii_base,
+            weights=weights,
         )
         add_broad_block(ps, comps, wave, fsub, LAM["Hbeta"], "Hb", n_broad, amax, vb_lo, vb_hi, sig_broad_min)
     elif name == "MgII":
@@ -212,7 +214,7 @@ def fit_complex(name, wave, fsub, ivar, n_broad, **kw):
         return None
     kw = dict(kw)
     kw["v_bounds"] = covered_velocity_bounds(v_lo, v_hi)
-    ps, comps = build_complex(name, x, y, n_broad=n_broad, **kw)
+    ps, comps = build_complex(name, x, y, n_broad=n_broad, weights=w, **kw)
     prefix = COMPLEX_PREFIX[name]
 
     soft = name == "Halpha" and "s2_sig" in ps.names

@@ -102,6 +102,7 @@ when the slope is flagged `pl_unphysical`.
 | `dv_spread`, `fwhm_spread`, `n_equivalent` | km/s, km/s, — | the degeneracy check: spread of Δv and FWHM over the equally good decompositions, and their number |
 | `n_residual_outliers`, `params_at_bound` | | pixels more than 5σ off the model away from the narrow lines; fitted parameters on a bound |
 | `o3_base`, `o3_base_trigger`, `o3_base_dbic`, `c50_sys_alt` | —, —, —, km/s | Hβ only: the broad [O III] base kept (1) or not (0), the rule triggered (1) or not, the BIC with the base minus without it, and the c(1/2) of the fit not kept ([method](method.md#broad-o-iii-base)); absent for a fit made without the rule (`o3_base=False`), whose columns are those of version 0.5 |
+| `o3_match_snr`, `o3_wing_dv`, `tags` | —, km/s, — | Hβ only, where the [O III] core sets the systemic velocity: the S/N of the [O III] doublet match on the fitted data, the [O III] wing velocity from the core, and tags, comma separated: `o3_weak` (match S/N below 5: no [O III] systemic, the core started at the input redshift) and `o3_wing_red` (the wing more than 300 km/s redward of the core, where an outflow wing does not lie). Tags are information, not flags: no class, flag, measurable or strong-offset rule reads them ([method](method.md#systemic-velocity)) |
 | `systemic_source` | | the narrow lines that define v_n |
 
 **Monte Carlo** (with `--nmc`), per line:

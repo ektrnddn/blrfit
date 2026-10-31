@@ -168,6 +168,28 @@ NW_F_PRIOR = 0.25  # weak prior pulling the fraction to zero: it decides only wh
 
 # [O III] core plus blueshifted wing (Heckman et al. 1981) in the Hbeta complex.
 SIG_O3_CORE_MAX = 800.0
+# Start of the [O III] core: the velocity at which the doublet (5007 and 4959 at 1/R_OIII, each a Gaussian of this
+# sigma) best matches the data, weighted by the inverse variance and insensitive to a flat pedestal, if that match
+# has S/N >= O3_START_MATCH_SNR; else the input velocity. Until 0.6.0.dev0 the start was the highest point of the
+# data smoothed over 3 pixels without weights, which a single sky residual near the observed [O III] outranks; the
+# core then started there and stayed, raised by the amplitude ordering to the height of the wing, which fitted the
+# line (DR2 Hbeta tier: cores 1,000-1,400 km/s from the input redshift on single-pixel OH residuals, 9,378-9,571 A
+# recurring across objects, and the wing at its minimum width near zero). A width floor for the core (sigma 69 km/s,
+# PyQSOFit's) was tried with this start and changed 13 strong offsets of 8,989 test fits while worsening chi-square
+# in more fits; it is not used.
+O3_START_MATCH_SIG = 200.0
+O3_START_MATCH_SNR = 5.0
+# Tags on an Hbeta fit whose systemic velocity is the [O III] core (summary column <P>_tags; tags are information,
+# not quality flags: no class, flag, measurable or strong-offset rule reads them): 'o3_weak', the doublet match below
+# O3_START_MATCH_SNR (the core started at the input redshift and the systemic is not measured by [O III]);
+# 'o3_wing_red', the [O III] wing more than O3_WING_RED_KMS redward of the core (outflow wings are blue; on the DR2
+# Hbeta tier a red "wing" marked a core displaced from the line: 501 strong offsets of 2,371 before the start was
+# fixed, 67 after). Their numbers are in <P>_o3_match_snr and <P>_o3_wing_dv.
+O3_WING_RED_KMS = 300.0
+# Keeping the old smoothed peak as a second start, the fit choosing by chi-square, was tried (2026-10-30) and is not
+# used: a large sky residual does lower chi-square, and on the 130 Hbeta gold candidates the core went back onto the
+# residual in 7 (with a width floor of 69 km/s, in 2); on the test list more strong offsets kept a "wing" redward
+# of the core (81 against 67) and chi-square worsened in more fits (268 against 219 by more than 10).
 SIG_WING_MIN, SIG_WING_MAX = 250.0, 2500.0
 V_WING_MIN, V_WING_MAX = -2500.0, 500.0  # [O III] wings are blue
 # With overlapping width ranges the two components can exchange roles (the wing

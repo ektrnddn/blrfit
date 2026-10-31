@@ -79,11 +79,14 @@ from ..constants import (
     PROFILE_GRID_KMS,
     PROFILE_GRID_MAX_KMS,
     LAM,
+    O3_START_MATCH_SNR,
+    O3_WING_RED_KMS,
 )
 from .extinction import deredden
 from .continuum import fit_continuum, fit_continuum_host
 from .lines import fit_complex, fit_complex_select
 from .broad import o3_base_trigger
+from .narrow import oiii_doublet_match
 from ..measure import measure_complex, broad_profile, profile_measures
 from ..classify import classify
 
@@ -151,6 +154,8 @@ SUMMARY_KEYS = (
 # the record of the [O III]-base rule (_o3_base_measures): in the row of an Hbeta fit made with the rule only, so
 # that a fit made without it keeps the columns of version 0.5
 O3_BASE_KEYS = ("o3_base", "o3_base_trigger", "o3_base_dbic", "c50_sys_alt")
+# the systemic check of an Hbeta fit whose systemic is the [O III] core (_o3_systemic_tags): its numbers and the tags
+O3_SYS_KEYS = ("o3_match_snr", "o3_wing_dv", "tags")
 PREFIX = {"Halpha": "HA", "Hbeta": "HB", "MgII": "MG"}
 
 
@@ -243,6 +248,24 @@ def _o3_base_measures(r):
     )
 
 
+def _o3_systemic_tags(r, m):
+    """For an Hbeta fit whose systemic velocity is the [O III] core: the S/N of the
+    [O III] doublet match on the fitted data (``o3_match_snr``), the wing velocity
+    from the core (``o3_wing_dv``) and the tags 'o3_weak' and 'o3_wing_red'
+    (constants.py; information only, read by no rule). Empty for any other fit."""
+    if m.get("systemic_source") != "[OIII] core":
+        return {}
+    d = r.get("d", {})
+    _, snr = oiii_doublet_match(np.asarray(r["x"]), np.asarray(r["y"]), np.asarray(r["w"]))
+    dw = float(d["w_v"] - d["o3_v"]) if "w_v" in d and "o3_v" in d else np.nan
+    tags = []
+    if not snr >= O3_START_MATCH_SNR:
+        tags.append("o3_weak")
+    if np.isfinite(dw) and dw > O3_WING_RED_KMS:
+        tags.append("o3_wing_red")
+    return dict(o3_match_snr=float(snr), o3_wing_dv=dw, tags=",".join(tags))
+
+
 def _fit_line_sequence(
     wr,
     fsub,
@@ -319,6 +342,8 @@ def _fit_line_sequence(
         )
         if ha_prior_used:
             m["sys_snr"] = prior_snr
+        if name == "Hbeta":
+            m.update(_o3_systemic_tags(r, m))
         if name == "Halpha":
             m["v_o3_pre"] = v_o3_pre
             m["o3_pre_snr"] = o3_pre_snr
@@ -653,6 +678,8 @@ def remeasure(res, thresholds=None):
         m["systemic_source"] = src
         if name == "Hbeta" and src == "Halpha prior" and prior_snr is not None:
             m["sys_snr"] = prior_snr
+        if name == "Hbeta":
+            m.update(_o3_systemic_tags(r, m))
         if name == "Halpha":
             pre = res.get("o3_prefit", {})
             m["v_o3_pre"] = float(pre.get("v_o3", np.nan))
@@ -681,7 +708,9 @@ def summary_row(res, prefix_meta=None):
     contributing, finite and solver-converged draws; flags and their scalar
     diagnostics accompany the percentile errors. An Hbeta fit made with the
     [O III]-base rule adds ``HB_o3_base``, ``HB_o3_base_trigger``,
-    ``HB_o3_base_dbic`` and ``HB_c50_sys_alt`` (O3_BASE_KEYS)."""
+    ``HB_o3_base_dbic`` and ``HB_c50_sys_alt`` (O3_BASE_KEYS). An Hbeta fit whose
+    systemic is the [O III] core adds ``HB_o3_match_snr``, ``HB_o3_wing_dv`` and
+    ``HB_tags`` (O3_SYS_KEYS; tags are information, not flags)."""
     row = dict(prefix_meta or {})
     row["z_in"] = res["z"]
     row["host_applied"] = bool(res["host_info"].get("applied", False))
@@ -705,7 +734,7 @@ def summary_row(res, prefix_meta=None):
         p = PREFIX[name]
         for k in SUMMARY_KEYS:
             row[f"{p}_{k}"] = m.get(k, np.nan)
-        for k in O3_BASE_KEYS:
+        for k in O3_BASE_KEYS + O3_SYS_KEYS:
             if k in m:
                 row[f"{p}_{k}"] = m[k]
         if "params_at_bound" in m:

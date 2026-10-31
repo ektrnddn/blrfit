@@ -91,7 +91,9 @@ its physical range (about 0.44–1.45). Narrow widths are 25 ≤ σ ≤ 510 km/s
 - **[O III].** The doublet is a core (σ ≤ 800 km/s) plus a blueshifted wing (σ
   250–2500 km/s, v between −2500 and +500 km/s), ordered by two hinge penalties (wing at
   least as wide as the core, core at least as tall as the wing) so that the two cannot
-  exchange roles. The core starts at the smoothed data peak near 5007 Å. Where the Hβ fit
+  exchange roles. The core starts where both [O III] lines best match the data (a matched
+  filter of the doublet weighted by the inverse variance), so that a single sky residual
+  cannot set the start. Where the Hβ fit
   calls for it, a broad base is added under both lines (see [Broad [O III] base](#broad-o-iii-base)).
 - **Hβ narrow lines.** When the Hα narrow lines are detected (peak S/N ≥ 3), the
   velocity and width of narrow Hβ, He II and the wing are fixed to the Hα values;
@@ -111,6 +113,14 @@ the [O III] core has S/N ≥ 10, a Gaussian prior of 150 km/s pulls v_n towards 
 narrow lines override the prior; a remaining disagreement above 400 km/s is flagged. In
 the DESI sample the reference systems agree: [S II] deviates from v_n by +3 ± 17 km/s and
 the [O III] core (where its S/N ≥ 10) by −4 ± 28 km/s (median ± NMAD).
+
+Where Hα is not covered (the Hβ complex alone), the systemic velocity is that of the [O III]
+core. Two tags record when it is uncertain: `o3_weak` where the [O III] doublet is not
+detected (matched-filter S/N below 5; the core then starts at the input redshift, which
+for a broad-line object follows the broad lines), and `o3_wing_red` where the [O III] wing
+lies more than 300 km/s redward of the core, the wrong side for an outflow, which marks a
+core displaced from the line. Tags are information only; no class, flag or offset rule
+reads them.
 
 ## Broad lines
 

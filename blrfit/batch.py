@@ -100,6 +100,7 @@ UNITS = {
             "centroid_sys",
             "c50_sys",
             "c50_sys_alt",
+            "o3_wing_dv",
             "c25_sys",
             "c75_sys",
             "peak_top",

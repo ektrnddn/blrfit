@@ -3,6 +3,21 @@
 The full notes of versions up to 0.2.0 are attached to the v0.3.0rc1 pre-release on GitHub,
 and each version is preserved by its tag.
 
+## 0.6.0.dev1 (unreleased)
+
+- The [O III] core of the Hβ complex starts where both [O III] lines best match the data (a matched filter of
+  the doublet, weighted by the inverse variance and insensitive to a flat pedestal; `O3_START_MATCH_*`), not
+  at the highest point of the data smoothed over three pixels. A single sky residual near the observed [O III]
+  outranked a weak line in that search; the core started on the residual and stayed there, raised by the
+  amplitude ordering to the height of the wing, which fitted the line, and the systemic velocity was that of
+  the residual, 1000–1400 km/s off. On the DESI DR2 Hβ tier half of the strong offsets in a random sample of
+  5,000 fits had the wing more than 700 km/s from the core; of the 130 Hβ gold candidates, 44 of the 50 such
+  fits move their systemic velocity onto the [O III] line and lose the offset.
+- New Hβ columns where the [O III] core sets the systemic velocity: `o3_match_snr` (S/N of the doublet match),
+  `o3_wing_dv` (wing velocity from the core) and `tags`, with `o3_weak` (no [O III] detected: the systemic is the
+  input redshift) and `o3_wing_red` (wing more than 300 km/s redward of the core). Tags are information only: no
+  class, flag, measurable or strong-offset rule reads them.
+
 ## 0.6.0.dev0 (unreleased)
 
 The Hβ complex gains a broad [O III] base, fitted only where the selected fit puts a narrow broad Gaussian
